@@ -71,3 +71,5 @@ cairosvg
 
 # Needed for tools/check-thirdparty
 python-debian
+
+ptvsd
