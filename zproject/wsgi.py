@@ -24,6 +24,13 @@ setup_path()
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "zproject.settings")
 
+#if os.environ.get('DJANGO_DEBUG', False):  # You can use django.conf settings.DEBUG
+import ptvsd
+ptvsd.enable_attach(address=('127.0.0.1', 8888))
+ptvsd.wait_for_attach()  # We can remove this line it gives you trouble,
+                             # but it's good to know if the debugger started or not
+                             # blocking the execution for a while :-)
+
 import django
 try:
     django.setup()

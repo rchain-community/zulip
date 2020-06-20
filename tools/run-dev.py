@@ -141,7 +141,7 @@ with open(pid_file_path, 'w+') as f:
 
 def server_processes() -> List[List[str]]:
     main_cmds = [
-        ['./manage.py', 'runserver'] +
+        ['./manage.py', 'runserver', '--noreload', '--nothreading'] +
         manage_args + runserver_args + ['127.0.0.1:%d' % (django_port,)],
         ['env', 'PYTHONUNBUFFERED=1', './manage.py', 'runtornado'] +
         manage_args + ['127.0.0.1:%d' % (tornado_port,)],
