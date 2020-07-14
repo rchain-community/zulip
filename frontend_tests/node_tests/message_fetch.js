@@ -5,35 +5,38 @@ zrequire('message_fetch');
 
 const noop = () => {};
 
-set_global('MessageListView', function () { return {}; });
+function MessageListView() {
+    return {};
+}
+set_global('MessageListView', MessageListView);
 
 zrequire('FetchStatus', 'js/fetch_status');
 zrequire('Filter', 'js/filter');
 zrequire('MessageListData', 'js/message_list_data');
 zrequire('message_list');
-zrequire('recent_topics');
 zrequire('people');
 
-set_global('page_params', {
-    have_initial_messages: true,
-    pointer: 444,
+set_global('recent_topics', {
+    process_messages: noop,
 });
+// Still required for page_params.initial_pointer
+set_global('page_params', {});
 set_global('ui_report', {
     hide_error: noop,
 });
-set_global('activity', {});
+
 set_global('channel', {});
 set_global('document', 'document-stub');
 set_global('message_scroll', {
+    show_loading_older: noop,
+    hide_loading_older: noop,
     show_loading_newer: noop,
     hide_loading_newer: noop,
+    update_top_of_narrow_notices: () => {},
 });
 set_global('message_util', {});
 set_global('message_store', {});
 set_global('narrow_state', {});
-set_global('notifications', {
-    hide_or_show_history_limit_message: () => {},
-});
 set_global('pm_list', {});
 set_global('server_events', {});
 set_global('stream_list', {
@@ -83,10 +86,12 @@ function config_fake_channel(conf) {
     let called;
 
     channel.get = function (opts) {
-        if (called) {
+        if (called && !conf.can_call_again) {
             throw "only use this for one call";
         }
-        assert(self.success === undefined);
+        if (!conf.can_call_again) {
+            assert(self.success === undefined);
+        }
         assert.equal(opts.url, '/json/messages');
         assert.deepEqual(opts.data, conf.expected_opts_data);
         self.success = opts.success;
@@ -105,7 +110,7 @@ function config_process_results(messages) {
         messages_processed_for_bools.push(message);
     };
 
-    message_store.add_message_metadata = message => message;
+    message_store.add_message_metadata = (message) => message;
 
     message_util.do_unread_count_updates = function (arg) {
         assert.deepEqual(arg, messages);
@@ -114,10 +119,6 @@ function config_process_results(messages) {
     message_util.add_old_messages = function (new_messages, msg_list) {
         assert.deepEqual(new_messages, messages);
         msg_list.add_messages(new_messages);
-    };
-
-    activity.process_loaded_messages = function (arg) {
-        assert.deepEqual(arg, messages);
     };
 
     stream_list.update_streams_sidebar = noop;
@@ -132,7 +133,7 @@ function config_process_results(messages) {
 }
 
 function message_range(start, end) {
-    return _.range(start, end).map(idx => ({
+    return _.range(start, end).map((idx) => ({
         id: idx,
     }));
 }
@@ -140,7 +141,7 @@ function message_range(start, end) {
 const initialize_data = {
     initial_fetch: {
         req: {
-            anchor: 444,
+            anchor: 'first_unread',
             num_before: 200,
             num_after: 200,
             client_gravatar: true,
@@ -148,6 +149,7 @@ const initialize_data = {
         resp: {
             messages: message_range(201, 801),
             found_newest: false,
+            anchor: 444,
         },
     },
 
@@ -308,20 +310,39 @@ run_test('loading_newer', () => {
 
         const fetch = config_fake_channel({
             expected_opts_data: data.req,
+            can_call_again: true,
         });
 
-        message_fetch.maybe_load_newer_messages({
-            msg_list: msg_list,
-            show_loading: noop,
-            hide_loading: noop,
-        });
+        // The msg_list is empty and we are calling frontfill, which should
+        // raise fatal error.
+        if (opts.empty_msg_list) {
+            assert.throws(
+                () => {
+                    message_fetch.maybe_load_newer_messages({
+                        msg_list: msg_list,
+                        show_loading: noop,
+                        hide_loading: noop,
+                    });
+                },
+                {
+                    name: "Error",
+                    message: "There are no message available to frontfill.",
+                },
+            );
+        } else {
+            message_fetch.maybe_load_newer_messages({
+                msg_list: msg_list,
+                show_loading: noop,
+                hide_loading: noop,
+            });
 
-        test_dup_new_fetch(msg_list);
+            test_dup_new_fetch(msg_list);
 
-        test_fetch_success({
-            fetch: fetch,
-            response: data.resp,
-        });
+            test_fetch_success({
+                fetch: fetch,
+                response: data.resp,
+            });
+        }
     }
 
     (function test_narrow() {
@@ -344,9 +365,39 @@ run_test('loading_newer', () => {
         test_happy_path({
             msg_list: msg_list,
             data: data,
+            empty_msg_list: true,
+        });
+
+        msg_list.append_to_view = () => {};
+        // Instead of using 444 as page_param.pointer, we
+        // should have a message with that id in the message_list.
+        msg_list.append(message_range(444, 445), false);
+
+        test_happy_path({
+            msg_list: msg_list,
+            data: data,
+            empty_msg_list: false,
         });
 
         assert.equal(msg_list.data.fetch_status.can_load_newer_messages(), true);
+
+        // The server successfully responded with messages having id's from 500-599.
+        // We test for the case that this was the last batch of messages for the narrow
+        // so no more fetching should occur.
+        // And also while fetching for the above condition the server received a new message
+        // event, updating the last message's id for that narrow to 600 from 599.
+        data.resp.found_newest = true;
+        msg_list.data.fetch_status.update_expected_max_message_id([{id: 600}]);
+
+        test_happy_path({
+            msg_list: msg_list,
+            data: data,
+        });
+
+        // To handle this special case we should allow another fetch to occur,
+        // since the last message event's data had been discarded.
+        // This fetch goes on until the newest message has been found.
+        assert.equal(msg_list.data.fetch_status.can_load_newer_messages(), false);
     }());
 
     (function test_home() {
@@ -383,6 +434,16 @@ run_test('loading_newer', () => {
         test_happy_path({
             msg_list: msg_list,
             data: data[0],
+            empty_msg_list: true,
+        });
+
+        message_list.all.append_to_view = () => {};
+        message_list.all.append(message_range(444, 445), false);
+
+        test_happy_path({
+            msg_list: msg_list,
+            data: data[0],
+            empty_msg_list: false,
         });
 
         assert.equal(msg_list.data.fetch_status.can_load_newer_messages(), true);

@@ -27,6 +27,21 @@ exports.demote_inactive_streams_values = {
     },
 };
 
+exports.color_scheme_values = {
+    automatic: {
+        code: 1,
+        description: i18n.t("Automatic"),
+    },
+    night: {
+        code: 2,
+        description: i18n.t("Night mode"),
+    },
+    day: {
+        code: 3,
+        description: i18n.t("Day mode"),
+    },
+};
+
 exports.twenty_four_hour_time_values = {
     twenty_four_hour_clock: {
         value: true,
@@ -42,7 +57,6 @@ exports.get_all_display_settings = () => ({
     settings: {
         user_display_settings: [
             "dense_mode",
-            "night_mode",
             "high_contrast_mode",
             "left_side_userlist",
             "starred_message_counts",
@@ -171,7 +185,14 @@ exports.user_role_values = {
         code: 200,
         description: i18n.t("Administrator"),
     },
+    owner: {
+        code: 100,
+        description: i18n.t("Owner"),
+    },
 };
+
+const user_role_array = Object.values(exports.user_role_values);
+exports.user_role_map = new Map(user_role_array.map((role) => [role.code, role.description]));
 
 // NOTIFICATIONS
 
@@ -241,12 +262,12 @@ const other_notification_settings = desktop_notification_settings.concat(
     mobile_notification_settings,
     email_notification_settings,
     presence_notification_settings,
-    ["notification_sound"]
+    ["notification_sound"],
 );
 
 exports.all_notification_settings = other_notification_settings.concat(
     pm_mention_notification_settings,
-    exports.stream_notification_settings
+    exports.stream_notification_settings,
 );
 
 exports.all_notifications = () => ({

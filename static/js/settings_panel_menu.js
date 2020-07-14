@@ -1,3 +1,9 @@
+exports.mobile_deactivate_section = function () {
+    const $settings_overlay_container = $("#settings_overlay_container");
+    $settings_overlay_container.find(".right").removeClass("show");
+    $settings_overlay_container.find(".settings-header.mobile").removeClass("slide-left");
+};
+
 exports.make_menu = function (opts) {
     const main_elem = opts.main_elem;
     const hash_prefix = opts.hash_prefix;
@@ -5,10 +11,17 @@ exports.make_menu = function (opts) {
 
     const self = {};
 
+    function two_column_mode() {
+        return $('#settings_overlay_container').css('--single-column') === undefined;
+    }
+
     self.show = function () {
         main_elem.show();
         const section = self.current_tab();
-        self.activate_section(section);
+        if (two_column_mode()) {
+            // In one colum mode want to show the settings list, not the first settings section.
+            self.activate_section_or_default(section);
+        }
         curr_li.focus();
     };
 
@@ -57,17 +70,30 @@ exports.make_menu = function (opts) {
         return true;
     };
 
-    self.activate_section = function (section) {
+    self.activate_section_or_default = function (section) {
+        if (!section) {
+            // No section is given so we display the default.
+
+            if (two_column_mode()) {
+                // In two column mode we resume to the last active section.
+                section = self.current_tab();
+            } else {
+                // In single column mode we close the active section
+                // so that you always start at the settings list.
+                exports.mobile_deactivate_section();
+                return;
+            }
+        }
+
         curr_li = self.li_for_section(section);
 
-        main_elem.children("li").removeClass("active no-border");
+        main_elem.children("li").removeClass("active");
         curr_li.addClass("active");
-        curr_li.prev().addClass("no-border");
 
         const settings_section_hash = '#' + hash_prefix + section;
         hashchange.update_browser_history(settings_section_hash);
 
-        $(".settings-section, .settings-wrapper").removeClass("show");
+        $(".settings-section").removeClass("show");
 
         settings_sections.load_settings_section(section);
 
@@ -85,14 +111,14 @@ exports.make_menu = function (opts) {
     self.get_panel = function () {
         const section = curr_li.data('section');
         const sel = "[data-name='" + section + "']";
-        const panel = $(".settings-section" + sel + ", .settings-wrapper" + sel);
+        const panel = $(".settings-section" + sel);
         return panel;
     };
 
     main_elem.on("click", "li[data-section]", function (e) {
         const section = $(this).attr('data-section');
 
-        self.activate_section(section);
+        self.activate_section_or_default(section);
 
         // You generally want to add logic to activate_section,
         // not to this click handler.

@@ -9,7 +9,7 @@
                     <tr>
                         <th rowspan="2" width="30%"></th>
                         <th colspan="2" width="28%">{{t "Desktop"}}</th>
-                        <th rowspan="2" width="14%" class="{{#if show_push_notifications_tooltip}}control-label-disabled{{/if}}">
+                        <th rowspan="2" width="14%" class="{{#if show_push_notifications_tooltip.push_notifications}}control-label-disabled{{/if}}">
                             {{t "Mobile"}}
                             {{#if (not page_params.realm_push_notifications_enabled) }}
                             <i class="fa fa-question-circle settings-info-icon" data-toggle="tooltip"
@@ -75,9 +75,9 @@
                     <option value="{{ this }}">{{ this }}</option>
                     {{/each}}
                 </select>
-                <a id="play_notification_sound">
-                    {{t "Play sound" }}
-                </a>
+                <span id="play_notification_sound">
+                    <i class="fa fa-play-circle" aria-label="{{t 'Play sound' }}"></i>
+                </span>
             </div>
 
             <div class="input-group">

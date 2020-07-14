@@ -14,9 +14,7 @@ zrequire('composebox_typeahead');
 zrequire('recent_senders');
 zrequire('settings_org');
 const settings_config = zrequire('settings_config');
-set_global('md5', function (s) {
-    return 'md5-' + s;
-});
+set_global('md5', (s) => 'md5-' + s);
 
 // To be eliminated in next commit:
 stream_data.update_calculated_fields = () => {};
@@ -114,7 +112,7 @@ const emojis_by_name = new Map(Object.entries({
     heart: emoji_heart,
     headphones: emoji_headphones,
 }));
-const emoji_list = Array.from(emojis_by_name.values(), emoji_dict => {
+const emoji_list = Array.from(emojis_by_name.values(), (emoji_dict) => {
     if (emoji_dict.is_realm_emoji === true) {
         return {
             emoji_name: emoji_dict.name,
@@ -289,7 +287,7 @@ run_test('topics_seen_for', () => {
 
     assert.deepEqual(
         ct.topics_seen_for('Denmark'),
-        ['With Twisted Metal', 'acceptance', 'civil fears']
+        ['With Twisted Metal', 'acceptance', 'civil fears'],
     );
 
     // Test when the stream doesn't exist (there are no topics)
@@ -320,7 +318,7 @@ run_test('content_typeahead_selected', () => {
         },
     });
     let set_timeout_called = false;
-    global.patch_builtin('setTimeout', function (f, time) {
+    global.patch_builtin('setTimeout', (f, time) => {
         f();
         assert.equal(time, 0);
         set_timeout_called = true;
@@ -518,7 +516,7 @@ run_test('content_typeahead_selected', () => {
 });
 
 function sorted_names_from(subs) {
-    return subs.map(sub => sub.name).sort();
+    return subs.map((sub) => sub.name).sort();
 }
 
 run_test('initialize', () => {
@@ -646,17 +644,17 @@ run_test('initialize', () => {
         // corresponding parts in bold.
         options.query = 'oth';
         actual_value = options.highlighter(othello);
-        expected_value = '        <img class="typeahead-image" src="https://secure.gravatar.com/avatar/md5-othello@zulip.com?d&#x3D;identicon&amp;s&#x3D;50" />\n<strong>Othello, the Moor of Venice</strong>';
+        expected_value = `        <img class="typeahead-image" src="/avatar/${othello.user_id}&amp;s&#x3D;50" />\n<strong>Othello, the Moor of Venice</strong>`;
         assert.equal(actual_value, expected_value);
 
         options.query = 'Lear';
         actual_value = options.highlighter(cordelia);
-        expected_value = '        <img class="typeahead-image" src="https://secure.gravatar.com/avatar/md5-cordelia@zulip.com?d&#x3D;identicon&amp;s&#x3D;50" />\n<strong>Cordelia Lear</strong>';
+        expected_value = `        <img class="typeahead-image" src="/avatar/${cordelia.user_id}&amp;s&#x3D;50" />\n<strong>Cordelia Lear</strong>`;
         assert.equal(actual_value, expected_value);
 
         options.query = 'othello@zulip.com, co';
         actual_value = options.highlighter(cordelia);
-        expected_value = '        <img class="typeahead-image" src="https://secure.gravatar.com/avatar/md5-cordelia@zulip.com?d&#x3D;identicon&amp;s&#x3D;50" />\n<strong>Cordelia Lear</strong>';
+        expected_value = `        <img class="typeahead-image" src="/avatar/${cordelia.user_id}&amp;s&#x3D;50" />\n<strong>Cordelia Lear</strong>`;
         assert.equal(actual_value, expected_value);
 
         function matcher(query, person) {
@@ -713,7 +711,7 @@ run_test('initialize', () => {
                 people,
                 query,
                 compose_state.stream_name(),
-                compose_state.topic()
+                compose_state.topic(),
             );
         }
 
@@ -821,7 +819,7 @@ run_test('initialize', () => {
         let actual_value = options.source.call(fake_this, 'test #s');
         assert.deepEqual(
             sorted_names_from(actual_value),
-            ['Denmark', 'Sweden', 'The Netherlands']
+            ['Denmark', 'Sweden', 'The Netherlands'],
         );
         assert(caret_called);
 
@@ -831,7 +829,7 @@ run_test('initialize', () => {
         // content_highlighter.
         fake_this = { completing: 'mention', token: 'othello' };
         actual_value = options.highlighter.call(fake_this, othello);
-        expected_value = '        <img class="typeahead-image" src="https://secure.gravatar.com/avatar/md5-othello@zulip.com?d&#x3D;identicon&amp;s&#x3D;50" />\n<strong>Othello, the Moor of Venice</strong>';
+        expected_value = `        <img class="typeahead-image" src="/avatar/${othello.user_id}&amp;s&#x3D;50" />\n<strong>Othello, the Moor of Venice</strong>`;
         assert.equal(actual_value, expected_value);
 
         fake_this = { completing: 'mention', token: 'hamletcharacters' };
@@ -1126,6 +1124,7 @@ run_test('begins_typeahead', () => {
         stream: true,
         syntax: true,
         topic: true,
+        timestamp: true,
     }}};
 
     function get_values(input, rest) {
@@ -1134,7 +1133,7 @@ run_test('begins_typeahead', () => {
             return [input, rest];
         };
         const values = ct.get_candidates.call(
-            begin_typehead_this, input
+            begin_typehead_this, input,
         );
         return values;
     }
@@ -1159,7 +1158,7 @@ run_test('begins_typeahead', () => {
         const values = get_values(input, rest);
         assert.deepEqual(
             sorted_names_from(values),
-            ['Denmark', 'Sweden', 'The Netherlands']
+            ['Denmark', 'Sweden', 'The Netherlands'],
         );
     }
 
@@ -1302,14 +1301,24 @@ run_test('begins_typeahead', () => {
     sweden_topics_to_show.push('totally new topic');
     assert_typeahead_equals("#**Sweden>totally new topic", sweden_topics_to_show);
 
+    // time_jump
+    assert_typeahead_equals("<tim", false);
+    assert_typeahead_equals("<timerandom", false);
+    assert_typeahead_equals("<time", ['translated: Mention a timezone-aware time']);
+    assert_typeahead_equals("<time:", ['translated: Mention a timezone-aware time']);
+    assert_typeahead_equals("<time:something", ['translated: Mention a timezone-aware time']);
+    assert_typeahead_equals("<time:something", "> ", ['translated: Mention a timezone-aware time']);
+    assert_typeahead_equals("<time:something>", ['translated: Mention a timezone-aware time']);
+    assert_typeahead_equals("<time:something> ", false); // Already completed the mention
+
     // Following tests place the cursor before the second string
     assert_typeahead_equals("#test", "ing", false);
     assert_typeahead_equals("@test", "ing", false);
     assert_typeahead_equals(":test", "ing", false);
     assert_typeahead_equals("```test", "ing", false);
     assert_typeahead_equals("~~~test", "ing", false);
-    const terminal_symbols = ',.;?!()[] "\'\n\t';
-    terminal_symbols.split().forEach(symbol => {
+    const terminal_symbols = ',.;?!()[]> "\'\n\t';
+    terminal_symbols.split().forEach((symbol) => {
         assert_stream_list("#test", symbol);
         assert_typeahead_equals("@test", symbol, all_mentions);
         assert_typeahead_equals(":test", symbol, emoji_list);

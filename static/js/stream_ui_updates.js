@@ -31,12 +31,12 @@ exports.initialize_disable_btn_hint_popover = function (btn_wrapper, popover_btn
         animation: false,
     });
 
-    btn_wrapper.on('mouseover', function (e) {
+    btn_wrapper.on('mouseover', (e) => {
         popover_btn.popover('show');
         e.stopPropagation();
     });
 
-    btn_wrapper.on('mouseout', function (e) {
+    btn_wrapper.on('mouseout', (e) => {
         popover_btn.popover('hide');
         e.stopPropagation();
     });
@@ -103,7 +103,7 @@ exports.update_notification_setting_checkbox = function (notification_name) {
     }
     const stream_id = stream_row.data('stream-id');
     $(`#${notification_name}_${stream_id}`).prop("checked", stream_data.receives_notifications(
-        stream_data.maybe_get_stream_name(stream_id), notification_name));
+        stream_id, notification_name));
 };
 
 exports.update_stream_row_in_settings_tab = function (sub) {
@@ -143,7 +143,12 @@ exports.update_stream_privacy_type_icon = function (sub) {
 
 exports.update_stream_subscription_type_text = function (sub) {
     const stream_settings = stream_edit.settings_for_sub(sub);
-    const html = render_subscription_type(sub);
+    const template_data = {
+        ...sub,
+        stream_post_policy_values: stream_data.stream_post_policy_values,
+        message_retention_text: stream_edit.get_retention_policy_text_for_subscription_type(sub),
+    };
+    const html = render_subscription_type(template_data);
     if (stream_edit.is_sub_settings_active(sub)) {
         stream_settings.find('.subscription-type-text').expectOne().html(html);
     }

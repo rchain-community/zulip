@@ -1,8 +1,8 @@
 const settings_config = require("./settings_config");
 const render_settings_tab = require('../templates/settings_tab.hbs');
 
-$("body").ready(function () {
-    $("#settings_overlay_container").click(function (e) {
+$("body").ready(() => {
+    $("#settings_overlay_container").click((e) => {
         if (!overlays.is_modal_open()) {
             return;
         }
@@ -37,7 +37,6 @@ function setup_settings_label() {
         fluid_layout_width: i18n.t("Use full width on wide screens"),
         high_contrast_mode: i18n.t("High contrast mode"),
         left_side_userlist: i18n.t("Show user list on left sidebar in narrow windows"),
-        night_mode: i18n.t("Night mode"),
         starred_message_counts: i18n.t("Show counts for starred messages"),
         twenty_four_hour_time: i18n.t("Time format"),
         translate_emoticons: i18n.t("Convert emoticons before sending (<code>:)</code> becomes 😃)"),
@@ -58,6 +57,7 @@ exports.build_page = function () {
         can_create_new_bots: settings_bots.can_create_new_bots(),
         settings_label: exports.settings_label,
         demote_inactive_streams_values: settings_config.demote_inactive_streams_values,
+        color_scheme_values: settings_config.color_scheme_values,
         twenty_four_hour_time_values: settings_config.twenty_four_hour_time_values,
         general_settings: settings_config.all_notifications().general_settings,
         notification_settings: settings_config.all_notifications().settings,
@@ -78,7 +78,7 @@ exports.launch = function (section) {
     settings_sections.reset_sections();
 
     overlays.open_settings();
-    settings_panel_menu.normal_settings.activate_section(section);
+    settings_panel_menu.normal_settings.activate_section_or_default(section);
     settings_toggle.highlight_toggle('settings');
 };
 

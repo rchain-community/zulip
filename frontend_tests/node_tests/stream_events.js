@@ -1,7 +1,6 @@
 const noop = function () {};
 const return_true = function () { return true; };
 set_global('$', global.make_zjquery());
-set_global('document', 'document-stub');
 const _settings_notifications = {
     update_page: () => {},
 };
@@ -10,6 +9,10 @@ set_global('settings_notifications', _settings_notifications);
 zrequire('people');
 zrequire('stream_data');
 zrequire('stream_events');
+zrequire('Filter', 'js/filter');
+zrequire('narrow_state');
+zrequire('tab_bar');
+
 const with_overrides = global.with_overrides;
 
 const george = {
@@ -30,11 +33,18 @@ const frontend = {
 
 stream_data.add_sub(frontend);
 
+
+const frontend_filter_terms = [
+    { operator: 'stream', operand: 'frontend' },
+];
+
+const frontend_filter = new Filter(frontend_filter_terms);
+
 run_test('update_property', () => {
     // Invoke error for non-existent stream/property
-    with_overrides(function (override) {
+    with_overrides((override) => {
         let errors = 0;
-        override('blueslip.warn', function () {
+        override('blueslip.warn', () => {
             errors += 1;
         });
 
@@ -46,8 +56,8 @@ run_test('update_property', () => {
     });
 
     // Test update color
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('stream_color.update_stream_color', stub.f);
             stream_events.update_property(1, 'color', 'blue');
             const args = stub.get_args('sub', 'val');
@@ -57,8 +67,8 @@ run_test('update_property', () => {
     });
 
     // Test in home view
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('stream_muting.update_is_muted', stub.f);
             stream_events.update_property(1, 'in_home_view', false);
             const args = stub.get_args('sub', 'val');
@@ -98,8 +108,8 @@ run_test('update_property', () => {
     assert.equal(checkbox.prop('checked'), true);
 
     // Test name change
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('subs.update_stream_name', stub.f);
             stream_events.update_property(1, 'name', 'the frontend');
             const args = stub.get_args('sub', 'val');
@@ -109,8 +119,8 @@ run_test('update_property', () => {
     });
 
     // Test description change
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('subs.update_stream_description', stub.f);
             stream_events.update_property(1, 'description', 'we write code', {rendered_description: 'we write code'});
             const args = stub.get_args('sub', 'val');
@@ -124,7 +134,7 @@ run_test('update_property', () => {
     assert.equal(frontend.email_address, 'zooly@zulip.com');
 
     // Test pin to top
-    with_overrides(function (override) {
+    with_overrides((override) => {
         override('stream_list.refresh_pinned_or_unpinned_stream', noop);
         stream_events.update_property(1, 'pin_to_top', true);
         checkbox = $("#pin_to_top_1");
@@ -132,8 +142,8 @@ run_test('update_property', () => {
     });
 
     // Test stream privacy change event
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('subs.update_stream_privacy', stub.f);
             stream_events.update_property(1, 'invite_only', true, {
                 history_public_to_subscribers: true,
@@ -148,8 +158,8 @@ run_test('update_property', () => {
     });
 
     // Test stream stream_post_policy change event
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('subs.update_stream_post_policy', stub.f);
             stream_events.update_property(1, 'stream_post_policy', stream_data.stream_post_policy_values.admins.code);
             const args = stub.get_args('sub', 'val');
@@ -157,14 +167,25 @@ run_test('update_property', () => {
             assert.equal(args.val, stream_data.stream_post_policy_values.admins.code);
         });
     });
+
+    // Test stream message_retention_days change event
+    with_overrides((override) => {
+        global.with_stub((stub) => {
+            override('subs.update_message_retention_setting', stub.f);
+            stream_events.update_property(1, 'message_retention_days', 20);
+            const args = stub.get_args('sub', 'val');
+            assert.equal(args.sub.stream_id, 1);
+            assert.equal(args.val, 20);
+        });
+    });
 });
 
 run_test('marked_subscribed', () => {
     // Test undefined error
-    with_overrides(function (override) {
+    with_overrides((override) => {
         let errors = 0;
         override('stream_color.update_stream_color', noop);
-        override('blueslip.error', function () {
+        override('blueslip.error', () => {
             errors += 1;
         });
         stream_events.mark_subscribed(undefined, [], 'yellow');
@@ -172,9 +193,9 @@ run_test('marked_subscribed', () => {
     });
 
     // Test early return if subscribed
-    with_overrides(function (override) {
+    with_overrides((override) => {
         let completed = false;
-        override('message_util.do_unread_count_updates', function () {
+        override('message_util.do_unread_count_updates', () => {
             completed = true; // This gets run if we continue and don't early return
         });
         const subscribed = {subscribed: true};
@@ -194,69 +215,54 @@ run_test('marked_subscribed', () => {
     stream_data.update_calculated_fields = noop;
 
     set_global('subs', { update_settings_for_subscribed: noop });
-    set_global('narrow_state', { is_for_stream_id: noop });
     set_global('overlays', { streams_open: return_true });
 
-    // Test unread count update
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
-            override('stream_color.update_stream_color', noop);
-            override('message_util.do_unread_count_updates', stub.f);
-            stream_events.mark_subscribed(frontend, [], '');
-            const args = stub.get_args('messages');
-            assert.deepEqual(args.messages, ['msg']);
-        });
-    });
+    // Test basic dispatching and updating stream color
+    narrow_state.set_current_filter(frontend_filter);
+    with_overrides((override) => {
+        let args;
+        let list_updated = false;
 
-    set_global('message_util', { do_unread_count_updates: noop });
+        const stream_list_stub = global.make_stub();
+        const tab_bar_stub = global.make_stub();
+        const message_util_stub = global.make_stub();
 
-    // Test jQuery event
-    with_overrides(function (override) {
         override('stream_color.update_stream_color', noop);
-        global.with_stub(function (stub) {
-            $(document).on('subscription_add_done.zulip', stub.f);
-            stream_events.mark_subscribed(frontend, [], '');
-            const args = stub.get_args('event');
-            assert.equal(args.event.sub.stream_id, 1);
+        override('stream_list.add_sidebar_row', stream_list_stub.f);
+        override('message_util.do_unread_count_updates', message_util_stub.f);
+        override('tab_bar.render_title_area', tab_bar_stub.f);
+        override('current_msg_list.update_trailing_bookend', () => {
+            list_updated = true;
         });
-    });
 
-    // Test bookend update
-    with_overrides(function (override) {
-        override('stream_color.update_stream_color', noop);
-        override('narrow_state.is_for_stream_id', function () {
-            return true;
-        });
-        let updated = false;
-        override('current_msg_list.update_trailing_bookend', function () {
-            updated = true;
-        });
-        stream_events.mark_subscribed(frontend, [], '');
-        assert.equal(updated, true);
-    });
-
-    // reset overridden value
-    set_global('narrow_state', { is_for_stream_id: noop });
-
-    // Test setting color
-    with_overrides(function (override) {
-        override('stream_color.update_stream_color', noop);
         stream_events.mark_subscribed(frontend, [], 'blue');
+
+        args = message_util_stub.get_args('messages');
+        assert.deepEqual(args.messages, ['msg']);
+
+        args = stream_list_stub.get_args('sub');
+        assert.equal(args.sub.stream_id, 1);
+        assert.equal(tab_bar_stub.num_calls, 1);
+
+        assert.equal(list_updated, true);
+
         assert.equal(frontend.color, 'blue');
     });
+    narrow_state.reset_current_filter();
 
     // Test assigning generated color
-    with_overrides(function (override) {
+    with_overrides((override) => {
         frontend.color = undefined;
-        override('color_data.pick_color', function () {
-            return 'green';
-        });
+        override('color_data.pick_color', () => 'green');
         let warnings = 0;
-        override('blueslip.warn', function () {
+        override('blueslip.warn', () => {
             warnings += 1;
         });
 
-        global.with_stub(function (stub) {
+        // narrow state is undefined
+        global.with_stub((stub) => {
+            override('message_util.do_unread_count_updates', noop);
+            override('stream_list.add_sidebar_row', noop);
             override('stream_color.update_stream_color', noop);
             override('subs.set_color', stub.f);
             stream_events.mark_subscribed(frontend, [], undefined);
@@ -268,9 +274,13 @@ run_test('marked_subscribed', () => {
     });
 
     // Test assigning subscriber emails
-    with_overrides(function (override) {
+    // narrow state is undefined
+    with_overrides((override) => {
         override('stream_color.update_stream_color', noop);
-        global.with_stub(function (stub) {
+        override('message_util.do_unread_count_updates', noop);
+        override('stream_list.add_sidebar_row', noop);
+
+        global.with_stub((stub) => {
             override('stream_data.set_subscribers', stub.f);
             const user_ids = [15, 20, 25];
             stream_events.mark_subscribed(frontend, user_ids, '');
@@ -280,7 +290,7 @@ run_test('marked_subscribed', () => {
         });
 
         // assign self as well
-        global.with_stub(function (stub) {
+        global.with_stub((stub) => {
             override('stream_data.subscribe_myself', stub.f);
             stream_events.mark_subscribed(frontend, [], '');
             const args = stub.get_args('sub');
@@ -288,7 +298,7 @@ run_test('marked_subscribed', () => {
         });
 
         // and finally update subscriber settings
-        global.with_stub(function (stub) {
+        global.with_stub((stub) => {
             override('subs.update_settings_for_subscribed', stub.f);
             stream_events.mark_subscribed(frontend, [], '');
             const args = stub.get_args('sub');
@@ -298,26 +308,29 @@ run_test('marked_subscribed', () => {
 });
 
 run_test('mark_unsubscribed', () => {
-    let removed_sub = false;
-    $(document).on('subscription_remove_done.zulip', function () {
-        removed_sub = true;
+    with_overrides((override) => {
+        let removed_sub = false;
+        override('stream_list.remove_sidebar_row', () => {
+            removed_sub = true;
+        });
+
+        // take no action if no sub specified
+        stream_events.mark_unsubscribed();
+        assert.equal(removed_sub, false);
+
+        // take no action if already unsubscribed
+        frontend.subscribed = false;
+        stream_events.mark_unsubscribed(frontend);
+        assert.equal(removed_sub, false);
     });
-
-    // take no action if no sub specified
-    stream_events.mark_unsubscribed();
-    assert.equal(removed_sub, false);
-
-    // take no action if already unsubscribed
-    frontend.subscribed = false;
-    stream_events.mark_unsubscribed(frontend);
-    assert.equal(removed_sub, false);
 
     // Test unsubscribe
     frontend.subscribed = true;
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('stream_data.unsubscribe_myself', stub.f);
             override('subs.update_settings_for_unsubscribed', noop);
+            override('stream_list.remove_sidebar_row', noop);
             stream_events.mark_unsubscribed(frontend);
             const args = stub.get_args('sub');
             assert.deepEqual(args.sub, frontend);
@@ -325,10 +338,11 @@ run_test('mark_unsubscribed', () => {
     });
 
     // Test update settings after unsubscribe
-    with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    with_overrides((override) => {
+        global.with_stub((stub) => {
             override('subs.update_settings_for_unsubscribed', stub.f);
             override('stream_data.unsubscribe_myself', noop);
+            override('stream_list.remove_sidebar_row', noop);
             stream_events.mark_unsubscribed(frontend);
             const args = stub.get_args('sub');
             assert.deepEqual(args.sub, frontend);
@@ -336,29 +350,31 @@ run_test('mark_unsubscribed', () => {
     });
 
     // Test update bookend and remove done event
-    with_overrides(function (override) {
+    narrow_state.set_current_filter(frontend_filter);
+    with_overrides((override) => {
+        const tab_bar_stub = global.make_stub();
+        override('tab_bar.render_title_area', tab_bar_stub.f);
         override('stream_data.unsubscribe_myself', noop);
         override('subs.update_settings_for_unsubscribed', noop);
-        override('narrow_state.is_for_stream_id', function () {
-            return true;
-        });
 
         let updated = false;
-        override('current_msg_list.update_trailing_bookend', function () {
+        override('current_msg_list.update_trailing_bookend', () => {
             updated = true;
         });
 
         let event_triggered = false;
-        $(document).trigger = function (ev) {
-            assert.equal(ev.name, 'subscription_remove_done.zulip');
-            assert.deepEqual(ev.data.sub, frontend);
+        override('stream_list.remove_sidebar_row', (stream_id) => {
+            assert.equal(stream_id, frontend.stream_id);
             event_triggered = true;
-        };
+        });
 
         stream_events.mark_unsubscribed(frontend);
+
+        assert.equal(tab_bar_stub.num_calls, 1);
         assert.equal(updated, true);
         assert.equal(event_triggered, true);
     });
+    narrow_state.reset_current_filter();
 });
 
 stream_data.clear_subscriptions();
@@ -373,15 +389,17 @@ const dev_help = {
 stream_data.add_sub(dev_help);
 
 run_test('remove_deactivated_user_from_all_streams', () => {
-    subs.rerender_subscriptions_settings = () => {};
+    const subs_stub = global.make_stub();
+    subs.update_subscribers_ui = subs_stub.f;
 
     dev_help.can_access_subscribers = true;
 
     // verify that deactivating user should unsubscribe user from all streams
-    assert(stream_data.add_subscriber(dev_help.name, george.user_id));
+    assert(stream_data.add_subscriber(dev_help.stream_id, george.user_id));
     assert(dev_help.subscribers.has(george.user_id));
 
     stream_events.remove_deactivated_user_from_all_streams(george.user_id);
 
-    assert(!dev_help.subscribers.has(george.user_id));
+    // verify that we issue a call to update subscriber count/list UI
+    assert.equal(subs_stub.num_calls, 1);
 });

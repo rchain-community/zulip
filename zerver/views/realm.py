@@ -1,31 +1,41 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
+
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.utils.translation import ugettext as _
-from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_safe
 
-from zerver.decorator import require_realm_admin
+from confirmation.models import Confirmation, ConfirmationKeyException, get_object_from_key
+from zerver.decorator import require_realm_admin, require_realm_owner
+from zerver.forms import check_subdomain_available as check_subdomain
 from zerver.lib.actions import (
-    do_set_realm_message_editing,
-    do_set_realm_message_deleting,
-    do_set_realm_authentication_methods,
-    do_set_realm_notifications_stream,
-    do_set_realm_signup_notifications_stream,
-    do_set_realm_property,
     do_deactivate_realm,
     do_reactivate_realm,
+    do_set_realm_authentication_methods,
+    do_set_realm_message_deleting,
+    do_set_realm_message_editing,
+    do_set_realm_notifications_stream,
+    do_set_realm_property,
+    do_set_realm_signup_notifications_stream,
 )
+from zerver.lib.exceptions import OrganizationOwnerRequired
 from zerver.lib.i18n import get_available_language_codes
-from zerver.lib.request import has_request_variables, REQ, JsonableError
-from zerver.lib.response import json_success, json_error
-from zerver.lib.validator import check_string, check_dict, check_bool, check_int, \
-    check_int_in, to_positive_or_allowed_int, to_non_negative_int
+from zerver.lib.request import REQ, JsonableError, has_request_variables
+from zerver.lib.response import json_error, json_success
+from zerver.lib.retention import parse_message_retention_days
 from zerver.lib.streams import access_stream_by_id
-from zerver.lib.domains import validate_domain
+from zerver.lib.validator import (
+    check_bool,
+    check_dict,
+    check_int,
+    check_int_in,
+    check_string,
+    check_string_or_int,
+    to_non_negative_int,
+)
 from zerver.models import Realm, UserProfile
-from zerver.forms import check_subdomain_available as check_subdomain
-from confirmation.models import get_object_from_key, Confirmation, ConfirmationKeyException
+
 
 @require_realm_admin
 @has_request_variables
@@ -52,11 +62,11 @@ def update_realm(
         allow_edit_history: Optional[bool]=REQ(validator=check_bool, default=None),
         default_language: Optional[str]=REQ(validator=check_string, default=None),
         waiting_period_threshold: Optional[int]=REQ(converter=to_non_negative_int, default=None),
-        authentication_methods: Optional[Dict[Any, Any]]=REQ(validator=check_dict([]), default=None),
+        authentication_methods: Optional[Dict[str, Any]]=REQ(validator=check_dict([]), default=None),
         notifications_stream_id: Optional[int]=REQ(validator=check_int, default=None),
         signup_notifications_stream_id: Optional[int]=REQ(validator=check_int, default=None),
-        message_retention_days: Optional[int] = REQ(converter=to_positive_or_allowed_int(
-            Realm.RETAIN_MESSAGE_FOREVER), default=None),
+        message_retention_days_raw: Optional[Union[int, str]] = REQ(
+            "message_retention_days", validator=check_string_or_int, default=None),
         send_welcome_emails: Optional[bool]=REQ(validator=check_bool, default=None),
         digest_emails_enabled: Optional[bool]=REQ(validator=check_bool, default=None),
         message_content_allowed_in_email_notifications: Optional[bool]=REQ(
@@ -75,7 +85,6 @@ def update_realm(
             Realm.EMAIL_ADDRESS_VISIBILITY_TYPES), default=None),
         default_twenty_four_hour_time: Optional[bool]=REQ(validator=check_bool, default=None),
         video_chat_provider: Optional[int]=REQ(validator=check_int, default=None),
-        google_hangouts_domain: Optional[str]=REQ(validator=check_string, default=None),
         default_code_block_language: Optional[str]=REQ(validator=check_string, default=None),
         digest_weekday: Optional[int]=REQ(validator=check_int_in(Realm.DIGEST_WEEKDAY_VALUES), default=None),
 ) -> HttpResponse:
@@ -84,24 +93,27 @@ def update_realm(
     # Additional validation/error checking beyond types go here, so
     # the entire request can succeed or fail atomically.
     if default_language is not None and default_language not in get_available_language_codes():
-        raise JsonableError(_("Invalid language '%s'") % (default_language,))
+        raise JsonableError(_("Invalid language '{}'").format(default_language))
     if description is not None and len(description) > 1000:
         return json_error(_("Organization description is too long."))
     if name is not None and len(name) > Realm.MAX_REALM_NAME_LENGTH:
         return json_error(_("Organization name is too long."))
-    if authentication_methods is not None and True not in list(authentication_methods.values()):
-        return json_error(_("At least one authentication method must be enabled."))
+    if authentication_methods is not None:
+        if not user_profile.is_realm_owner:
+            raise OrganizationOwnerRequired()
+        if True not in list(authentication_methods.values()):
+            return json_error(_("At least one authentication method must be enabled."))
     if (video_chat_provider is not None and
             video_chat_provider not in {p['id'] for p in Realm.VIDEO_CHAT_PROVIDERS.values()}):
         return json_error(_("Invalid video_chat_provider {}").format(video_chat_provider))
-    if video_chat_provider == Realm.VIDEO_CHAT_PROVIDERS['google_hangouts']['id']:
-        try:
-            validate_domain(google_hangouts_domain)
-        except ValidationError as e:
-            return json_error(_('Invalid domain: {}').format(e.messages[0]))
 
-    if message_retention_days is not None:
+    message_retention_days: Optional[int] = None
+    if message_retention_days_raw is not None:
+        if not user_profile.is_realm_owner:
+            raise OrganizationOwnerRequired()
         realm.ensure_not_on_limited_plan()
+        message_retention_days = parse_message_retention_days(
+            message_retention_days_raw, Realm.MESSAGE_RETENTION_SPECIAL_VALUES_MAP)
 
     # The user of `locals()` here is a bit of a code smell, but it's
     # restricted to the elements present in realm.property_types.
@@ -114,7 +126,7 @@ def update_realm(
 
     for k, v in list(req_vars.items()):
         if v is not None and getattr(realm, k) != v:
-            do_set_realm_property(realm, k, v)
+            do_set_realm_property(realm, k, v, acting_user=user_profile)
             if isinstance(v, str):
                 data[k] = 'updated'
             else:
@@ -125,7 +137,7 @@ def update_realm(
     # framework because of its bitfield.
     if authentication_methods is not None and (realm.authentication_methods_dict() !=
                                                authentication_methods):
-        do_set_realm_authentication_methods(realm, authentication_methods)
+        do_set_realm_authentication_methods(realm, authentication_methods, acting_user=user_profile)
         data['authentication_methods'] = authentication_methods
     # The message_editing settings are coupled to each other, and thus don't fit
     # into the do_set_realm_property framework.
@@ -184,7 +196,7 @@ def update_realm(
 
     return json_success(data)
 
-@require_realm_admin
+@require_realm_owner
 @has_request_variables
 def deactivate_realm(request: HttpRequest, user: UserProfile) -> HttpResponse:
     realm = user.realm

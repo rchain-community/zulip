@@ -482,9 +482,7 @@ var inline = {
   usermention: noop,
   groupmention: noop,
   stream: noop,
-  avatar: noop,
   tex: noop,
-  gravatar: noop,
   timestamp: noop,
   realm_filters: [],
   text: /^[\s\S]+?(?=[\\<!\[_*`$]| {2,}\n|$)/
@@ -550,10 +548,8 @@ inline.zulip = merge({}, inline.breaks, {
   groupmention: /^@\*([^\*]+)\*/, // Match multi-word string between @* *
   stream_topic: /^#\*\*([^\*>]+)>([^\*]+)\*\*/,
   stream: /^#\*\*([^\*]+)\*\*/,
-  avatar: /^!avatar\(([^)]+)\)/,
-  gravatar: /^!gravatar\(([^)]+)\)/,
   tex: /^(\$\$([^\n_$](\\\$|[^\n$])*)\$\$(?!\$))\B/,
-  timestamp: /^!time\(([^)]+)\)/,
+  timestamp: /^<time:([^>]+)>/,
   realm_filters: [],
   text: replace(inline.breaks.text)
     ('|', '|(\ud83c[\udd00-\udfff]|\ud83d[\udc00-\ude4f]|' +
@@ -692,6 +688,13 @@ InlineLexer.prototype.output = function(src) {
       continue;
     }
 
+    // timestamp
+    if (cap = this.rules.timestamp.exec(src)) {
+      src = src.substring(cap[0].length);
+      out += this.timestamp(cap[1]);
+      continue;
+    }
+
     // tag
     if (cap = this.rules.tag.exec(src)) {
       if (!this.inLink && /^<a /i.test(cap[0])) {
@@ -814,20 +817,6 @@ InlineLexer.prototype.output = function(src) {
       continue;
     }
 
-    // user avatar
-    if (cap = this.rules.avatar.exec(src)) {
-      src = src.substring(cap[0].length);
-      out += this.userAvatar(cap[1]);
-      continue;
-    }
-
-    // user gravatar
-    if (cap = this.rules.gravatar.exec(src)) {
-      src = src.substring(cap[0].length);
-      out += this.userGravatar(cap[1]);
-      continue;
-    }
-
     // timestamp
     if (cap = this.rules.timestamp.exec(src)) {
       src = src.substring(cap[0].length);
@@ -895,23 +884,9 @@ InlineLexer.prototype.tex = function (tex, fullmatch) {
   return this.options.texHandler(tex, fullmatch);
 };
 
-InlineLexer.prototype.userAvatar = function (email) {
-  email = escape(email);
-  if (typeof this.options.avatarHandler !== 'function')
-    return '!avatar(' + email + ')';
-  return this.options.avatarHandler(email);
-};
-
-InlineLexer.prototype.userGravatar = function (email) {
-  email = escape(email);
-  if (typeof this.options.avatarHandler !== 'function')
-    return '!gravatar(' + email + ')';
-  return this.options.avatarHandler(email);
-};
-
 InlineLexer.prototype.timestamp = function (time) {
   if (typeof this.options.timestampHandler !== 'function')
-    return '!time(' + time + ')';
+    return '&lt;time:' + time + '&gt;';
   return this.options.timestampHandler(time);
 };
 
@@ -1537,8 +1512,6 @@ marked.defaults = {
   gfm: true,
   emoji: false,
   unicodeemoji: false,
-  avatar: false,
-  gravatar: false,
   timestamp: true,
   tables: true,
   breaks: false,

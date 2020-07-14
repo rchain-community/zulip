@@ -9,11 +9,11 @@ set -x
 # Provisioning may fail due to many issues but most of the times a network
 # connection issue is the reason. So we are going to retry entire provisioning
 # once again if that fixes our problem.
-tools/provision --production-test-suite || {
+tools/provision --build-release-tarball-only || {
     ret=$?
     if [ "$ret" = 1 ]; then
         echo "\`provision\`: Something went wrong with the provisioning, might be a network issue, Retrying to provision..."
-        tools/provision --production-test-suite
+        tools/provision --build-release-tarball-only
     else
         echo "\`provision\`: Something REALLY BAD went wrong with the provisioning, not retrying."
         exit "$ret"
@@ -28,7 +28,14 @@ if ! ./tools/build-release-tarball test; then
     exit 1
 fi
 
+# This list matches up against the persist_to_workspace step in
+# .circleci/config.yml
 mv /tmp/tmp.*/zulip-server-test.tar.gz /tmp/
-cp -a tools/ci/success-http-headers.txt /tmp/success-http-headers.txt
-cp -a tools/ci/production-install /tmp/production-install
-cp -a tools/ci/production-extract-tarball /tmp/production-extract-tarball
+cp -a \
+   tools/ci/success-http-headers.template.txt \
+   tools/ci/production-install \
+   tools/ci/production-verify \
+   tools/ci/production-upgrade-pg \
+   tools/ci/production-extract-tarball \
+   \
+   /tmp/

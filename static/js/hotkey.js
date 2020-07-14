@@ -27,6 +27,10 @@ const keydown_shift_mappings = {
     // these can be triggered by shift + key only
     9: {name: 'shift_tab', message_view_only: false}, // tab
     32: {name: 'shift_spacebar', message_view_only: true},  // space bar
+    37: {name: 'left_arrow', message_view_only: false}, // left arrow
+    39: {name: 'right_arrow', message_view_only: false}, // right arrow
+    38: {name: 'up_arrow', message_view_only: false}, // up arrow
+    40: {name: 'down_arrow', message_view_only: false}, // down arrow
 };
 
 const keydown_unshift_mappings = {
@@ -104,6 +108,7 @@ const keypress_mappings = {
     113: {name: 'query_streams', message_view_only: true}, // 'q'
     114: {name: 'reply_message', message_view_only: true}, // 'r'
     115: {name: 'narrow_by_recipient', message_view_only: true}, // 's'
+    116: {name: 'open_recent_topics', message_view_only: true}, // 't'
     117: {name: 'show_sender_info', message_view_only: true}, // 'u'
     118: {name: 'show_lightbox', message_view_only: true}, // 'v'
     119: {name: 'query_users', message_view_only: true}, // 'w'
@@ -281,12 +286,7 @@ exports.process_enter_key = function (e) {
     }
 
     if (emoji_picker.reactions_popped()) {
-        if (emoji_picker.is_composition(e.target)) {
-            e.target.click();
-        } else {
-            emoji_picker.toggle_selected_emoji();
-        }
-        return true;
+        return emoji_picker.navigate('enter', e);
     }
 
     if (exports.in_content_editable_widget(e)) {
@@ -421,6 +421,19 @@ exports.process_shift_tab_key = function () {
 exports.process_hotkey = function (e, hotkey) {
     const event_name = hotkey.name;
 
+    // This block needs to be before the `tab` handler.
+    switch (event_name) {
+    case 'up_arrow':
+    case 'down_arrow':
+    case 'left_arrow':
+    case 'right_arrow':
+    case 'tab':
+    case 'shift_tab':
+        if (overlays.recent_topics_open()) {
+            return recent_topics.change_focused_element(e, event_name);
+        }
+    }
+
     // We handle the most complex keys in their own functions.
     switch (event_name) {
     case 'escape':
@@ -460,6 +473,10 @@ exports.process_hotkey = function (e, hotkey) {
         }
         if (event_name === 'open_drafts' && overlays.drafts_open()) {
             overlays.close_overlay('drafts');
+            return true;
+        }
+        if (event_name === 'open_recent_topics' && overlays.recent_topics_open()) {
+            overlays.close_overlay('recent_topics');
             return true;
         }
         return false;
@@ -616,7 +633,7 @@ exports.process_hotkey = function (e, hotkey) {
         compose_actions.start('private', {trigger: "compose_hotkey"});
         return true;
     case 'narrow_private':
-        return do_narrow_action(function (target, opts) {
+        return do_narrow_action((target, opts) => {
             narrow.by('is', 'private', opts);
         });
     case 'query_streams':
@@ -663,6 +680,9 @@ exports.process_hotkey = function (e, hotkey) {
         return true;
     case 'copy_with_c':
         copy_and_paste.copy_handler();
+        return true;
+    case 'open_recent_topics':
+        hashchange.go_to_location('recent_topics');
         return true;
     }
 
@@ -771,7 +791,7 @@ exports.process_keydown = function (e) {
     return exports.process_hotkey(e, hotkey);
 };
 
-$(document).keydown(function (e) {
+$(document).keydown((e) => {
     if (exports.process_keydown(e)) {
         e.preventDefault();
     }
@@ -785,7 +805,7 @@ exports.process_keypress = function (e) {
     return exports.process_hotkey(e, hotkey);
 };
 
-$(document).keypress(function (e) {
+$(document).keypress((e) => {
     if (exports.process_keypress(e)) {
         e.preventDefault();
     }

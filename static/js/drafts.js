@@ -1,6 +1,12 @@
 const util = require("./util");
 const render_draft_table_body = require('../templates/draft_table_body.hbs');
 
+function set_count(count) {
+    const draft_count = count.toString();
+    const text = i18n.t('Drafts (__draft_count__)', {draft_count: draft_count});
+    $(".compose_drafts_button").text(text);
+}
+
 const draft_model = (function () {
     const exports = {};
 
@@ -24,6 +30,7 @@ const draft_model = (function () {
 
     function save(drafts) {
         ls.set(KEY, drafts);
+        set_count(Object.keys(drafts).length);
     }
 
     exports.addDraft = function (draft) {
@@ -168,7 +175,7 @@ exports.restore_draft = function (draft_id) {
                     {operator: "stream", operand: compose_args.stream},
                     {operator: "topic", operand: compose_args.topic},
                 ],
-                {trigger: "restore draft"}
+                {trigger: "restore draft"},
             );
         }
     } else {
@@ -177,7 +184,7 @@ exports.restore_draft = function (draft_id) {
                 [
                     {operator: "pm-with", operand: compose_args.private_message_recipient},
                 ],
-                {trigger: "restore draft"}
+                {trigger: "restore draft"},
             );
         }
     }
@@ -238,7 +245,7 @@ exports.format_draft = function (draft) {
         };
     } else {
         const emails = util.extract_pm_recipients(draft.private_message_recipient);
-        const recipients = emails.map(email => {
+        const recipients = emails.map((email) => {
             email = email.trim();
             const person = people.get_by_email(email);
             if (person !== undefined) {
@@ -311,9 +318,9 @@ exports.launch = function () {
 
         const unsorted_raw_drafts = Object.values(data);
 
-        const sorted_raw_drafts = unsorted_raw_drafts.sort(function (draft_a, draft_b) {
-            return draft_b.updatedAt - draft_a.updatedAt;
-        });
+        const sorted_raw_drafts = unsorted_raw_drafts.sort(
+            (draft_a, draft_b) => draft_b.updatedAt - draft_a.updatedAt,
+        );
 
         const sorted_formatted_drafts = sorted_raw_drafts.map(exports.format_draft).filter(Boolean);
 
@@ -507,13 +514,15 @@ exports.set_initial_element = function (drafts) {
 };
 
 exports.initialize = function () {
-    window.addEventListener("beforeunload", function () {
+    window.addEventListener("beforeunload", () => {
         exports.update_draft();
     });
 
+    set_count(Object.keys(draft_model.get()).length);
+
     $("#compose-textarea").focusout(exports.update_draft);
 
-    $('body').on('focus', '.draft-info-box', function (e) {
+    $('body').on('focus', '.draft-info-box', (e) => {
         activate_element(e.target);
     });
 };

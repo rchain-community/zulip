@@ -23,7 +23,7 @@ exports.build_widget = function (
     upload_button, // jQuery button to open file dialog
     preview_text = null,
     preview_image = null,
-    max_file_upload_size
+    max_file_upload_size,
 ) {
     // default value of max uploaded file size
     max_file_upload_size = max_file_upload_size || default_max_file_size;
@@ -53,12 +53,12 @@ exports.build_widget = function (
 
 
 
-    clear_button.on('click', function (e) {
+    clear_button.on('click', (e) => {
         clear();
         e.preventDefault();
     });
 
-    upload_button.on('drop', function (e) {
+    upload_button.on('drop', (e) => {
         const files = e.dataTransfer.files;
         if (files === null || files === undefined || files.length === 0) {
             return false;
@@ -69,7 +69,7 @@ exports.build_widget = function (
     });
 
     get_file_input().attr('accept', supported_types.toString());
-    get_file_input().on('change', function (e) {
+    get_file_input().on('change', (e) => {
         if (e.target.files.length === 0) {
             input_error.hide();
         } else if (e.target.files.length === 1) {
@@ -92,7 +92,7 @@ exports.build_widget = function (
         }
     });
 
-    upload_button.on('click', function (e) {
+    upload_button.on('click', (e) => {
         get_file_input().trigger('click');
         e.preventDefault();
     });
@@ -119,28 +119,28 @@ exports.build_direct_upload_widget = function (
     input_error, // jQuery object for error text
     upload_button, // jQuery button to open file dialog
     upload_function,
-    max_file_upload_size
+    max_file_upload_size,
 ) {
     // default value of max uploaded file size
     max_file_upload_size = max_file_upload_size || default_max_file_size;
     function accept() {
         input_error.hide();
-        if (upload_button.hasClass("night-settings")) {
-            upload_function(get_file_input(), true);
-        } else if (upload_button.hasClass("day-settings")) {
-            upload_function(get_file_input(), false);
+        const realm_logo_section = upload_button.closest(".avatar-icon-logo-settings");
+        if (realm_logo_section.attr('id') === "realm-night-logo-upload-widget") {
+            upload_function(get_file_input(), true, false);
+        } else if (realm_logo_section.attr('id') === "realm-day-logo-upload-widget") {
+            upload_function(get_file_input(), false, false);
         } else {
-            upload_function(get_file_input());
+            upload_function(get_file_input(), null, true);
         }
     }
 
     function clear() {
         const control = get_file_input();
-        const new_control = control.clone(true);
-        control.replaceWith(new_control);
+        control.val('');
     }
 
-    upload_button.on('drop', function (e) {
+    upload_button.on('drop', (e) => {
         const files = e.dataTransfer.files;
         if (files === null || files === undefined || files.length === 0) {
             return false;
@@ -151,7 +151,7 @@ exports.build_direct_upload_widget = function (
     });
 
     get_file_input().attr('accept', supported_types.toString());
-    get_file_input().on('change', function (e) {
+    get_file_input().on('change', (e) => {
         if (e.target.files.length === 0) {
             input_error.hide();
         } else if (e.target.files.length === 1) {
@@ -174,7 +174,7 @@ exports.build_direct_upload_widget = function (
         }
     });
 
-    upload_button.on('click', function (e) {
+    upload_button.on('click', (e) => {
         get_file_input().trigger('click');
         e.preventDefault();
     });

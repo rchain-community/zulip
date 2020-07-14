@@ -16,40 +16,40 @@ aliases:
   - &restore_cache_package_json
     restore_cache:
       keys:
-      - v1-npm-base.{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}-{{ checksum "yarn.lock" }}
+        - v1-npm-base.{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}-{{ checksum "yarn.lock" }}
 
   - &restore_cache_requirements
     restore_cache:
       keys:
-      - v1-venv-base.{{ .Environment.CIRCLE_JOB }}-{{ checksum "requirements/thumbor-dev.txt" }}-{{ checksum "requirements/dev.txt" }}
+        - v1-venv-base.{{ .Environment.CIRCLE_JOB }}-{{ checksum "requirements/thumbor-dev.txt" }}-{{ checksum "requirements/dev.txt" }}
 
   - &restore_emoji_cache
     restore_cache:
       keys:
-      - v1-venv-base.{{ .Environment.CIRCLE_JOB }}-{{ checksum "tools/setup/emoji/emoji_map.json" }}-{{ checksum "tools/setup/emoji/build_emoji" }}-{{checksum "tools/setup/emoji/emoji_setup_utils.py" }}-{{ checksum "tools/setup/emoji/emoji_names.py" }}-{{ checksum "package.json" }}
+        - v1-venv-base.{{ .Environment.CIRCLE_JOB }}-{{ checksum "tools/setup/emoji/emoji_map.json" }}-{{ checksum "tools/setup/emoji/build_emoji" }}-{{checksum "tools/setup/emoji/emoji_setup_utils.py" }}-{{ checksum "tools/setup/emoji/emoji_names.py" }}-{{ checksum "package.json" }}
 
   - &install_dependencies
     run:
       name: install dependencies
       command: |
-        sudo apt-get update
-        # Install moreutils so we can use `ts` and `mispipe` in the following.
-        sudo apt-get install -y moreutils
+          sudo apt-get update
+          # Install moreutils so we can use `ts` and `mispipe` in the following.
+          sudo apt-get install -y moreutils
 
-        # CircleCI sets the following in Git config at clone time:
-        #   url.ssh://git@github.com.insteadOf https://github.com
-        # This breaks the Git clones in the NVM `install.sh` we run
-        # in `install-node`.
-        # TODO: figure out why that breaks, and whether we want it.
-        #   (Is it an optimization?)
-        rm -f /home/circleci/.gitconfig
+          # CircleCI sets the following in Git config at clone time:
+          #   url.ssh://git@github.com.insteadOf https://github.com
+          # This breaks the Git clones in the NVM `install.sh` we run
+          # in `install-node`.
+          # TODO: figure out why that breaks, and whether we want it.
+          #   (Is it an optimization?)
+          rm -f /home/circleci/.gitconfig
 
-        # This is the main setup job for the test suite
-        mispipe "tools/ci/setup-backend" ts
+          # This is the main setup job for the test suite
+          mispipe "tools/ci/setup-backend --skip-dev-db-build" ts
 
-        # Cleaning caches is mostly unnecessary in Circle, because
-        # most builds don't get to write to the cache.
-        # mispipe "scripts/lib/clean-unused-caches --verbose --threshold 0" ts
+          # Cleaning caches is mostly unnecessary in Circle, because
+          # most builds don't get to write to the cache.
+          # mispipe "scripts/lib/clean-unused-caches --verbose --threshold 0 2>&1" ts
 
   - &save_cache_package_json
     save_cache:
@@ -73,84 +73,96 @@ aliases:
     run:
       name: do Bionic hack
       command: |
-        # Temporary hack till `sudo service redis-server start` gets fixes in Bionic. See
-        # https://chat.zulip.org/#narrow/stream/3-backend/topic/Ubuntu.20bionic.20CircleCI
-        sudo sed -i '/^bind/s/bind.*/bind 0.0.0.0/' /etc/redis/redis.conf
+          # Temporary hack till `sudo service redis-server start` gets fixes in Bionic. See
+          # https://chat.zulip.org/#narrow/stream/3-backend/topic/Ubuntu.20bionic.20CircleCI
+          sudo sed -i '/^bind/s/bind.*/bind 0.0.0.0/' /etc/redis/redis.conf
 
   - &run_backend_tests
     run:
       name: run backend tests
       command: |
-        . /srv/zulip-py3-venv/bin/activate
-        mispipe ./tools/ci/backend ts
+          . /srv/zulip-py3-venv/bin/activate
+          mispipe "./tools/ci/backend 2>&1" ts
 
   - &run_frontend_tests
     run:
       name: run frontend tests
       command: |
-        . /srv/zulip-py3-venv/bin/activate
-        mispipe ./tools/ci/frontend ts
+          . /srv/zulip-py3-venv/bin/activate
+          mispipe "./tools/ci/frontend 2>&1" ts
 
   - &upload_coverage_report
     run:
-     name: upload coverage report
-     command: |
-       # codecov requires `.coverage` file to be stored in pwd for
-       # uploading coverage results.
-       mv /home/circleci/zulip/var/.coverage /home/circleci/zulip/.coverage
+      name: upload coverage report
+      command: |
+          # codecov requires `.coverage` file to be stored in pwd for
+          # uploading coverage results.
+          mv /home/circleci/zulip/var/.coverage /home/circleci/zulip/.coverage
 
-       . /srv/zulip-py3-venv/bin/activate
-       # TODO: Check that the next release of codecov doesn't
-       # throw find error.
-       # codecov==2.0.16 introduced a bug which uses "find"
-       # for locating files which is buggy on some platforms.
-       # It was fixed via https://github.com/codecov/codecov-python/pull/217
-       # and should get automatically fixed here once it's released.
-       # We cannot pin the version here because we need the latest version for uploading files.
-       # see https://community.codecov.io/t/http-400-while-uploading-to-s3-with-python-codecov-from-travis/1428/7
-       pip install codecov && codecov \
-         || echo "Error in uploading coverage reports to codecov.io."
+          . /srv/zulip-py3-venv/bin/activate
+          # TODO: Check that the next release of codecov doesn't
+          # throw find error.
+          # codecov==2.0.16 introduced a bug which uses "find"
+          # for locating files which is buggy on some platforms.
+          # It was fixed via https://github.com/codecov/codecov-python/pull/217
+          # and should get automatically fixed here once it's released.
+          # We cannot pin the version here because we need the latest version for uploading files.
+          # see https://community.codecov.io/t/http-400-while-uploading-to-s3-with-python-codecov-from-travis/1428/7
+          pip install codecov && codecov \
+            || echo "Error in uploading coverage reports to codecov.io."
 
   - &build_production
     run:
       name: build production
       command: |
-        sudo apt-get update
-        # Install moreutils so we can use `ts` and `mispipe` in the following.
-        sudo apt-get install -y moreutils
+          sudo apt-get update
+          # Install moreutils so we can use `ts` and `mispipe` in the following.
+          sudo apt-get install -y moreutils
 
-        mispipe ./tools/ci/production-build ts
+          mispipe "./tools/ci/production-build 2>&1" ts
 
   - &production_extract_tarball
     run:
-     name: production extract tarball
-     command: |
-      sudo apt-get update
-      # Install moreutils so we can use `ts` and `mispipe` in the following.
-      sudo apt-get install -y moreutils
+      name: production extract tarball
+      command: |
+          sudo apt-get update
+          # Install moreutils so we can use `ts` and `mispipe` in the following.
+          sudo apt-get install -y moreutils
 
-      mispipe /tmp/production-extract-tarball ts
+          mispipe "/tmp/production-extract-tarball 2>&1" ts
 
   - &install_production
     run:
-     name: install production
-     command: |
-      sudo service rabbitmq-server restart
-      sudo mispipe /tmp/production-install ts
+      name: install production
+      command: |
+          sudo service rabbitmq-server restart
+          sudo mispipe "/tmp/production-install 2>&1" ts
+
+  - &verify_production
+    run:
+      name: verify install
+      command: |
+          sudo mispipe "/tmp/production-verify 2>&1" ts
+
+  - &upgrade_postgresql
+    run:
+      name: upgrade postgresql
+      command: |
+          sudo mispipe "/tmp/production-upgrade-pg 2>&1" ts
 
   - &check_xenial_provision_error
     run:
       name: check tools/provision error message on xenial
       command: |
-        ! tools/provision > >(tee provision.out)
-        grep -Fqx 'CRITICAL:root:Unsupported platform: ubuntu 16.04' provision.out
+          ! tools/provision > >(tee provision.out)
+          grep -Fqx 'CRITICAL:root:Unsupported platform: ubuntu 16.04' provision.out
 
   - &check_xenial_upgrade_error
     run:
       name: check scripts/lib/upgrade-zulip-stage-2 error message on xenial
       command: |
-        ! sudo scripts/lib/upgrade-zulip-stage-2 2> >(tee upgrade.err >&2)
-        grep -Fq 'upgrade-zulip-stage-2: Unsupported platform: ubuntu 16.04' upgrade.err
+          ! sudo scripts/lib/upgrade-zulip-stage-2 2> >(tee upgrade.err >&2)
+          grep -Fq 'upgrade-zulip-stage-2: Unsupported platform: ubuntu 16.04' upgrade.err
 
   - &notify_failure_status
     run:
@@ -159,18 +171,18 @@ aliases:
       branches:
         only: master
       command: |
-        if [[ "$CIRCLE_REPOSITORY_URL" == "git@github.com:zulip/zulip.git" ]]; then
-          curl  -H "Content-Type: application/json" \
-          -X POST -i 'https://chat.zulip.org/api/v1/external/circleci?api_key='"$ZULIP_BOT_KEY"'&stream=automated%20testing&topic=master%20failing' \
-          -d '{"payload": { "branch": "'"$CIRCLE_BRANCH"'", "reponame": "'"$CIRCLE_PROJECT_REPONAME"'", "status": "failed", "build_url": "'"$CIRCLE_BUILD_URL"'", "username": "'"$CIRCLE_USERNAME"'"}}'
-        fi
+          if [[ "$CIRCLE_REPOSITORY_URL" == "git@github.com:zulip/zulip.git" && "$ZULIP_BOT_KEY" != "" ]]; then
+            curl  -H "Content-Type: application/json" \
+            -X POST -i 'https://chat.zulip.org/api/v1/external/circleci?api_key='"$ZULIP_BOT_KEY"'&stream=automated%20testing&topic=master%20failing' \
+            -d '{"payload": { "branch": "'"$CIRCLE_BRANCH"'", "reponame": "'"$CIRCLE_PROJECT_REPONAME"'", "status": "failed", "build_url": "'"$CIRCLE_BUILD_URL"'", "username": "'"$CIRCLE_USERNAME"'"}}'
+          fi
 
 jobs:
-  "bionic-backend-frontend-python3.6":
+  "bionic-backend-frontend":
     docker:
-      # This is built from tools/circleci/images/bionic/Dockerfile .
+      # This is built from tools/ci/images/bionic/Dockerfile .
       # Bionic ships with Python 3.6.
-      - image: amanagr/circleci:bionic-python-2.test
+      - image: arpit551/circleci:bionic-python-test
 
     working_directory: ~/zulip
 
@@ -191,8 +203,8 @@ jobs:
       - run:
           name: test locked requirements
           command: |
-            . /srv/zulip-py3-venv/bin/activate
-            mispipe ./tools/test-locked-requirements ts
+              . /srv/zulip-py3-venv/bin/activate
+              mispipe "./tools/test-locked-requirements 2>&1" ts
 
       - *run_frontend_tests
         # We only need to upload coverage reports on whichever platform
@@ -212,15 +224,15 @@ jobs:
           destination: test-reports
 
       - store_test_results:
-            path: ./var/xunit-test-results/casper/
+          path: ./var/xunit-test-results/casper/
       - *notify_failure_status
 
 
-  "focal-backend-python3.8":
+  "focal-backend":
       docker:
-        # This is built from tools/circleci/images/focal/Dockerfile.
+        # This is built from tools/ci/images/focal/Dockerfile.
         # Focal ships with Python 3.8.2.
-        - image: arpit551/circleci:focal-test
+        - image: arpit551/circleci:focal-python-test
 
       working_directory: ~/zulip
 
@@ -236,11 +248,14 @@ jobs:
         - *save_cache_requirements
         - *save_emoji_cache
         - *run_backend_tests
+        - run:
+            name: Check development database build
+            command: mispipe "tools/ci/setup-backend" ts
         - *notify_failure_status
 
   "xenial-legacy":
     docker:
-      - image: gregprice/circleci:xenial-python-4.test
+      - image: arpit551/circleci:xenial-python-test
 
     working_directory: ~/zulip
 
@@ -251,11 +266,11 @@ jobs:
       - *check_xenial_upgrade_error
       - *notify_failure_status
 
-  "bionic-production-build-python3.6":
+  "bionic-production-build":
     docker:
-        # This is built from tools/circleci/images/bionic/Dockerfile .
-        # Bionic ships with Python 3.6.
-        - image: amanagr/circleci:bionic-python-2.test
+      # This is built from tools/ci/images/bionic/Dockerfile .
+      # Bionic ships with Python 3.6.
+      - image: arpit551/circleci:bionic-python-test
 
     working_directory: ~/zulip
 
@@ -284,22 +299,24 @@ jobs:
           # Must be relative path from root
           paths:
             - zulip-server-test.tar.gz
-            - success-http-headers.txt
+            - success-http-headers.template.txt
             - production-install
+            - production-verify
+            - production-upgrade-pg
             - production
             - production-extract-tarball
       - *notify_failure_status
 
-  "bionic-production-install-python3.6":
+  "bionic-production-install":
     docker:
-        # This is built from tools/circleci/images/bionic/Dockerfile .
-        # Bionic ships with Python 3.6.
-        - image: amanagr/circleci:bionic-python-2.test
+      # This is built from tools/ci/images/bionic/Dockerfile .
+      # Bionic ships with Python 3.6.
+      - image: arpit551/circleci:bionic-python-test
 
     working_directory: ~/zulip
 
     steps:
-      # Contains the built tarball from bionic-production-build-python3.6 job
+      # Contains the built tarball from bionic-production-build job
       - attach_workspace:
           # Must be absolute path or relative path from working_directory
           at: /tmp
@@ -309,42 +326,59 @@ jobs:
       - *production_extract_tarball
       - *restore_cache_package_json
       - *install_production
+      - *verify_production
+      - *upgrade_postgresql
+      - *verify_production
       - *save_cache_package_json
       - *notify_failure_status
 
-  "focal-production-install-python3.8":
+  "focal-production-install":
     docker:
-        # This is built from tools/circleci/images/focal/Dockerfile.
-        # Focal ships with Python 3.8.2.
-        - image: arpit551/circleci:focal-test
+      # This is built from tools/ci/images/focal/Dockerfile.
+      # Focal ships with Python 3.8.2.
+      - image: arpit551/circleci:focal-python-test
 
     working_directory: ~/zulip
 
     steps:
-      # Contains the built tarball from bionic-production-build-python3.6 job
+      # Contains the built tarball from bionic-production-build job
       - attach_workspace:
           # Must be absolute path or relative path from working_directory
           at: /tmp
 
       - *create_cache_directories
-      - *do_bionic_hack
+
+      - run:
+          name: do memcached hack
+          command: |
+              # Temporary hack till memcached upstream is updated in Focal.
+              # https://bugs.launchpad.net/ubuntu/+source/memcached/+bug/1878721
+              echo "export SASL_CONF_PATH=/etc/sasl2" | sudo tee - a /etc/default/memcached
+
       - *production_extract_tarball
       - *restore_cache_package_json
       - *install_production
+      - *verify_production
       - *save_cache_package_json
       - *notify_failure_status
 
 workflows:
   version: 2
-  build:
+  "Ubuntu 16.04 Xenial (Python 3.5, legacy)":
     jobs:
-      - "bionic-backend-frontend-python3.6"
-      - "bionic-production-build-python3.6"
-      - "focal-backend-python3.8"
       - "xenial-legacy"
-      - "bionic-production-install-python3.6":
-            requires:
-                - "bionic-production-build-python3.6"
-      # - "focal-production-install-python3.8":
-      #       requires:
-      #           - "bionic-production-build-python3.6"
+  "Ubuntu 18.04 Bionic (Python 3.6, backend+frontend)":
+    jobs:
+      - "bionic-backend-frontend"
+  "Ubuntu 20.04 Focal (Python 3.8, backend)":
+    jobs:
+      - "focal-backend"
+  "Production":
+    jobs:
+      - "bionic-production-build"
+      - "bionic-production-install":
+          requires:
+            - "bionic-production-build"
+      - "focal-production-install":
+          requires:
+            - "bionic-production-build"

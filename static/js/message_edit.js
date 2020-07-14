@@ -1,10 +1,15 @@
 const render_message_edit_form = require('../templates/message_edit_form.hbs');
-const render_message_edit_history = require('../templates/message_edit_history.hbs');
 const render_topic_edit_form = require('../templates/topic_edit_form.hbs');
 
 const currently_editing_messages = new Map();
 let currently_deleting_messages = [];
 const currently_echoing_messages = new Map();
+
+// These variables are designed to preserve the user's most recent
+// choices when editing a group of messages, to make it convenient to
+// move several topics in a row with the same settings.
+exports.notify_old_thread_default = true;
+exports.notify_new_thread_default = true;
 
 const editability_types = {
     NO: 1,
@@ -42,9 +47,9 @@ function is_topic_editable(message, edit_limit_seconds_buffer) {
     }
 
     // If you're using community topic editing, there's a deadline.
-    // TODO: Change hardcoded value (24 hrs) to be realm setting.  Currently, it is
-    // DEFAULT_COMMUNITY_TOPIC_EDITING_LIMIT_SECONDS
-    return 86400 + edit_limit_seconds_buffer + now.diffSeconds(message.timestamp * 1000) > 0;
+    return page_params.realm_community_topic_editing_limit_seconds
+        + edit_limit_seconds_buffer
+        + now.diffSeconds(message.timestamp * 1000) > 0;
 }
 
 function get_editability(message, edit_limit_seconds_buffer) {
@@ -249,7 +254,7 @@ function edit_message(row, raw_content) {
     // been able to click it at the time the mouse entered the message_row. Also
     // a buffer in case their computer is slow, or stalled for a second, etc
     // If you change this number also change edit_limit_buffer in
-    // zerver.views.messages.update_message_backend
+    // zerver.views.message_edit.update_message_backend
     const seconds_left_buffer = 5;
     const editability = get_editability(message, seconds_left_buffer);
     const is_editable = editability === exports.editability_types.TOPIC_ONLY ||
@@ -266,7 +271,7 @@ function edit_message(row, raw_content) {
     const show_edit_stream = message.is_stream && page_params.is_admin;
     // current message's stream has been already been added and selected in handlebar
     const available_streams = show_edit_stream ? stream_data.subscribed_subs()
-        .filter(s => s.stream_id !== message.stream_id) : null;
+        .filter((s) => s.stream_id !== message.stream_id) : null;
 
     const form = $(render_message_edit_form({
         is_stream: message.type === 'stream',
@@ -283,6 +288,8 @@ function edit_message(row, raw_content) {
         available_streams: available_streams,
         stream_id: message.stream_id,
         stream_name: message.stream,
+        notify_new_thread: exports.notify_new_thread_default,
+        notify_old_thread: exports.notify_old_thread_default,
     }));
 
     const edit_obj = {form: form, raw_content: raw_content};
@@ -298,6 +305,7 @@ function edit_message(row, raw_content) {
     const message_edit_content = row.find('textarea.message_edit_content');
     const message_edit_topic = row.find('input.message_edit_topic');
     const message_edit_topic_propagate = row.find('select.message_edit_topic_propagate');
+    const message_edit_breadcrumb_messages = row.find('div.message_edit_breadcrumb_messages');
     const message_edit_countdown_timer = row.find('.message_edit_countdown_timer');
     const copy_message = row.find('.copy_message');
 
@@ -358,7 +366,7 @@ function edit_message(row, raw_content) {
         page_params.realm_message_content_edit_limit_seconds > 0) {
         // Give them at least 10 seconds.
         // If you change this number also change edit_limit_buffer in
-        // zerver.views.messages.update_message_backend
+        // zerver.views.message_edit.update_message_backend
         const min_seconds_to_edit = 10;
         const now = new XDate();
         let seconds_left = page_params.realm_message_content_edit_limit_seconds +
@@ -372,7 +380,7 @@ function edit_message(row, raw_content) {
         // Do this right away, rather than waiting for the timer to do its first update,
         // since otherwise there is a noticeable lag
         message_edit_countdown_timer.text(timer_text(seconds_left));
-        const countdown_timer = setInterval(function () {
+        const countdown_timer = setInterval(() => {
             seconds_left -= 1;
             if (seconds_left <= 0) {
                 clearInterval(countdown_timer);
@@ -380,6 +388,7 @@ function edit_message(row, raw_content) {
                 if (message.type === 'stream') {
                     message_edit_topic.prop("readonly", "readonly");
                     message_edit_topic_propagate.hide();
+                    message_edit_breadcrumb_messages.hide();
                 }
                 // We don't go directly to a "TOPIC_ONLY" type state (with an active Save button),
                 // since it isn't clear what to do with the half-finished edit. It's nice to keep
@@ -424,14 +433,15 @@ function edit_message(row, raw_content) {
         const is_topic_edited = new_topic !== original_topic && new_topic !== "";
         const is_stream_edited = new_stream_id !== original_stream_id;
         message_edit_topic_propagate.toggle(is_topic_edited || is_stream_edited);
+        message_edit_breadcrumb_messages.toggle(is_stream_edited);
     }
 
     if (!message.locally_echoed) {
-        message_edit_topic.keyup(function () {
+        message_edit_topic.keyup(() => {
             set_propagate_selector_display();
         });
 
-        message_edit_stream.on('change', function () {
+        message_edit_stream.on('change', () => {
             set_propagate_selector_display();
         });
     }
@@ -628,7 +638,13 @@ exports.save_message_row_edit = function (row) {
 
     if (topic_changed || stream_changed) {
         const selected_topic_propagation = row.find("select.message_edit_topic_propagate").val() || "change_later";
+        const send_notification_to_old_thread = row.find('.send_notification_to_old_thread').is(':checked');
+        const send_notification_to_new_thread = row.find('.send_notification_to_new_thread').is(':checked');
         request.propagate_mode = selected_topic_propagation;
+        request.send_notification_to_old_thread = send_notification_to_old_thread;
+        request.send_notification_to_new_thread = send_notification_to_new_thread;
+        exports.notify_old_thread_default = send_notification_to_old_thread;
+        exports.notify_new_thread_default = send_notification_to_new_thread;
         changed = true;
     }
 
@@ -683,7 +699,7 @@ exports.save_message_row_edit = function (row) {
         echo.edit_locally(message, currently_echoing_messages.get(message_id));
 
         row = current_msg_list.get_row(message_id);
-        message_edit.end_message_row_edit(row);
+        exports.end_message_row_edit(row);
     }
 
     channel.patch({
@@ -716,7 +732,7 @@ exports.save_message_row_edit = function (row) {
                     });
 
                     row = current_msg_list.get_row(message_id);
-                    if (!message_edit.is_editing(message_id)) {
+                    if (!exports.is_editing(message_id)) {
                         // Return to the message editing open UI state.
                         start_edit_maintaining_scroll(row, echo_data.orig_raw_content);
                     }
@@ -765,73 +781,9 @@ exports.edit_last_sent_message = function () {
 
     // Finally do the real work!
     compose_actions.cancel();
-    exports.start(msg_row, function () {
+    exports.start(msg_row, () => {
         $('#message_edit_content').focus();
     });
-};
-
-exports.fetch_and_render_message_history = function (message) {
-    channel.get({
-        url: "/json/messages/" + message.id + "/history",
-        data: {message_id: JSON.stringify(message.id)},
-        success: function (data) {
-            const content_edit_history = [];
-            let prev_timestamp;
-
-            for (const [index, msg] of data.message_history.entries()) {
-                // Format timestamp nicely for display
-                const timestamp = timerender.get_full_time(msg.timestamp);
-                const item = {
-                    timestamp: moment(timestamp).format("h:mm A"),
-                    display_date: moment(timestamp).format("MMMM D, YYYY"),
-                };
-                if (msg.user_id) {
-                    const person = people.get_by_user_id(msg.user_id);
-                    item.edited_by = person.full_name;
-                }
-
-                if (index === 0) {
-                    item.posted_or_edited = "Posted by";
-                    item.body_to_render = msg.rendered_content;
-                    prev_timestamp = timestamp;
-                    item.show_date_row = true;
-                } else if (msg.prev_topic && msg.prev_content) {
-                    item.posted_or_edited = "Edited by";
-                    item.body_to_render = msg.content_html_diff;
-                    item.show_date_row = !moment(timestamp).isSame(prev_timestamp, 'day');
-                    item.topic_edited = true;
-                    item.prev_topic = msg.prev_topic;
-                    item.new_topic = msg.topic;
-                } else if (msg.prev_topic) {
-                    item.posted_or_edited = "Topic edited by";
-                    item.topic_edited = true;
-                    item.prev_topic = msg.prev_topic;
-                    item.new_topic = msg.topic;
-                } else {
-                    // just a content edit
-                    item.posted_or_edited = "Edited by";
-                    item.body_to_render = msg.content_html_diff;
-                    item.show_date_row = !moment(timestamp).isSame(prev_timestamp, 'day');
-                }
-
-                content_edit_history.push(item);
-            }
-            $('#message-history').attr('data-message-id', message.id);
-            $('#message-history').html(render_message_edit_history({
-                edited_messages: content_edit_history,
-            }));
-        },
-        error: function (xhr) {
-            ui_report.error(i18n.t("Error fetching message edit history"), xhr,
-                            $("#message-history-error"));
-        },
-    });
-};
-
-exports.show_history = function (message) {
-    $('#message-history').html('');
-    $('#message-edit-history').modal("show");
-    exports.fetch_and_render_message_history(message);
 };
 
 function hide_delete_btn_show_spinner(deleting) {
@@ -855,7 +807,7 @@ exports.delete_message = function (msg_id) {
     } else {
         hide_delete_btn_show_spinner(false);
     }
-    $('#do_delete_message_button').off().on('click', function (e) {
+    $('#do_delete_message_button').off().on('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
         currently_deleting_messages.push(msg_id);
@@ -865,13 +817,13 @@ exports.delete_message = function (msg_id) {
             success: function () {
                 $('#delete_message_modal').modal("hide");
                 currently_deleting_messages = currently_deleting_messages.filter(
-                    id => id !== msg_id
+                    (id) => id !== msg_id,
                 );
                 hide_delete_btn_show_spinner(false);
             },
             error: function (xhr) {
                 currently_deleting_messages = currently_deleting_messages.filter(
-                    id => id !== msg_id
+                    (id) => id !== msg_id,
                 );
                 hide_delete_btn_show_spinner(false);
                 ui_report.error(i18n.t("Error deleting message"), xhr,
@@ -904,12 +856,17 @@ exports.handle_narrow_deactivated = function () {
 };
 
 exports.move_topic_containing_message_to_stream =
-    function (message_id, new_stream_id, new_topic_name) {
+    function (message_id, new_stream_id, new_topic_name, send_notification_to_new_thread,
+              send_notification_to_old_thread) {
         const request = {
             stream_id: new_stream_id,
             propagate_mode: 'change_all',
             topic: new_topic_name,
+            send_notification_to_old_thread: send_notification_to_old_thread,
+            send_notification_to_new_thread: send_notification_to_new_thread,
         };
+        exports.notify_old_thread_default = send_notification_to_old_thread;
+        exports.notify_new_thread_default = send_notification_to_new_thread;
         channel.patch({
             url: '/json/messages/' + message_id,
             data: request,
@@ -921,10 +878,7 @@ exports.move_topic_containing_message_to_stream =
             },
             error: function (xhr) {
                 ui_report.error(i18n.t("Error moving the topic"), xhr,
-                                $("#home-error"));
-                // The fadeTo method used by ui_report.message doesn't work
-                // on this. Hence we fadeOut it here.
-                setTimeout(() => { $("#home-error").fadeOut('slow'); }, 4000);
+                                $("#home-error"), 4000);
             },
         });
     };

@@ -16,7 +16,7 @@ run_test('basics', () => {
     assert.equal(
         html,
         '<ul class="foo" title="cats &amp; &lt;&quot;dogs&quot;&gt;">\n\n' +
-        '</ul>'
+        '</ul>',
     );
 });
 
@@ -40,7 +40,7 @@ run_test('attribute escaping', () => {
     assert.equal(
         html,
         '<ul class="&quot;&gt;something evil&lt;div class=&quot;" ' +
-        'title="apples &amp; oranges">\n\n</ul>'
+        'title="apples &amp; oranges">\n\n</ul>',
     );
 });
 
@@ -61,7 +61,7 @@ run_test('attribute updates', () => {
     assert.equal(
         html,
         '<ul class="same" color="blue" id="101">\n\n' +
-        '</ul>'
+        '</ul>',
     );
 
     let updated;
@@ -102,13 +102,9 @@ run_test('attribute updates', () => {
 });
 
 function make_child(i, name) {
-    const render = () => {
-        return '<li>' + name + '</li>';
-    };
+    const render = () => '<li>' + name + '</li>';
 
-    const eq = (other) => {
-        return name === other.name;
-    };
+    const eq = (other) => name === other.name;
 
     return {
         key: i,
@@ -119,7 +115,7 @@ function make_child(i, name) {
 }
 
 function make_children(lst) {
-    return lst.map(i => make_child(i, 'foo' + i));
+    return lst.map((i) => make_child(i, 'foo' + i));
 }
 
 run_test('children', () => {
@@ -148,7 +144,7 @@ run_test('children', () => {
         '<li>foo1</li>\n' +
         '<li>foo2</li>\n' +
         '<li>foo3</li>\n' +
-        '</ul>'
+        '</ul>',
     );
 
     // Force a complete redraw.
@@ -168,7 +164,7 @@ run_test('children', () => {
         '<ul class="main">\n' +
         '<li>foo4</li>\n' +
         '<li>foo5</li>\n' +
-        '</ul>'
+        '</ul>',
     );
 });
 
@@ -198,7 +194,7 @@ run_test('partial updates', () => {
         '<li>foo1</li>\n' +
         '<li>foo2</li>\n' +
         '<li>foo3</li>\n' +
-        '</ul>'
+        '</ul>',
     );
 
     replace_content = () => {
@@ -207,22 +203,18 @@ run_test('partial updates', () => {
 
     let patched_html;
 
-    find = () => {
-        return {
-            children: () => {
+    find = () => ({
+        children: () => ({
+            eq: (i) => {
+                assert.equal(i, 0);
                 return {
-                    eq: (i) => {
-                        assert.equal(i, 0);
-                        return {
-                            replaceWith: (html) => {
-                                patched_html = html;
-                            },
-                        };
+                    replaceWith: (html) => {
+                        patched_html = html;
                     },
                 };
             },
-        };
-    };
+        }),
+    });
 
     const new_nodes = make_children([1, 2, 3]);
     new_nodes[0] = make_child(1, 'modified1');

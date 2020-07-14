@@ -8,7 +8,7 @@ function render_lightbox_list_images(preview_source) {
         const images = Array.prototype.slice.call($(".focused_table .message_inline_image img"));
         const $image_list = $("#lightbox_overlay .image-list").html("");
 
-        images.forEach(function (img) {
+        images.forEach((img) => {
             const src = img.getAttribute("src");
             const className = preview_source === src ? "image selected" : "image";
 
@@ -70,7 +70,7 @@ function display_video(payload) {
         // Use data: to load the player in a unique origin for security.
         source = "data:text/html," + window.encodeURIComponent(
             "<!DOCTYPE html><style>iframe{position:absolute;left:0;top:0;width:100%;height:100%;box-sizing:border-box}</style>" +
-                payload.source
+                payload.source,
         );
     }
 
@@ -321,7 +321,7 @@ exports.initialize = function () {
         }
     });
 
-    $("#lightbox_overlay .image-preview").on("dblclick", "img, canvas", function (e) {
+    $("#lightbox_overlay .image-preview").on("dblclick", "img, canvas", (e) => {
         $("#lightbox_overlay .lightbox-canvas-trigger").click();
         e.preventDefault();
     });
@@ -332,7 +332,7 @@ exports.initialize = function () {
         }
     });
 
-    $("#lightbox_overlay").on("click", ".image-info-wrapper, .center", function (e) {
+    $("#lightbox_overlay").on("click", ".image-info-wrapper, .center", (e) => {
         if ($(e.target).is(".image-info-wrapper, .center")) {
             overlays.close_overlay("lightbox");
         }

@@ -65,7 +65,7 @@ people.initialize_current_user(me.user_id);
 
 function convert_recipients(people) {
     // Display_recipient uses `id` for user_ids.
-    return people.map(p => ({
+    return people.map((p) => ({
         email: p.email,
         id: p.user_id,
         full_name: p.full_name,
@@ -279,7 +279,7 @@ run_test('message_id_change', () => {
         new_id: 402,
     };
 
-    global.with_stub(function (stub) {
+    global.with_stub((stub) => {
         home_msg_list.change_message_id = stub.f;
         message_store.reify_message_id(opts);
         const msg_id = stub.get_args('old', 'new');
@@ -288,7 +288,7 @@ run_test('message_id_change', () => {
     });
 
     home_msg_list.view = {};
-    global.with_stub(function (stub) {
+    global.with_stub((stub) => {
         home_msg_list.view.change_message_id = stub.f;
         message_store.reify_message_id(opts);
         const msg_id = stub.get_args('old', 'new');

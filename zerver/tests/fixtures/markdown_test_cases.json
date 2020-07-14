@@ -42,6 +42,12 @@
       "text_content": " outer      space    "
     },
     {
+      "name": "inline_code_html_entities",
+      "input": "`<&nbsp;>`",
+      "expected_output": "<p><code>&lt;&amp;nbsp;&gt;</code></p>",
+      "text_content": "<&nbsp;>"
+    },
+    {
       "name": "codeblock_backticks",
       "input": "\n```\nfenced code\n```\n\n```inline code```\n",
       "expected_output": "<div class=\"codehilite\"><pre><span></span><code>fenced code\n</code></pre></div>\n\n\n<p><code>inline code</code></p>",
@@ -381,10 +387,10 @@
     },
     {
       "name": "two_inline_images",
-      "input": "Google logo today: https://www.google.com/images/srpr/logo4w.png\nKinda boring\nZulip logo: https://zulipchat.com/static/images/landing-page/zulip-octopus.png",
-      "expected_output": "<p>Google logo today: <a href=\"https:\/\/www.google.com\/images\/srpr\/logo4w.png\">https:\/\/www.google.com\/images\/srpr\/logo4w.png<\/a><br>\nKinda boring<br>\nZulip logo: <a href=\"https:\/\/zulipchat.com\/static\/images\/landing-page\/zulip-octopus.png\">https:\/\/zulipchat.com\/static\/images\/landing-page\/zulip-octopus.png<\/a><\/p>\n<div class=\"message_inline_image\"><a href=\"https:\/\/www.google.com\/images\/srpr\/logo4w.png\"><img data-src-fullsize=\"\/thumbnail?url=https%3A%2F%2Fwww.google.com%2Fimages%2Fsrpr%2Flogo4w.png&amp;size=full\" src=\"\/thumbnail?url=https%3A%2F%2Fwww.google.com%2Fimages%2Fsrpr%2Flogo4w.png&amp;size=thumbnail\"><\/a><\/div><div class=\"message_inline_image\"><a href=\"https:\/\/zulipchat.com\/static\/images\/landing-page\/zulip-octopus.png\"><img data-src-fullsize=\"\/thumbnail?url=https%3A%2F%2Fzulipchat.com%2Fstatic%2Fimages%2Flanding-page%2Fzulip-octopus.png&amp;size=full\" src=\"\/thumbnail?url=https%3A%2F%2Fzulipchat.com%2Fstatic%2Fimages%2Flanding-page%2Fzulip-octopus.png&amp;size=thumbnail\"><\/a><\/div>",
+      "input": "Google logo today: https://www.google.com/images/srpr/logo4w.png\nKinda boring\nZulip logo: https://zulip.com/static/images/landing-page/zulip-octopus.png",
+      "expected_output": "<p>Google logo today: <a href=\"https:\/\/www.google.com\/images\/srpr\/logo4w.png\">https:\/\/www.google.com\/images\/srpr\/logo4w.png<\/a><br>\nKinda boring<br>\nZulip logo: <a href=\"https:\/\/zulip.com\/static\/images\/landing-page\/zulip-octopus.png\">https:\/\/zulip.com\/static\/images\/landing-page\/zulip-octopus.png<\/a><\/p>\n<div class=\"message_inline_image\"><a href=\"https:\/\/www.google.com\/images\/srpr\/logo4w.png\"><img data-src-fullsize=\"\/thumbnail?url=https%3A%2F%2Fwww.google.com%2Fimages%2Fsrpr%2Flogo4w.png&amp;size=full\" src=\"\/thumbnail?url=https%3A%2F%2Fwww.google.com%2Fimages%2Fsrpr%2Flogo4w.png&amp;size=thumbnail\"><\/a><\/div><div class=\"message_inline_image\"><a href=\"https:\/\/zulip.com\/static\/images\/landing-page\/zulip-octopus.png\"><img data-src-fullsize=\"\/thumbnail?url=https%3A%2F%2Fzulip.com%2Fstatic%2Fimages%2Flanding-page%2Fzulip-octopus.png&amp;size=full\" src=\"\/thumbnail?url=https%3A%2F%2Fzulip.com%2Fstatic%2Fimages%2Flanding-page%2Fzulip-octopus.png&amp;size=thumbnail\"><\/a><\/div>",
       "backend_only_rendering": true,
-      "text_content": "Google logo today: https:\/\/www.google.com\/images\/srpr\/logo4w.png\nKinda boring\nZulip logo: https:\/\/zulipchat.com\/static\/images\/landing-page\/zulip-octopus.png\n"
+      "text_content": "Google logo today: https:\/\/www.google.com\/images\/srpr\/logo4w.png\nKinda boring\nZulip logo: https:\/\/zulip.com\/static\/images\/landing-page\/zulip-octopus.png\n"
     },
     {
       "name": "deduplicate_inline_previews",
@@ -717,60 +723,38 @@
       "text_content": "gonna take a break for a bit--all yours if you want to play around too. what I did:\n\ninstall cmake\ngit clone zulip desktop\nrun cmake-gui .. in c:\\zulip\\zulip-desktop\\msvcbuild\nhit configure\/generate until it generated the msvc project (had to make a fix to some cmake files)\nopened vs2013 \ntried to build\n"
     },
     {
-      "name": "avatar",
-      "input": "!avatar(username@example.com)",
-      "expected_output": "<p><img alt=\"username@example.com\" class=\"message_body_gravatar\" src=\"/avatar/username@example.com?s=30\" title=\"username@example.com\"></p>",
-      "text_content": "username@example.com"
+      "name": "timestamp_backend_markdown_only",
+      "input": "<time:Jun 5th 2017, 10:30PM>",
+      "expected_output": "<p><time datetime=\"2017-06-05T22:30:00Z\">Jun 5th 2017, 10:30PM</time></p>",
+      "marked_expected_output": "<p><span>Jun 5th 2017, 10:30PM</span></p>"
     },
     {
-      "name": "gravatar",
-      "input": "!gravatar(username@example.com)",
-      "expected_output": "<p><img alt=\"username@example.com\" class=\"message_body_gravatar\" src=\"/avatar/username@example.com?s=30\" title=\"username@example.com\"></p>",
-      "text_content": "username@example.com"
-    },
-    {
-      "name": "avatar_escaped",
-      "input": "`!avatar(username@example.com)`",
-      "expected_output": "<p><code>!avatar(username@example.com)</code></p>",
-      "text_content": "!avatar(username@example.com)"
-    },
-    {
-      "name": "gravatar_escaped",
-      "input": "`!gravatar(username@example.com)`",
-      "expected_output": "<p><code>!gravatar(username@example.com)</code></p>",
-      "text_content": "!gravatar(username@example.com)"
-    },
-    {
-      "name": "timestamp_bugdown_only",
-      "input": "!time(Jun 5th 2017, 10:30PM)",
-      "expected_output": "<p><span class=\"timestamp\" data-timestamp=\"1496701800\">Jun 5th 2017, 10:30PM</span></p>",
-      "marked_expected_output": "<p><span class=\"timestamp\">Jun 5th 2017, 10:30PM</span></p>"
-    },
-    {
-      "name": "timestamp_bugdown_and_marked",
-      "input": "!time(31 Dec 2017)",
-      "expected_output": "<p><span class=\"timestamp\" data-timestamp=\"1514678400\">31 Dec 2017</span></p>"
+      "name": "timestamp_backend_markdown_and_marked",
+      "input": "<time:31 Dec 2017>",
+      "expected_output": "<p><time datetime=\"2017-12-31T00:00:00Z\">31 Dec 2017</time></p>"
     },
     {
       "name": "timestamp_invalid_input",
-      "input": "!time(<alert(1)>)",
-      "expected_output": "<p><span class=\"timestamp\">&lt;alert(1</span>&gt;)</p>"
+      "input": "<time:<alert(1)>>",
+      "expected_output": "<p><span class=\"timestamp-error\">Invalid time format: &lt;alert(1)</span>&gt;</p>",
+      "marked_expected_output": "<p><span>&lt;alert(1)</span>&gt;</p>"
     },
     {
       "name": "timestamp_timezone",
-      "input": "!time(31 Dec 2017 5:30 am IST)",
-      "expected_output": "<p><span class=\"timestamp\" data-timestamp=\"1514678400\">31 Dec 2017 5:30 am IST</span></p>",
-      "marked_expected_output": "<p><span class=\"timestamp\">31 Dec 2017 5:30 am IST</span></p>"
+      "input": "<time:31 Dec 2017 5:30 am IST>",
+      "expected_output": "<p><time datetime=\"2017-12-31T00:00:00Z\">31 Dec 2017 5:30 am IST</time></p>",
+      "marked_expected_output": "<p><span>31 Dec 2017 5:30 am IST</span></p>"
     },
     {
       "name": "timestamp_incorrect",
-      "input": "!time(hello world)",
-      "expected_output": "<p><span class=\"timestamp\">hello world</span></p>"
+      "input": "<time:**hello world**>",
+      "expected_output": "<p><span class=\"timestamp-error\">Invalid time format: **hello world**</span></p>",
+      "marked_expected_output": "<p><span>**hello world**</span></p>"
     },
     {
       "name": "timestamp_unix",
-      "input": "!time(1496701800)",
-      "expected_output": "<p><span class=\"timestamp\" data-timestamp=\"1496701800\">1496701800</span></p>"
+      "input": "<time:1496701800>",
+      "expected_output": "<p><time datetime=\"2017-06-05T22:30:00Z\">1496701800</time></p>"
     },
     {
       "name": "tex_inline",
@@ -853,6 +837,38 @@
       "expected_output": "<ol>\n<li>\n<p>A</p>\n</li>\n<li>\n<p>B</p>\n</li>\n<li>\n<p>C</p>\n</li>\n<li>\n<p>D<br>\nordinary paragraph</p>\n</li>\n<li>\n<p>AA</p>\n</li>\n<li>\n<p>BB</p>\n</li>\n</ol>",
       "marked_expected_output": "<ol>\n<li><p>A</p>\n</li>\n<li><p>B</p>\n</li>\n<li><p>C</p>\n</li>\n<li><p>D<br>\nordinary paragraph</p>\n</li>\n<li><p>AA</p>\n</li>\n<li><p>BB</p>\n</li>\n</ol>",
       "text_content": "1. A\n2. B\n3. C\n4. D\nordinary paragraph\n5. AA\n6. BB"
+    },
+    {
+      "name": "spoilers_fenced_spoiler",
+      "input": "```spoiler header\ncontent\n```\noutside spoiler\n",
+      "expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>header</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>content</p>\n</div></div>\n\n<p>outside spoiler</p>"
+    },
+    {
+      "name": "spoilers_empty_header",
+      "input": "```spoiler\ncontent\n```\noutside spoiler\n",
+      "expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>content</p>\n</div></div>\n\n<p>outside spoiler</p>"
+    },
+    {
+      "name": "spoilers_script_tags",
+      "input": "```spoiler <script>alert(1)</script>\n<script>alert(1)</script>\n```",
+      "expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\n</div></div>",
+      "marked_expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>&lt;script&gt;alert(1)&lt;/script&gt;\n\n</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>&lt;script&gt;alert(1)&lt;/script&gt;\n\n</p>\n</div></div>"
+    },
+    {
+      "name": "spoilers_block_quote",
+      "input": "~~~quote\n```spoiler header\ncontent\n```\noutside spoiler\n~~~\noutside quote",
+      "expected_output": "<blockquote>\n<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>header</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>content</p>\n</div></div>\n\n<p>outside spoiler</p>\n</blockquote>\n<p>outside quote</p>"
+    },
+    {
+      "name": "spoilers_with_header_markdown",
+      "input": "```spoiler [Header](https://example.com) :smile:\ncontent\n```",
+      "expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p><a href=\"https://example.com\">Header</a> <span aria-label=\"smile\" class=\"emoji emoji-263a\" role=\"img\" title=\"smile\">:smile:</span></p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>content</p>\n</div></div>"
+    },
+    {
+      "name": "spoiler_with_inline_image",
+      "input": "```spoiler header\nContent http://example.com/image.png\n```",
+      "expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>header</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>Content <a href=\"http://example.com/image.png\">http://example.com/image.png</a></p>\n<div class=\"message_inline_image\"><a href=\"http://example.com/image.png\"><img data-src-fullsize=\"/thumbnail?url=http%3A%2F%2Fexample.com%2Fimage.png&amp;size=full\" src=\"/thumbnail?url=http%3A%2F%2Fexample.com%2Fimage.png&amp;size=thumbnail\"></a></div></div></div>",
+      "marked_expected_output": "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p>header</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>Content <a href=\"http://example.com/image.png\">http://example.com/image.png</a></p>\n</div></div>"
     }
   ],
   "linkify_tests": [

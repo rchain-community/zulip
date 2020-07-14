@@ -140,11 +140,8 @@ exports.update_stream_name = function (sub, new_name) {
         compose_state.stream_name(new_name);
     }
 
-    // Update navbar stream name if needed
-    const filter = narrow_state.filter();
-    if (filter && filter.operands("stream")[0] === old_name) {
-        tab_bar.update_stream_name(new_name);
-    }
+    // Update navbar if needed
+    tab_bar.maybe_rerender_title_area_for_stream(sub);
 };
 
 exports.update_stream_description = function (sub, description, rendered_description) {
@@ -158,11 +155,8 @@ exports.update_stream_description = function (sub, description, rendered_descrip
     // Update stream settings
     stream_edit.update_stream_description(sub);
 
-    // Update navbar stream description if needed
-    const filter = narrow_state.filter();
-    if (filter && filter.operands("stream")[0] === sub.name) {
-        tab_bar.update_stream_description(sub.rendered_description);
-    }
+    // Update navbar if needed
+    tab_bar.maybe_rerender_title_area_for_stream(sub);
 };
 
 exports.update_stream_privacy = function (sub, values) {
@@ -177,12 +171,20 @@ exports.update_stream_privacy = function (sub, values) {
     stream_ui_updates.update_subscribers_count(sub);
     stream_ui_updates.update_add_subscriptions_elements(sub);
     stream_list.redraw_stream_privacy(sub);
+
+    // Update navbar if needed
+    tab_bar.maybe_rerender_title_area_for_stream(sub);
 };
 
 exports.update_stream_post_policy = function (sub, new_value) {
     stream_data.update_stream_post_policy(sub, new_value);
     stream_data.update_calculated_fields(sub);
 
+    stream_ui_updates.update_stream_subscription_type_text(sub);
+};
+
+exports.update_message_retention_setting = function (sub, new_value) {
+    stream_data.update_message_retention_setting(sub, new_value);
     stream_ui_updates.update_stream_subscription_type_text(sub);
 };
 
@@ -201,6 +203,13 @@ exports.rerender_subscriptions_settings = function (sub) {
     stream_data.update_subscribers_count(sub);
     stream_ui_updates.update_subscribers_count(sub);
     stream_ui_updates.update_subscribers_list(sub);
+};
+
+exports.update_subscribers_ui = function (sub) {
+    // We rely on rerender_subscriptions_settings to complete the
+    // stream_data subscribers count update
+    exports.rerender_subscriptions_settings(sub);
+    tab_bar.maybe_rerender_title_area_for_stream(sub);
 };
 
 exports.add_sub_to_table = function (sub) {
@@ -577,9 +586,14 @@ exports.setup_page = function (callback) {
             hide_all_streams: !should_list_all_streams(),
             max_name_length: page_params.stream_name_max_length,
             max_description_length: page_params.stream_description_max_length,
-            is_admin: page_params.is_admin,
+            is_owner: page_params.is_owner,
             stream_post_policy_values: stream_data.stream_post_policy_values,
             stream_post_policy: stream_data.stream_post_policy_values.everyone.code,
+            zulip_plan_is_not_limited: page_params.zulip_plan_is_not_limited,
+            realm_message_retention_setting:
+                stream_edit.get_display_text_for_realm_message_retention_setting,
+            upgrade_text_for_wide_organization_logo:
+                page_params.upgrade_text_for_wide_organization_logo,
         };
 
         const rendered = render_subscription_table_body(template_data);
@@ -590,12 +604,12 @@ exports.setup_page = function (callback) {
         exports.actually_filter_streams();
         stream_create.set_up_handlers();
 
-        $("#stream_filter input[type='text']").on("input", function () {
+        $("#stream_filter input[type='text']").on("input", () => {
             // Debounce filtering in case a user is typing quickly
             filter_streams();
         });
 
-        $("#clear_search_stream_name").on("click", function () {
+        $("#clear_search_stream_name").on("click", () => {
             $("#stream_filter input[type='text']").val("");
             filter_streams();
         });
@@ -614,14 +628,15 @@ exports.setup_page = function (callback) {
 
 exports.switch_to_stream_row = function (stream_id) {
     const stream_row = exports.row_for_stream_id(stream_id);
+    const container = $(".streams-list");
 
     exports.get_active_data().row.removeClass("active");
     stream_row.addClass("active");
 
-    scroll_util.scroll_element_into_container(stream_row, stream_row.parent());
+    scroll_util.scroll_element_into_container(stream_row, container);
 
     // It's dubious that we need this timeout any more.
-    setTimeout(function () {
+    setTimeout(() => {
         if (stream_id === exports.get_active_data().id) {
             stream_row.click();
         }
@@ -668,7 +683,7 @@ exports.change_state = function (section) {
 };
 
 exports.launch = function (section) {
-    exports.setup_page(function () {
+    exports.setup_page(() => {
         overlays.open_overlay({
             name: 'subscriptions',
             overlay: $("#subscription_overlay"),
@@ -751,7 +766,7 @@ exports.view_stream = function () {
 /* For the given stream_row, remove the tick and replace by a spinner. */
 function display_subscribe_toggle_spinner(stream_row) {
     /* Prevent sending multiple requests by removing the button class. */
-    $(stream_row).removeClass("sub_unsub_button");
+    $(stream_row).find('.check').removeClass("sub_unsub_button");
 
     /* Hide the tick. */
     const tick = $(stream_row).find("svg");
@@ -766,7 +781,7 @@ function display_subscribe_toggle_spinner(stream_row) {
 /* For the given stream_row, add the tick and delete the spinner. */
 function hide_subscribe_toggle_spinner(stream_row) {
     /* Re-enable the button to handle requests. */
-    $(stream_row).addClass("sub_unsub_button");
+    $(stream_row).find('.check').addClass("sub_unsub_button");
 
     /* Show the tick. */
     const tick = $(stream_row).find("svg");
@@ -873,12 +888,12 @@ exports.sub_or_unsub = function (sub, stream_row) {
 
 
 exports.initialize = function () {
-    $("#subscriptions_table").on("click", ".create_stream_button", function (e) {
+    $("#subscriptions_table").on("click", ".create_stream_button", (e) => {
         e.preventDefault();
         exports.open_create_stream();
     });
 
-    $(".subscriptions").on("click", "[data-dismiss]", function (e) {
+    $(".subscriptions").on("click", "[data-dismiss]", (e) => {
         e.preventDefault();
         // we want to make sure that the click is not just a simulated
         // click; this fixes an issue where hitting "enter" would
@@ -888,37 +903,16 @@ exports.initialize = function () {
         }
     });
 
-    $("body").on("mouseover", ".subscribed-button", function (e) {
-        $(e.target).addClass("btn-danger").text(i18n.t("Unsubscribe"));
-    }).on("mouseout", ".subscribed-button", function (e) {
-        $(e.target).removeClass("btn-danger").text(i18n.t("Subscribed"));
-    });
-
     $("#subscriptions_table").on("click", ".email-address", function () {
         selectText(this);
     });
 
-    $('.empty_feed_sub_unsub').click(function (e) {
-        e.preventDefault();
-
-        $('#subscription-status').hide();
-        const stream_name = narrow_state.stream();
-        if (stream_name === undefined) {
-            return;
-        }
-        const sub = stream_data.get_sub(stream_name);
-        exports.sub_or_unsub(sub);
-
-        $('.empty_feed_notice').hide();
-        $('#empty_narrow_message').show();
-    });
-
-    $("#subscriptions_table").on("click", ".stream-row, .create_stream_button", function () {
+    $("#subscriptions_table").on("click", ".stream-row, .create_stream_button", () => {
         $(".right").addClass("show");
         $(".subscriptions-header").addClass("slide-left");
     });
 
-    $("#subscriptions_table").on("click", ".fa-chevron-left", function () {
+    $("#subscriptions_table").on("click", ".fa-chevron-left", () => {
         $(".right").removeClass("show");
         $(".subscriptions-header").removeClass("slide-left");
     });
@@ -926,7 +920,7 @@ exports.initialize = function () {
     (function defocus_sub_settings() {
         const sel = ".search-container, .streams-list, .subscriptions-header";
 
-        $("#subscriptions_table").on("click", sel, function (e) {
+        $("#subscriptions_table").on("click", sel, (e) => {
             if ($(e.target).is(sel)) {
                 stream_edit.open_edit_panel_empty();
             }

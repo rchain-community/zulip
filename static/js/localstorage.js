@@ -62,11 +62,9 @@ const ls = {
     // Remove keys which match a regex.
     removeDataRegex: function (version, regex) {
         const key_regex = new RegExp(this.formGetter(version, regex));
-        const keys = Object.keys(localStorage).filter(function (key) {
-            return key_regex.test(key);
-        });
+        const keys = Object.keys(localStorage).filter((key) => key_regex.test(key));
 
-        keys.forEach(function (key) {
+        keys.forEach((key) => {
             localStorage.removeItem(key);
         });
     },
@@ -152,8 +150,6 @@ const localstorage = function () {
         },
         set: function (version) {
             _data.VERSION = version;
-
-            return prototype;
         },
     });
 

@@ -6,9 +6,10 @@ zrequire('list_render');
 // that are either jQuery, Element, or just raw HTML
 // strings.  We initially test with raw strings.
 set_global('jQuery', 'stub');
-set_global('Element', function () {
+function Element() {
     return { };
-});
+}
+set_global('Element', Element);
 
 // We only need very simple jQuery wrappers for when the
 // "real" code wraps html or sets up click handlers.
@@ -163,7 +164,7 @@ run_test('scrolling', () => {
 
     assert.deepEqual(
         container.appended_data.html(),
-        items.slice(0, 80).join('')
+        items.slice(0, 80).join(''),
     );
 
     // Set up our fake geometry so it forces a scroll action.
@@ -176,7 +177,7 @@ run_test('scrolling', () => {
     scroll_container.call_scroll();
     assert.deepEqual(
         container.appended_data.html(),
-        items.slice(80, 100).join('')
+        items.slice(80, 100).join(''),
     );
 });
 
@@ -198,9 +199,7 @@ run_test('filtering', () => {
     const opts = {
         filter: {
             element: search_input,
-            predicate: (item, value) => {
-                return item.includes(value);
-            },
+            predicate: (item, value) => item.includes(value),
         },
         modifier: (item) => div(item),
     };
@@ -294,9 +293,7 @@ function sort_button(opts) {
         addClass: (cls) => {
             classList.add(cls);
         },
-        hasClass: (cls) => {
-            return classList.has(cls);
-        },
+        hasClass: (cls) => classList.has(cls),
         removeClass: (cls) => {
             classList.delete(cls);
         },
@@ -332,11 +329,7 @@ run_test('wire up filter element', () => {
 
     const opts = {
         filter: {
-            filterer: (list, value) => {
-                return list.filter((item) => {
-                    return item.toLowerCase().includes(value);
-                });
-            },
+            filterer: (list, value) => list.filter((item) => item.toLowerCase().includes(value)),
             element: filter_element,
         },
         modifier: (s) => '(' + s + ')',
@@ -346,7 +339,7 @@ run_test('wire up filter element', () => {
     filter_element.f.apply({value: 'se'});
     assert.equal(
         container.appended_data.html(),
-        '(JESSE)(moses)(Sean)'
+        '(JESSE)(moses)(Sean)',
     );
 });
 
@@ -372,9 +365,7 @@ run_test('sorting', () => {
     const opts = {
         name: 'sorting-list',
         parent_container: sort_container,
-        modifier: (item) => {
-            return div(item.name) + div(item.salary);
-        },
+        modifier: (item) => div(item.name) + div(item.salary),
         filter: {
             predicate: () => true,
         },
@@ -514,7 +505,7 @@ run_test('custom sort', () => {
 
     assert.deepEqual(
         container.appended_data.html(),
-        '(6, 7)(1, 43)(4, 11)'
+        '(6, 7)(1, 43)(4, 11)',
     );
 
     const widget = list_render.get('custom-sort-list');
@@ -522,7 +513,7 @@ run_test('custom sort', () => {
     widget.sort('x_value');
     assert.deepEqual(
         container.appended_data.html(),
-        '(1, 43)(4, 11)(6, 7)'
+        '(1, 43)(4, 11)(6, 7)',
     );
 
     // We can sort without registering the function, too.
@@ -533,7 +524,7 @@ run_test('custom sort', () => {
     widget.sort(sort_by_y);
     assert.deepEqual(
         container.appended_data.html(),
-        '(6, 7)(4, 11)(1, 43)'
+        '(6, 7)(4, 11)(1, 43)',
     );
 });
 
@@ -663,7 +654,7 @@ run_test('replace_list_data w/filter update', () => {
 
     assert.deepEqual(
         container.appended_data.html(),
-        '(2)(4)'
+        '(2)(4)',
     );
 
     const widget = list_render.get('replace-list');
@@ -673,7 +664,7 @@ run_test('replace_list_data w/filter update', () => {
 
     assert.deepEqual(
         container.appended_data.html(),
-        '(6)(8)'
+        '(6)(8)',
     );
 });
 
@@ -693,14 +684,12 @@ run_test('opts.get_item', () => {
 
     assert.deepEqual(
         list_render.get_filtered_items(
-            'whatever', list, boring_opts
+            'whatever', list, boring_opts,
         ),
-        ['one', 'two', 'three', 'four']
+        ['one', 'two', 'three', 'four'],
     );
 
-    const predicate = (item, value) => {
-        return item.startsWith(value);
-    };
+    const predicate = (item, value) => item.startsWith(value);
 
     const predicate_opts = {
         get_item: (n) => items[n],
@@ -711,27 +700,23 @@ run_test('opts.get_item', () => {
 
     assert.deepEqual(
         list_render.get_filtered_items(
-            't', list, predicate_opts
+            't', list, predicate_opts,
         ),
-        ['two', 'three']
+        ['two', 'three'],
     );
 
     const filterer_opts = {
         get_item: (n) => items[n],
         filter: {
-            filterer: (items, value) => {
-                return items.filter((item) => {
-                    return predicate(item, value);
-                });
-            },
+            filterer: (items, value) => items.filter((item) => predicate(item, value)),
         },
     };
 
     assert.deepEqual(
         list_render.get_filtered_items(
-            't', list, filterer_opts
+            't', list, filterer_opts,
         ),
-        ['two', 'three']
+        ['two', 'three'],
     );
 });
 
@@ -821,9 +806,7 @@ run_test('render item', () => {
     let rendering_item = false;
     const widget_3 = list_render.create(container, list, {
         name: 'replace-list',
-        modifier: (item) => {
-            return rendering_item ? undefined : `${item}\n`;
-        },
+        modifier: (item) => rendering_item ? undefined : `${item}\n`,
         get_item: get_item,
         html_selector: (item) => `tr[data-item='${item}']`,
     });

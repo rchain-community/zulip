@@ -1,25 +1,14 @@
 from typing import Any, Dict, Mapping, Union
-
 from unittest import mock
 
 from django.utils.timezone import now as timezone_now
 
-from zerver.lib.actions import (
-    get_client,
-)
+from zerver.lib.actions import get_client
+from zerver.lib.push_notifications import get_apns_badge_count
+from zerver.lib.test_classes import ZulipTestCase
+from zerver.models import Subscription, UserPresence
+from zerver.tornado.event_queue import maybe_enqueue_notifications
 
-from zerver.lib.test_classes import (
-    ZulipTestCase,
-)
-
-from zerver.models import (
-    Subscription,
-    UserPresence,
-)
-
-from zerver.tornado.event_queue import (
-    maybe_enqueue_notifications,
-)
 
 class EditMessageSideEffectsTest(ZulipTestCase):
     def _assert_update_does_not_notify_anybody(self, message_id: int, content: str) -> None:
@@ -45,7 +34,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         message_id = self.send_personal_message(
             hamlet,
             cordelia,
-            content='no mention'
+            content='no mention',
         )
 
         self._assert_update_does_not_notify_anybody(
@@ -143,7 +132,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
 
         return dict(
             enqueue_kwargs=enqueue_kwargs,
-            queue_messages=queue_messages
+            queue_messages=queue_messages,
         )
 
     def _send_and_update_message(self, original_content: str, updated_content: str,
@@ -175,7 +164,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
 
         return dict(
             message_id=message_id,
-            info=info
+            info=info,
         )
 
     def test_updates_with_stream_mention(self) -> None:
@@ -262,7 +251,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         '''
         return mock.patch(
             'zerver.tornado.event_queue.receiver_is_off_zulip',
-            return_value=False
+            return_value=False,
         )
 
     def test_stream_push_notify_for_sorta_present_user(self) -> None:
@@ -311,7 +300,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         notification_message_data = self._send_and_update_message(
             original_content, updated_content,
             enable_online_push_notifications=True,
-            connected_to_zulip=True, present_on_web=True
+            connected_to_zulip=True, present_on_web=True,
         )
 
         message_id = notification_message_data['message_id']
@@ -347,7 +336,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         notification_message_data = self._send_and_update_message(
             original_content, updated_content,
             enable_online_push_notifications=True,
-            connected_to_zulip=True, present_on_web=True
+            connected_to_zulip=True, present_on_web=True,
         )
 
         message_id = notification_message_data['message_id']
@@ -386,7 +375,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         updated_content = 'now we mention @**Cordelia Lear**'
         notification_message_data = self._send_and_update_message(
             original_content, updated_content,
-            connected_to_zulip=True
+            connected_to_zulip=True,
         )
 
         message_id = notification_message_data['message_id']
@@ -421,7 +410,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         updated_content = 'now we mention @**all**'
         notification_message_data = self._send_and_update_message(
             original_content, updated_content,
-            connected_to_zulip=True
+            connected_to_zulip=True,
         )
 
         message_id = notification_message_data['message_id']
@@ -481,7 +470,7 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         notification_message_data = self._send_and_update_message(
             original_content, updated_content,
             connected_to_zulip=True,
-            present_on_web=True
+            present_on_web=True,
         )
 
         message_id = notification_message_data['message_id']
@@ -505,3 +494,61 @@ class EditMessageSideEffectsTest(ZulipTestCase):
         # Because Cordelia is FULLY present, we don't need to send any offline
         # push notifications or missed message emails.
         self.assertEqual(len(info['queue_messages']), 0)
+
+    def test_clear_notification_when_mention_removed(self) -> None:
+        mentioned_user = self.example_user('iago')
+        self.assertEqual(get_apns_badge_count(mentioned_user), 0)
+
+        with mock.patch('zerver.lib.push_notifications.push_notifications_enabled', return_value=True):
+            message_id = self._login_and_send_original_stream_message(
+                content="@**Iago**",
+            )
+
+        self.assertEqual(get_apns_badge_count(mentioned_user), 1)
+
+        self._get_queued_data_for_message_update(
+            message_id=message_id,
+            content="Removed mention"
+        )
+
+        self.assertEqual(get_apns_badge_count(mentioned_user), 0)
+
+    def test_clear_notification_when_group_mention_removed(self) -> None:
+        group_mentioned_user = self.example_user('cordelia')
+        self.assertEqual(get_apns_badge_count(group_mentioned_user), 0)
+
+        with mock.patch('zerver.lib.push_notifications.push_notifications_enabled', return_value=True):
+            message_id = self._login_and_send_original_stream_message(
+                content="Hello @*hamletcharacters*",
+            )
+
+        self.assertEqual(get_apns_badge_count(group_mentioned_user), 1)
+
+        self._get_queued_data_for_message_update(
+            message_id=message_id,
+            content="Removed group mention",
+            expect_short_circuit=True,
+        )
+
+        self.assertEqual(get_apns_badge_count(group_mentioned_user), 0)
+
+    def test_not_clear_notification_when_mention_removed_but_stream_notified(self) -> None:
+        mentioned_user = self.example_user('iago')
+        mentioned_user.enable_stream_push_notifications = True
+        mentioned_user.save()
+
+        self.assertEqual(get_apns_badge_count(mentioned_user), 0)
+
+        with mock.patch('zerver.lib.push_notifications.push_notifications_enabled', return_value=True):
+            message_id = self._login_and_send_original_stream_message(
+                content="@**Iago**",
+            )
+
+        self.assertEqual(get_apns_badge_count(mentioned_user), 1)
+
+        self._get_queued_data_for_message_update(
+            message_id=message_id,
+            content="Removed mention"
+        )
+
+        self.assertEqual(get_apns_badge_count(mentioned_user), 1)

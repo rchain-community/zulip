@@ -17,9 +17,7 @@ const _ = global._;
 
 // Create a helper function to avoid sneaky delays in tests.
 function immediate(f) {
-    return () => {
-        return f();
-    };
+    return () => f();
 }
 
 // Find the files we need to run.
@@ -44,6 +42,7 @@ global.to_$ = () => window;
 
 // Set up stub helpers.
 const stub = require('./stub.js');
+global.make_stub = stub.make_stub;
 global.with_stub = stub.with_stub;
 
 // Set up fake jQuery
@@ -78,7 +77,7 @@ global.read_fixture_data = (fn) => {
 function short_tb(tb) {
     const lines = tb.split('\n');
 
-    const i = lines.findIndex(line => line.includes('run_test') || line.includes('run_one_module'));
+    const i = lines.findIndex((line) => line.includes('run_test') || line.includes('run_one_module'));
 
     if (i === -1) {
         return tb;
@@ -87,11 +86,14 @@ function short_tb(tb) {
     return lines.splice(0, i + 1).join('\n') + '\n(...)\n';
 }
 
-// Set up bugdown comparison helper
-global.bugdown_assert = require('./bugdown_assert.js');
+// Set up markdown comparison helper
+global.markdown_assert = require('./markdown_assert.js');
+
+let current_file_name;
 
 function run_one_module(file) {
     console.info('running tests for ' + file.name);
+    current_file_name = file.name;
     require(file.full_name);
 }
 
@@ -99,13 +101,20 @@ global.run_test = (label, f) => {
     if (files.length === 1) {
         console.info('        test: ' + label);
     }
-    f();
+    try {
+        f();
+    } catch (error) {
+        console.info('-'.repeat(50));
+        console.info(`test failed: ${current_file_name} > ${label}`);
+        console.info();
+        throw error;
+    }
     // defensively reset blueslip after each test.
     blueslip.reset();
 };
 
 try {
-    files.forEach(function (file) {
+    files.forEach((file) => {
         set_global('location', {
             hash: '#',
         });

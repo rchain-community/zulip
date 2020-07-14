@@ -41,7 +41,7 @@ exports.init = function () {
 exports.init();
 
 function split_to_ints(lst) {
-    return lst.split(',').map(s => parseInt(s, 10));
+    return lst.split(',').map((s) => parseInt(s, 10));
 }
 
 
@@ -63,7 +63,7 @@ exports.get_by_email = function (email) {
     if (person.email.toLowerCase() !== email.toLowerCase()) {
         blueslip.warn(
             'Obsolete email passed to get_by_email: ' + email +
-            ' new email = ' + person.email
+            ' new email = ' + person.email,
         );
     }
 
@@ -139,9 +139,7 @@ exports.is_known_user_id = function (user_id) {
 };
 
 function sort_numerically(user_ids) {
-    user_ids.sort(function (a, b) {
-        return a - b;
-    });
+    user_ids.sort((a, b) => a - b);
 
     return user_ids;
 }
@@ -151,7 +149,7 @@ exports.huddle_string = function (message) {
         return;
     }
 
-    let user_ids = message.display_recipient.map(recip => recip.id);
+    let user_ids = message.display_recipient.map((recip) => recip.id);
 
     function is_huddle_recip(user_id) {
         return user_id &&
@@ -173,7 +171,7 @@ exports.huddle_string = function (message) {
 exports.user_ids_string_to_emails_string = function (user_ids_string) {
     const user_ids = split_to_ints(user_ids_string);
 
-    let emails = user_ids.map(user_id => {
+    let emails = user_ids.map((user_id) => {
         const person = people_by_user_id_dict.get(user_id);
         return person && person.email;
     });
@@ -183,7 +181,7 @@ exports.user_ids_string_to_emails_string = function (user_ids_string) {
         return;
     }
 
-    emails = emails.map(email => email.toLowerCase());
+    emails = emails.map((email) => email.toLowerCase());
 
     emails.sort();
 
@@ -192,7 +190,7 @@ exports.user_ids_string_to_emails_string = function (user_ids_string) {
 
 exports.user_ids_string_to_ids_array = function (user_ids_string) {
     const user_ids = user_ids_string.split(',');
-    const ids = user_ids.map(id => Number(id));
+    const ids = user_ids.map((id) => Number(id));
     return ids;
 };
 
@@ -212,7 +210,7 @@ exports.reply_to_to_user_ids_string = function (emails_string) {
     // invalid data.
     const emails = emails_string.split(',');
 
-    let user_ids = emails.map(email => {
+    let user_ids = emails.map((email) => {
         const person = exports.get_by_email(email);
         return person && person.user_id;
     });
@@ -243,7 +241,9 @@ exports.get_user_time = function (user_id) {
 exports.get_user_type = function (user_id) {
     const user_profile = exports.get_by_user_id(user_id);
 
-    if (user_profile.is_admin) {
+    if (user_profile.is_owner) {
+        return i18n.t("Owner");
+    } else if (user_profile.is_admin) {
         return i18n.t("Administrator");
     } else if (user_profile.is_guest) {
         return i18n.t("Guest");
@@ -259,7 +259,7 @@ exports.emails_strings_to_user_ids_string = function (emails_string) {
 };
 
 exports.email_list_to_user_ids_string = function (emails) {
-    let user_ids = emails.map(email => {
+    let user_ids = emails.map((email) => {
         const person = exports.get_by_email(email);
         return person && person.user_id;
     });
@@ -275,7 +275,7 @@ exports.email_list_to_user_ids_string = function (emails) {
 };
 
 exports.safe_full_names = function (user_ids) {
-    let names = user_ids.map(user_id => {
+    let names = user_ids.map((user_id) => {
         const person = people_by_user_id_dict.get(user_id);
         return person && person.full_name;
     });
@@ -293,7 +293,7 @@ exports.get_recipients = function (user_ids_string) {
     // See message_store.get_pm_full_names() for a similar function.
 
     const user_ids = split_to_ints(user_ids_string);
-    const other_ids = user_ids.filter(user_id => !exports.is_my_user_id(user_id));
+    const other_ids = user_ids.filter((user_id) => !exports.is_my_user_id(user_id));
 
     if (other_ids.length === 0) {
         // private message with oneself
@@ -321,7 +321,7 @@ exports.pm_reply_to = function (message) {
         return;
     }
 
-    const emails = user_ids.map(user_id => {
+    const emails = user_ids.map((user_id) => {
         const person = people_by_user_id_dict.get(user_id);
         if (!person) {
             blueslip.error('Unknown user id in message: ' + user_id);
@@ -341,7 +341,7 @@ function sorted_other_user_ids(user_ids) {
     // This excludes your own user id unless you're the only user
     // (i.e. you sent a message to yourself).
 
-    const other_user_ids = user_ids.filter(user_id => !exports.is_my_user_id(user_id));
+    const other_user_ids = user_ids.filter((user_id) => !exports.is_my_user_id(user_id));
 
     if (other_user_ids.length >= 1) {
         user_ids = other_user_ids;
@@ -387,7 +387,7 @@ exports.all_user_ids_in_pm = function (message) {
         return;
     }
 
-    let user_ids = message.display_recipient.map(recip => recip.id);
+    let user_ids = message.display_recipient.map((recip) => recip.id);
 
     user_ids = sort_numerically(user_ids);
     return user_ids;
@@ -403,7 +403,7 @@ exports.pm_with_user_ids = function (message) {
         return;
     }
 
-    const user_ids = message.display_recipient.map(recip => recip.id);
+    const user_ids = message.display_recipient.map((recip) => recip.id);
 
     return sorted_other_user_ids(user_ids);
 };
@@ -418,8 +418,8 @@ exports.group_pm_with_user_ids = function (message) {
         return;
     }
 
-    const user_ids = message.display_recipient.map(recip => recip.id);
-    const is_user_present = user_ids.some(user_id => exports.is_my_user_id(user_id));
+    const user_ids = message.display_recipient.map((recip) => recip.id);
+    const is_user_present = user_ids.some((user_id) => exports.is_my_user_id(user_id));
     if (is_user_present) {
         user_ids.sort();
         if (user_ids.length > 2) {
@@ -481,19 +481,19 @@ exports.update_email_in_reply_to = function (reply_to, user_id, new_email) {
     // and we don't warn on any errors.
     let emails = reply_to.split(',');
 
-    const persons = emails.map(email => people_dict.get(email.trim()));
+    const persons = emails.map((email) => people_dict.get(email.trim()));
 
     if (!persons.every(Boolean)) {
         return reply_to;
     }
 
-    const needs_patch = persons.some(person => person.user_id === user_id);
+    const needs_patch = persons.some((person) => person.user_id === user_id);
 
     if (!needs_patch) {
         return reply_to;
     }
 
-    emails = persons.map(person => {
+    emails = persons.map((person) => {
         if (person.user_id === user_id) {
             return new_email;
         }
@@ -505,8 +505,8 @@ exports.update_email_in_reply_to = function (reply_to, user_id, new_email) {
 
 exports.pm_with_operand_ids = function (operand) {
     let emails = operand.split(',');
-    emails = emails.map(email => email.trim());
-    let persons = emails.map(email => people_dict.get(email));
+    emails = emails.map((email) => email.trim());
+    let persons = emails.map((email) => people_dict.get(email));
 
     // If your email is included in a PM group with other people, just ignore it
     if (persons.length > 1) {
@@ -517,7 +517,7 @@ exports.pm_with_operand_ids = function (operand) {
         return;
     }
 
-    let user_ids = persons.map(person => person.user_id);
+    let user_ids = persons.map((person) => person.user_id);
 
     user_ids = sort_numerically(user_ids);
 
@@ -545,7 +545,19 @@ exports.emails_to_slug = function (emails_string) {
 };
 
 exports.slug_to_emails = function (slug) {
-    const m = /^([\d,]+)-/.exec(slug);
+    /*
+        It's not super important to be flexible about
+        PM-related slugs, since you would rarely post
+        them to the web, but we we do want to support
+        reasonable variations:
+
+            99-alice@example.com
+            99
+
+        Our canonical version is 99-alice@example.com,
+        and we only care about the "99" prefix.
+    */
+    const m = /^([\d,]+)(-.*)?/.exec(slug);
     if (m) {
         let user_ids_string = m[1];
         user_ids_string = exports.exclude_me_from_string(user_ids_string);
@@ -565,7 +577,7 @@ exports.exclude_me_from_string = function (user_ids_string) {
         return user_ids.join(',');
     }
 
-    user_ids = user_ids.filter(user_id => !exports.is_my_user_id(user_id));
+    user_ids = user_ids.filter((user_id) => !exports.is_my_user_id(user_id));
 
     return user_ids.join(',');
 };
@@ -602,7 +614,22 @@ exports.small_avatar_url_for_person = function (person) {
     if (person.avatar_url) {
         return exports.format_small_avatar_url(person.avatar_url);
     }
-    return gravatar_url_for_email(person.email);
+
+    if (person.avatar_url === null) {
+        return gravatar_url_for_email(person.email);
+    }
+
+    return exports.format_small_avatar_url('/avatar/' + person.user_id);
+};
+
+exports.sender_info_with_small_avatar_urls_for_sender_ids = function (sender_ids) {
+    const senders_info = [];
+    for (const id of sender_ids) {
+        const sender = {...exports.get_by_user_id(id)};
+        sender.avatar_url_small = exports.small_avatar_url_for_person(sender);
+        senders_info.push(sender);
+    }
+    return senders_info;
 };
 
 exports.small_avatar_url = function (message) {
@@ -635,6 +662,15 @@ exports.small_avatar_url = function (message) {
         return exports.format_small_avatar_url(message.avatar_url);
     }
 
+    if (person && person.avatar_url === undefined) {
+        // If we don't have an avatar_url at all, we use `GET
+        // /avatar/{user_id}` endpoint to obtain avatar url.  This is
+        // required to take advantage of the user_avatar_url_field_optional
+        // optimization, which saves a huge amount of network traffic on
+        // servers with 10,000s of user accounts.
+        return exports.format_small_avatar_url('/avatar/' + person.user_id);
+    }
+
     // For computing the user's email, we first trust the person
     // object since that is updated via our real-time sync system, but
     // if unavailable, we use the sender email.
@@ -662,20 +698,12 @@ exports.is_valid_email_for_compose = function (email) {
 
 exports.is_valid_bulk_emails_for_compose = function (emails) {
     // Returns false if at least one of the emails is invalid.
-    return emails.every(email => {
+    return emails.every((email) => {
         if (!exports.is_valid_email_for_compose(email)) {
             return false;
         }
         return true;
     });
-};
-
-exports.get_active_user_for_email = function (email) {
-    const person = exports.get_by_email(email);
-    if (!person) {
-        return;
-    }
-    return active_user_dict.get(person.user_id);
 };
 
 exports.is_active_user_for_popover = function (user_id) {
@@ -723,28 +751,28 @@ exports.get_realm_users = function () {
     return Array.from(active_user_dict.values());
 };
 
-exports.get_active_humans = function () {
-    const humans = [];
+exports.get_active_human_ids = function () {
+    const human_ids = [];
 
     for (const user of active_user_dict.values()) {
         if (!user.is_bot) {
-            humans.push(user);
+            human_ids.push(user.user_id);
         }
     }
 
-    return humans;
+    return human_ids;
 };
 
-exports.get_non_active_humans = function () {
-    const humans = [];
+exports.get_non_active_human_ids = function () {
+    const human_ids = [];
 
     for (const user of non_active_user_dict.values()) {
         if (!user.is_bot) {
-            humans.push(user);
+            human_ids.push(user.user_id);
         }
     }
 
-    return humans;
+    return human_ids;
 };
 
 exports.get_active_human_count = function () {
@@ -821,7 +849,7 @@ exports.get_message_people = function () {
         semantics
     */
     const message_people = message_store.user_ids().map(
-        user_id => people_by_user_id_dict.get(user_id)
+        (user_id) => people_by_user_id_dict.get(user_id),
     ).filter(Boolean);
 
     return message_people;
@@ -829,9 +857,9 @@ exports.get_message_people = function () {
 
 exports.get_active_message_people = function () {
     const message_people = exports.get_message_people();
-    const active_message_people = message_people.filter(function (item) {
-        return active_user_dict.has(item.user_id);
-    });
+    const active_message_people = message_people.filter((item) =>
+        active_user_dict.has(item.user_id),
+    );
     return active_message_people;
 };
 
@@ -862,7 +890,7 @@ exports.build_termlet_matcher = function (termlet) {
         }
         const names = full_name.toLowerCase().split(' ');
 
-        return names.some(name => name.startsWith(termlet));
+        return names.some((name) => name.startsWith(termlet));
     };
 };
 
@@ -879,7 +907,7 @@ exports.build_person_matcher = function (query) {
             return true;
         }
 
-        return termlet_matchers.every(matcher => matcher(user));
+        return termlet_matchers.every((matcher) => matcher(user));
     };
 };
 
@@ -888,7 +916,7 @@ exports.filter_people_by_search_terms = function (users, search_terms) {
 
     // Build our matchers outside the loop to avoid some
     // search overhead that is not user-specific.
-    const matchers = search_terms.map(search_term => exports.build_person_matcher(search_term));
+    const matchers = search_terms.map((search_term) => exports.build_person_matcher(search_term));
 
     // Loop through users and populate filtered_users only
     // if they include search_terms
@@ -900,7 +928,7 @@ exports.filter_people_by_search_terms = function (users, search_terms) {
         }
 
         // Return user emails that include search terms
-        const match = matchers.some(matcher => matcher(user));
+        const match = matchers.some((matcher) => matcher(user));
 
         if (match) {
             filtered_users.set(person.user_id, true);
@@ -1168,7 +1196,7 @@ exports.filter_for_user_settings_search = function (persons, query) {
 
               See #13554 for more context.
     */
-    return persons.filter(person => exports.matches_user_settings_search(person, query));
+    return persons.filter((person) => exports.matches_user_settings_search(person, query));
 };
 
 exports.maybe_incr_recipient_count = function (message) {

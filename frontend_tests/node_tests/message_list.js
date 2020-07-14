@@ -7,6 +7,7 @@ const noop = function () {};
 set_global('Filter', noop);
 global.stub_out_jquery();
 set_global('document', null);
+set_global('current_msg_list', {});
 
 zrequire('FetchStatus', 'js/fetch_status');
 zrequire('muting');
@@ -18,9 +19,7 @@ const with_overrides = global.with_overrides; // make lint happy
 
 function accept_all_filter() {
     const filter = {
-        predicate: () => {
-            return () => true;
-        },
+        predicate: () => () => true,
     };
 
     return filter;
@@ -113,9 +112,7 @@ run_test('basics', () => {
     list.view.clear_table = function () {};
 
     list.remove_and_rerender([{id: 60}]);
-    const removed = list.all_messages().filter(function (msg) {
-        return msg.id !== 60;
-    });
+    const removed = list.all_messages().filter((msg) => msg.id !== 60);
     assert.deepEqual(list.all_messages(), removed);
 
     list.clear();
@@ -314,20 +311,16 @@ run_test('local_echo', () => {
 run_test('bookend', () => {
     const list = new MessageList({});
 
-    with_overrides(function (override) {
+    with_overrides((override) => {
         let expected = "translated: You subscribed to stream IceCream";
         list.view.clear_trailing_bookend = noop;
         list.narrowed = true;
 
-        override("narrow_state.stream", function () {
-            return "IceCream";
-        });
+        override("narrow_state.stream", () => "IceCream");
 
-        override("stream_data.is_subscribed", function () {
-            return true;
-        });
+        override("stream_data.is_subscribed", () => true);
 
-        global.with_stub(function (stub) {
+        global.with_stub((stub) => {
             list.view.render_trailing_bookend = stub.f;
             list.update_trailing_bookend();
             const bookend = stub.get_args('content', 'subscribed', 'show_button');
@@ -338,15 +331,11 @@ run_test('bookend', () => {
 
         expected = "translated: You unsubscribed from stream IceCream";
         list.last_message_historical = false;
-        override("stream_data.is_subscribed", function () {
-            return false;
-        });
+        override("stream_data.is_subscribed", () => false);
 
-        override("stream_data.get_sub", function () {
-            return {invite_only: false};
-        });
+        override("stream_data.get_sub", () => ({invite_only: false}));
 
-        global.with_stub(function (stub) {
+        global.with_stub((stub) => {
             list.view.render_trailing_bookend = stub.f;
             list.update_trailing_bookend();
             const bookend = stub.get_args('content', 'subscribed', 'show_button');
@@ -357,15 +346,11 @@ run_test('bookend', () => {
 
         // Test when the stream is privates (invite only)
         expected = "translated: You unsubscribed from stream IceCream";
-        override("stream_data.is_subscribed", function () {
-            return false;
-        });
+        override("stream_data.is_subscribed", () => false);
 
-        override("stream_data.get_sub", function () {
-            return {invite_only: true};
-        });
+        override("stream_data.get_sub", () => ({invite_only: true}));
 
-        global.with_stub(function (stub) {
+        global.with_stub((stub) => {
             list.view.render_trailing_bookend = stub.f;
             list.update_trailing_bookend();
             const bookend = stub.get_args('content', 'subscribed', 'show_button');
@@ -377,7 +362,7 @@ run_test('bookend', () => {
         expected = "translated: You are not subscribed to stream IceCream";
         list.last_message_historical = true;
 
-        global.with_stub(function (stub) {
+        global.with_stub((stub) => {
             list.view.render_trailing_bookend = stub.f;
             list.update_trailing_bookend();
             const bookend = stub.get_args('content', 'subscribed', 'show_button');
@@ -416,10 +401,8 @@ run_test('unmuted_messages', () => {
         },
     ];
 
-    with_overrides(function (override) {
-        override('muting.is_topic_muted', function (stream_id) {
-            return stream_id === muted_stream_id;
-        });
+    with_overrides((override) => {
+        override('muting.is_topic_muted', (stream_id) => stream_id === muted_stream_id);
 
         // Make sure unmuted_message filters out the "muted" entry,
         // which we mark as having a muted topic, and not mentioned.
@@ -439,7 +422,7 @@ run_test('add_remove_rerender', () => {
     list.add_messages(messages);
     assert.equal(list.num_items(), 3);
 
-    global.with_stub(function (stub) {
+    global.with_stub((stub) => {
         list.rerender = stub.f;
         list.remove_and_rerender(messages);
         assert.equal(stub.num_calls, 1);

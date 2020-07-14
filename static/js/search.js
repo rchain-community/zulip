@@ -66,14 +66,12 @@ exports.initialize = function () {
 
     search_query_box.typeahead({
         source: function (query) {
-            let suggestions;
+            let base_query = '';
             if (page_params.search_pills_enabled) {
-                const base_query = search_pill.get_search_string_for_current_filter(
+                base_query = search_pill.get_search_string_for_current_filter(
                     search_pill_widget.widget);
-                suggestions = search_suggestion.get_suggestions(base_query, query);
-            } else {
-                suggestions = search_suggestion.get_suggestions_legacy(query);
             }
+            const suggestions = search_suggestion.get_suggestions(base_query, query);
             // Update our global search_map hash
             search_map = suggestions.lookup_table;
             return suggestions.strings;
@@ -93,6 +91,15 @@ exports.initialize = function () {
             if (page_params.search_pills_enabled) {
                 search_pill.append_search_string(search_string,
                                                  search_pill_widget.widget);
+                if (search_query_box.is(':focus')) {
+                    // We usually allow the user to continue
+                    // typing until the enter key is pressed.
+                    // But we narrow when the user clicks on a
+                    // typeahead suggestion. This change in behaviour
+                    // is a workaround to be able to display the
+                    // navbar every time search_query_box loses focus.
+                    return search_query_box.val();
+                }
             }
             return exports.narrow_or_search_for_term(search_string);
         },
@@ -102,12 +109,18 @@ exports.initialize = function () {
         stopAdvance: page_params.search_pills_enabled,
         advanceKeyCodes: [8],
 
+        on_move: function () {
+            if (page_params.search_pills_enabled) {
+                ui_util.place_caret_at_end(search_query_box[0]);
+                return true;
+            }
+        },
         // Use our custom typeahead `on_escape` hook to exit
         // the search bar as soon as the user hits Esc.
         on_escape: tab_bar.exit_search,
     });
 
-    searchbox_form.on('compositionend', function () {
+    searchbox_form.on('compositionend', () => {
         // Set `is_using_input_method` to true if enter is pressed to exit
         // the input tool popover and get the text in the search bar. Then
         // we suppress searching triggered by this enter key by checking
@@ -116,7 +129,7 @@ exports.initialize = function () {
         exports.is_using_input_method = true;
     });
 
-    searchbox_form.keydown(function (e) {
+    searchbox_form.keydown((e) => {
         exports.update_button_visibility();
         const code = e.which;
         if (code === 13 && search_query_box.is(":focus")) {
@@ -125,7 +138,7 @@ exports.initialize = function () {
             // to be done will be handled in the keyup.
             return false;
         }
-    }).keyup(function (e) {
+    }).keyup((e) => {
         if (exports.is_using_input_method) {
             exports.is_using_input_method = false;
             return;
@@ -151,7 +164,7 @@ exports.initialize = function () {
     // more work to re-order everything and make them private.
 
     search_query_box.on('focus', exports.focus_search);
-    search_query_box.on('blur', function () {
+    search_query_box.on('blur', (e) => {
         // The search query box is a visual cue as to
         // whether search or narrowing is active.  If
         // the user blurs the search box, then we should
@@ -162,29 +175,29 @@ exports.initialize = function () {
         // selecting something in the typeahead menu causes
         // the box to lose focus a moment before.
         //
-        // The workaround is to check 100ms later -- long
+        // The workaround is to check 300ms later -- long
         // enough for the search to have gone through, but
         // short enough that the user won't notice (though
         // really it would be OK if they did).
 
-        setTimeout(function () {
+        if (page_params.search_pills_enabled) {
+            const pill_id = $(e.relatedTarget).closest(".pill").data('id');
+            const search_pill = search_pill_widget.widget.getByID(pill_id);
+            if (search_pill) {
+                // The searchbox loses focus while the search
+                // pill element gains focus.
+                // We do not consider the searchbox to actually
+                // lose focus when a pill inside it gets selected
+                // or deleted by a click.
+                return;
+            }
+        }
+        setTimeout(() => {
             exports.update_button_visibility();
-        }, 100);
-    });
-
-    if (page_params.search_pills_enabled) {
-        // Uses jquery instead of pure css as the `:focus` event occurs on `#search_query`,
-        // while we want to add box-shadow to `#searchbox`. This could have been done
-        // with `:focus-within` CSS selector, but it is not supported in IE or Opera.
-        searchbox.on('focusin', function () {
-            tab_bar.open_search_bar_and_close_narrow_description();
-            searchbox.css({"box-shadow": "inset 0px 0px 0px 2px hsl(204, 20%, 74%)"});
-        });
-        searchbox.on('focusout', function () {
             tab_bar.close_search_bar_and_open_narrow_description();
             searchbox.css({"box-shadow": "unset"});
-        });
-    }
+        }, 300);
+    });
 };
 
 exports.focus_search = function () {
@@ -193,11 +206,12 @@ exports.focus_search = function () {
 };
 
 exports.initiate_search = function () {
+    tab_bar.open_search_bar_and_close_narrow_description();
+    $('#searchbox').css({"box-shadow": "inset 0px 0px 0px 2px hsl(204, 20%, 74%)"});
+    $('#search_query').typeahead('lookup').select();
     if (page_params.search_pills_enabled) {
-        $('#search_arrows').focus();
-    } else {
-        tab_bar.open_search_bar_and_close_narrow_description();
-        $('#search_query').typeahead('lookup').select();
+        $('#search_query').focus();
+        ui_util.place_caret_at_end($('#search_query')[0]);
     }
 };
 

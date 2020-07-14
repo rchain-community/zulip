@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from zerver.lib.test_classes import WebhookTestCase
 
 
@@ -16,7 +15,7 @@ Hello, world.
         self.send_and_test_stream_message(
             'text',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def test_message_as_www_urlencoded(self) -> None:
@@ -29,7 +28,7 @@ Hello, world.
             'urlencoded_text',
             expected_topic,
             expected_message,
-            content_type="application/x-www-form-urlencoded"
+            content_type="application/x-www-form-urlencoded",
         )
 
     def test_message_with_actions(self) -> None:
@@ -44,7 +43,7 @@ Danny Torrence left the following review for your property:
         self.send_and_test_stream_message(
             'actions',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def test_message_with_blocks(self) -> None:
@@ -59,7 +58,7 @@ Danny Torrence left the following review for your property:
         self.send_and_test_stream_message(
             'blocks',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def test_message_with_attachment(self) -> None:
@@ -89,7 +88,7 @@ Danny Torrence left the following review for your property:
         self.send_and_test_stream_message(
             'attachment',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def get_body(self, fixture_name: str) -> str:

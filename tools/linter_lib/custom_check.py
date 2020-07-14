@@ -10,17 +10,6 @@ from zulint.custom_rules import Rule, RuleList
 # 'exclude_line': 'set([(<path>, <line>), ...])' - excludes all lines matching <line> in the file <path> from linting.
 # 'include_only': 'set([<path>, ...])' - includes only those files where <path> is a substring of the filepath.
 
-PYDELIMS = r'''"'()\[\]{}#\\'''
-PYREG = r"[^{}]".format(PYDELIMS)
-PYSQ = r'"(?:[^"\\]|\\.)*"'
-PYDQ = r"'(?:[^'\\]|\\.)*'"
-PYLEFT = r"[(\[{]"
-PYRIGHT = r"[)\]}]"
-PYCODE = PYREG
-for depth in range(5):
-    PYGROUP = r"""(?:{}|{}|{}{}*{})""".format(PYSQ, PYDQ, PYLEFT, PYCODE, PYRIGHT)
-    PYCODE = r"""(?:{}|{})""".format(PYREG, PYGROUP)
-
 FILES_WITH_LEGACY_SUBJECT = {
     # This basically requires a big DB migration:
     'zerver/lib/topic.py',
@@ -46,7 +35,7 @@ FILES_WITH_LEGACY_SUBJECT = {
 
     # This has lots of query data embedded, so it's hard
     # to fix everything until we migrate the DB to "topic".
-    'zerver/tests/test_narrow.py',
+    'zerver/tests/test_message_fetch.py',
 }
 
 shebang_rules: List["Rule"] = [
@@ -60,13 +49,13 @@ shebang_rules: List["Rule"] = [
      'description': "Use `#!/usr/bin/env foo` instead of `#!/path/foo`"
      " for interpreters other than sh."},
     {'pattern': '^#!/usr/bin/env python$',
-     'description': "Use `#!/usr/bin/env python3` instead of `#!/usr/bin/env python`."}
+     'description': "Use `#!/usr/bin/env python3` instead of `#!/usr/bin/env python`."},
 ]
 
 trailing_whitespace_rule: "Rule" = {
     'pattern': r'\s+$',
     'strip': '\n',
-    'description': 'Fix trailing whitespace'
+    'description': 'Fix trailing whitespace',
 }
 whitespace_rules: List["Rule"] = [
     # This linter should be first since bash_rules depends on it.
@@ -76,7 +65,7 @@ whitespace_rules: List["Rule"] = [
      },
     {'pattern': '\t',
      'strip': '\n',
-     'exclude': {'tools/ci/success-http-headers.txt'},
+     'exclude': {'tools/ci/success-http-headers.template.txt'},
      'description': 'Fix tab-based whitespace'},
 ]
 comma_whitespace_rule: List["Rule"] = [
@@ -117,8 +106,6 @@ js_rules = RuleList(
          'description': 'Avoid using "msgid" as a variable name; use "message_id" instead.'},
         {'pattern': r'.*blueslip.warning\(.*',
          'description': 'The module blueslip has no function warning, try using blueslip.warn'},
-        {'pattern': '[)]{$',
-         'description': 'Missing space between ) and {'},
         {'pattern': r'i18n\.t\([^)]+[^,\{\)]$',
          'description': 'i18n string should not be a multiline string'},
         {'pattern': r'''i18n\.t\(['"].+?['"]\s*\+''',
@@ -139,18 +126,8 @@ js_rules = RuleList(
         {'pattern': '["\']json/',
          'description': 'Relative URL for JSON route not supported by i18n'},
         # This rule is constructed with + to avoid triggering on itself
-        {'pattern': " =" + '[^ =>~"]',
-         'description': 'Missing whitespace after "="'},
         {'pattern': '^[ ]*//[A-Za-z0-9]',
          'description': 'Missing space after // in comment'},
-        {'pattern': 'if[(]',
-         'description': 'Missing space between if and ('},
-        {'pattern': 'else{$',
-         'description': 'Missing space between else and {'},
-        {'pattern': '^else {$',
-         'description': 'Write JS else statements on same line as }'},
-        {'pattern': '^else if',
-         'description': 'Write JS else statements on same line as }'},
         {'pattern': r'''[.]text\(["'][a-zA-Z]''',
          'description': 'Strings passed to $().text should be wrapped in i18n.t() for internationalization',
          'exclude': {'frontend_tests/node_tests/'}},
@@ -231,32 +208,10 @@ python_rules = RuleList(
          'exclude': {'zerver/tests', 'zerver/lib/create_user.py'},
          'good_lines': ['user_profile.save(update_fields=["pointer"])'],
          'bad_lines': ['user_profile.save()']},
-        {'pattern': r'^[^"]*"[^"]*"%\(',
-         'description': 'Missing space around "%"',
-         'good_lines': ['"%s" % ("foo")', '"%s" % (foo)'],
-         'bad_lines': ['"%s"%("foo")', '"%s"%(foo)']},
-        {'pattern': r"^[^']*'[^']*'%\(",
-         'description': 'Missing space around "%"',
-         'good_lines': ["'%s' % ('foo')", "'%s' % (foo)"],
-         'bad_lines': ["'%s'%('foo')", "'%s'%(foo)"]},
         {'pattern': 'self: Any',
          'description': 'you can omit Any annotation for self',
          'good_lines': ['def foo (self):'],
          'bad_lines': ['def foo(self: Any):']},
-        # This rule is constructed with + to avoid triggering on itself
-        {'pattern': " =" + '[^ =>~"]',
-         'description': 'Missing whitespace after "="',
-         'good_lines': ['a = b', '5 == 6'],
-         'bad_lines': ['a =b', 'asdf =42']},
-        {'pattern': r'":\w[^"]*$',
-         'description': 'Missing whitespace after ":"',
-         'exclude': {'zerver/tests/test_push_notifications.py'},
-         'good_lines': ['"foo": bar', '"some:string:with:colons"'],
-         'bad_lines': ['"foo":bar', '"foo":1']},
-        {'pattern': r"':\w[^']*$",
-         'description': 'Missing whitespace after ":"',
-         'good_lines': ["'foo': bar", "'some:string:with:colons'"],
-         'bad_lines': ["'foo':bar", "'foo':1"]},
         {'pattern': r"^\s+#\w",
          'strip': '\n',
          'exclude': {'tools/droplets/create.py'},
@@ -267,10 +222,6 @@ python_rules = RuleList(
          'description': 'Use assertEqual, not assertEquals (which is deprecated).',
          'good_lines': ['assertEqual(1, 2)'],
          'bad_lines': ['assertEquals(1, 2)']},
-        {'pattern': "== None",
-         'description': 'Use `is None` to check whether something is None',
-         'good_lines': ['if foo is None'],
-         'bad_lines': ['foo == None']},
         {'pattern': r"#\s*type:\s*ignore(?!\[[^][]+\] +# +\S)",
          'exclude': {'tools/tests',
                      'zerver/lib/test_runner.py',
@@ -288,23 +239,6 @@ python_rules = RuleList(
          'description': 'Unnecessary whitespace between "," and ")"',
          'good_lines': ['foo = (1, 2, 3,)', 'foo(bar, 42)'],
          'bad_lines': ['foo = (1, 2, 3, )']},
-        {'pattern': "%  [(]",
-         'description': 'Unnecessary whitespace between "%" and "("',
-         'good_lines': ['"foo %s bar" % ("baz",)'],
-         'bad_lines': ['"foo %s bar" %  ("baz",)']},
-        # This next check could have false positives, but it seems pretty
-        # rare; if we find any, they can be added to the exclude list for
-        # this rule.
-        {'pattern': r"""^(?:[^'"#\\]|{}|{})*(?:{}|{})\s*%\s*(?![\s({{\\]|dict\(|tuple\()(?:[^,{}]|{})+(?:$|[,#\\]|{})""".format(
-            PYSQ, PYDQ, PYSQ, PYDQ, PYDELIMS, PYGROUP, PYRIGHT),
-         'description': 'Used % formatting without a tuple',
-         'good_lines': ['"foo %s bar" % ("baz",)'],
-         'bad_lines': ['"foo %s bar" % "baz"']},
-        {'pattern': r"""^(?:[^'"#\\]|{}|{})*(?:{}|{})\s*%\s*\((?:[^,{}]|{})*\)""".format(
-            PYSQ, PYDQ, PYSQ, PYDQ, PYDELIMS, PYGROUP),
-         'description': 'Used % formatting with parentheses that do not form a tuple',
-         'good_lines': ['"foo %s bar" % ("baz",)"'],
-         'bad_lines': ['"foo %s bar" % ("baz")']},
         {'pattern': 'sudo',
          'include_only': {'scripts/'},
          'exclude': {'scripts/lib/setup_venv.py'},
@@ -343,11 +277,6 @@ python_rules = RuleList(
         {'pattern': r'''\WJsonableError\(["'].+\)''',
          'exclude': {'zerver/tests', 'zerver/views/development/'},
          'description': 'Argument to JsonableError should be a literal string enclosed by _()'},
-        {'pattern': r"""\b_\((?:\s|{}|{})*[^\s'")]""".format(PYSQ, PYDQ),
-         'description': 'Called _() on a computed string',
-         'exclude_line': {('zerver/lib/i18n.py', 'result = _(string)')},
-         'good_lines': ["return json_error(_('No presence data for %s') % (target.email,))"],
-         'bad_lines': ["return json_error(_('No presence data for %s' % (target.email,)))"]},
         {'pattern': r'''([a-zA-Z0-9_]+)=REQ\(['"]\1['"]''',
          'description': 'REQ\'s first argument already defaults to parameter name'},
         {'pattern': r'self\.client\.(get|post|patch|put|delete)',
@@ -400,20 +329,13 @@ python_rules = RuleList(
          'good_lines': ['if my_django_model.id == 42', 'self.user_profile._meta.pk'],
          'bad_lines': ['if my_django_model.pk == 42']},
         {'pattern': r'^\s*#\s*type:',
-         'exclude': {
-             # thumbor is (currently) python2 only
-             'zthumbor/',
-         },
          'description': 'Comment-style function type annotation. Use Python3 style annotations instead.',
          },
         {'pattern': r"\S\s*#\s*type:(?!\s*ignore)",
          'exclude': {'scripts/lib/hash_reqs.py',
                      'scripts/lib/setup_venv.py',
                      'scripts/lib/zulip_tools.py',
-                     'tools/lib/provision.py',
-                     'zproject/dev_settings.py',
-                     'zproject/prod_settings_template.py',
-                     'zthumbor'},
+                     'tools/lib/provision.py'},
          'description': 'Comment-style variable type annotation. Use Python 3.6 style annotations instead.',
          'good_lines': ['a: List[int] = []'],
          'bad_lines': ['a = []  # type: List[int]']},
@@ -445,8 +367,6 @@ python_rules = RuleList(
              'tools/lib',
              # TODO: Update our migrations from Text->str.
              'zerver/migrations/',
-             # thumbor is (currently) python2 only
-             'zthumbor/',
          },
          'description': "Now that we're a Python 3 only codebase, we don't need to use typing.Text. Please use str instead.",
          },
@@ -486,8 +406,8 @@ bash_rules = RuleList(
          'include_only': {'scripts/'},
          'exclude': {
              'scripts/lib/install',
-             'scripts/setup/configure-rabbitmq'
-         }, },
+             'scripts/setup/configure-rabbitmq',
+         }},
         *whitespace_rules[0:1],
     ],
     shebang_rules=shebang_rules,
@@ -569,6 +489,10 @@ html_rules: List["Rule"] = whitespace_rules + prose_style_rules + [
      'exclude': {"templates/analytics/support.html"},
      'good_lines': ['<input class="stream-list-filter" type="text" placeholder="{{ _(\'Search streams\') }}" />'],
      'bad_lines': ['<input placeholder="foo">']},
+    {'pattern': '={',
+     'description': "Likely missing quoting in HTML attribute",
+     'good_lines': ['<a href="{{variable}}">'],
+     'bad_lines': ['<a href={{variable}}>']},
     {'pattern': "placeholder='[^{]",
      'description': "`placeholder` value should be translatable.",
      'good_lines': ['<input class="stream-list-filter" type="text" placeholder="{{ _(\'Search streams\') }}" />'],
@@ -594,7 +518,7 @@ html_rules: List["Rule"] = whitespace_rules + prose_style_rules + [
     {'pattern': r'title="[^{\:]',
      'exclude_line': {
          ('templates/zerver/app/markdown_help.html',
-             '<td class="rendered_markdown"><img alt=":heart:" class="emoji" src="/static/generated/emoji/images/emoji/heart.png" title=":heart:" /></td>')
+             '<td class="rendered_markdown"><img alt=":heart:" class="emoji" src="/static/generated/emoji/images/emoji/heart.png" title=":heart:" /></td>'),
      },
      'exclude': {"templates/zerver/emails", "templates/analytics/realm_details.html", "templates/analytics/support.html"},
      'description': "`title` value should be translatable."},
@@ -731,7 +655,7 @@ json_rules = RuleList(
         {'pattern': r'":["\[\{]',
          'exclude': {'zerver/webhooks/', 'zerver/tests/fixtures/'},
          'description': 'Require space after : in JSON'},
-    ]
+    ],
 )
 
 markdown_docs_length_exclude = {
@@ -777,12 +701,13 @@ markdown_rules = RuleList(
     ],
     max_length=120,
     length_exclude=markdown_docs_length_exclude,
-    exclude_files_in='templates/zerver/help/'
+    exclude_files_in='templates/zerver/help/',
 )
 
 help_markdown_rules = RuleList(
     langs=['md'],
-    rules=markdown_rules.rules + [
+    rules=[
+        *markdown_rules.rules,
         {'pattern': '[a-z][.][A-Z]',
          'description': "Likely missing space after end of sentence",
          'include_only': {'templates/zerver/help/'},

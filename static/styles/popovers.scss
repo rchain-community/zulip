@@ -122,6 +122,10 @@ ul {
             text-align: center;
             margin-top: 5px;
             margin-bottom: 5px;
+
+            .fa-chevron-right {
+                font-size: 12px;
+            }
         }
 
         .admin-separator {
@@ -282,9 +286,10 @@ ul {
             margin-bottom: 5px;
 
             .name {
-                color: hsl(0, 0%, 55%);
+                color: hsl(0, 0%, 20%);
                 display: inline-block;
                 min-width: 120px;
+                font-weight: 600;
             }
         }
 
@@ -296,6 +301,8 @@ ul {
             font-size: 26px;
             font-weight: 700;
             margin-bottom: 5px;
+            max-width: 300px;
+            line-height: 30px;
 
             #edit-button {
                 font-size: 18px;
@@ -316,7 +323,8 @@ ul {
             margin-top: 8px;
 
             .name {
-                color: hsl(0, 0%, 55%);
+                color: hsl(0, 0%, 20%);
+                font-weight: 600;
             }
 
             .value {
@@ -426,9 +434,8 @@ ul {
         margin-bottom: 5px !important;
         border-left: 0px;
         padding-left: 0px;
-        border-radius: 0px 3px 3px 0px;
-        // Extra 1px for post-selection boundry
-        margin: 0 5px 0 -11px;
+        border-radius: 3px;
+        margin: 0 5px 0 -10px;
         text-indent: 10px;
     }
     .inline_topic_edit {

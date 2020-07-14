@@ -144,6 +144,10 @@ exports.make_new_elem = function (selector, opts) {
             classes.set(class_name, true);
             return self;
         },
+        append: function (arg) {
+            html = html + arg;
+            return self;
+        },
         attr: function (name, val) {
             if (val === undefined) {
                 return attrs.get(name);
@@ -284,6 +288,10 @@ exports.make_new_elem = function (selector, opts) {
                             parents_selector + ' in ' + selector);
             return result;
         },
+        prepend: function (arg) {
+            html = arg + html;
+            return self;
+        },
         prop: function (name, val) {
             if (val === undefined) {
                 return properties.get(name);
@@ -297,7 +305,7 @@ exports.make_new_elem = function (selector, opts) {
         },
         removeClass: function (class_names) {
             class_names = class_names.split(' ');
-            class_names.forEach(function (class_name) {
+            class_names.forEach((class_name) => {
                 classes.delete(class_name);
             });
             return self;
@@ -364,6 +372,9 @@ exports.make_new_elem = function (selector, opts) {
         },
         visible: function () {
             return shown;
+        },
+        slice: function () {
+            return self;
         },
     };
 
@@ -512,9 +523,9 @@ exports.make_zjquery = function (opts) {
 
     zjquery.state = function () {
         // useful for debugging
-        let res = Array.from(elems.values(), v => v.debug());
+        let res = Array.from(elems.values(), (v) => v.debug());
 
-        res = res.map(v => [v.selector, v.value, v.shown]);
+        res = res.map((v) => [v.selector, v.value, v.shown]);
 
         res.sort();
 
@@ -528,10 +539,20 @@ exports.make_zjquery = function (opts) {
         };
     };
 
+    fn.after = function (s) {
+        return s;
+    };
+    fn.before = function (s) {
+        return s;
+    };
+
     zjquery.fn = fn;
 
     zjquery.clear_all_elements = function () {
         elems.clear();
+    };
+    zjquery.escapeSelector = function (s) {
+        return s;
     };
 
     return zjquery;

@@ -44,9 +44,10 @@ set_global('page_params', {
     translate_emoticons: false,
 });
 
-set_global('Image', function () {
+function Image() {
     return {};
-});
+}
+set_global('Image', Image);
 emoji.initialize();
 
 const doc = "";
@@ -188,12 +189,12 @@ run_test('fenced_block_defaults', () => {
 
 markdown.initialize(
     page_params.realm_filters,
-    markdown_config.get_helpers()
+    markdown_config.get_helpers(),
 );
 
-const bugdown_data = global.read_fixture_data('markdown_test_cases.json');
+const markdown_data = global.read_fixture_data('markdown_test_cases.json');
 
-run_test('bugdown_detection', () => {
+run_test('markdown_detection', () => {
     const no_markup = [
         "This is a plaintext message",
         "This is a plaintext: message",
@@ -213,8 +214,6 @@ run_test('bugdown_detection', () => {
         "User Mention @**leo with some name**",
         "Group Mention @*hamletcharacters*",
         "Stream #**Verona**",
-        "This contains !gravatar(leo@zulip.com)",
-        "And an avatar !avatar(leo@zulip.com) is here",
     ];
 
     const markup = [
@@ -232,19 +231,19 @@ run_test('bugdown_detection', () => {
         "youtube url https://www.youtube.com/watch?v=HHZ8iqswiCw&feature=youtu.be&a",
     ];
 
-    no_markup.forEach(function (content) {
+    no_markup.forEach((content) => {
         assert.equal(markdown.contains_backend_only_syntax(content), false);
     });
 
-    markup.forEach(function (content) {
+    markup.forEach((content) => {
         assert.equal(markdown.contains_backend_only_syntax(content), true);
     });
 });
 
 run_test('marked_shared', () => {
-    const tests = bugdown_data.regular_tests;
+    const tests = markdown_data.regular_tests;
 
-    tests.forEach(function (test) {
+    tests.forEach((test) => {
 
         // Ignore tests if specified
         if (test.ignore === true) {
@@ -257,12 +256,12 @@ run_test('marked_shared', () => {
         const output = message.content;
         const error_message = `Failure in test: ${test.name}`;
         if (test.marked_expected_output) {
-            global.bugdown_assert.notEqual(test.expected_output, output, error_message);
-            global.bugdown_assert.equal(test.marked_expected_output, output, error_message);
+            global.markdown_assert.notEqual(test.expected_output, output, error_message);
+            global.markdown_assert.equal(test.marked_expected_output, output, error_message);
         } else if (test.backend_only_rendering) {
             assert.equal(markdown.contains_backend_only_syntax(test.input), true);
         } else {
-            global.bugdown_assert.equal(test.expected_output, output, error_message);
+            global.markdown_assert.equal(test.expected_output, output, error_message);
         }
     });
 });
@@ -352,10 +351,6 @@ run_test('marked', () => {
          expected: '<p>A pattern written as #1234is not a realm filter.</p>'},
         {input: 'This is a realm filter with ZGROUP_123:45 groups',
          expected: '<p>This is a realm filter with <a href="https://zone_45.zulip.net/ticket/123" title="https://zone_45.zulip.net/ticket/123">ZGROUP_123:45</a> groups</p>'},
-        {input: 'This is an !avatar(cordelia@zulip.com) of Cordelia Lear',
-         expected: '<p>This is an <img alt="cordelia@zulip.com" class="message_body_gravatar" src="/avatar/cordelia@zulip.com?s=30" title="cordelia@zulip.com"> of Cordelia Lear</p>'},
-        {input: 'This is a !gravatar(cordelia@zulip.com) of Cordelia Lear',
-         expected: '<p>This is a <img alt="cordelia@zulip.com" class="message_body_gravatar" src="/avatar/cordelia@zulip.com?s=30" title="cordelia@zulip.com"> of Cordelia Lear</p>'},
         {input: 'Test *italic*',
          expected: '<p>Test <em>italic</em></p>'},
         {input: 'T\n#**Denmark**',
@@ -395,8 +390,6 @@ run_test('marked', () => {
          expected: '<p>@**&lt;h1&gt;The Rogue One&lt;/h1&gt;**</p>'},
         {input: '#**<h1>The Rogue One</h1>**',
          expected: '<p>#**&lt;h1&gt;The Rogue One&lt;/h1&gt;**</p>'},
-        {input: '!avatar(<h1>The Rogue One</h1>)',
-         expected: '<p><img alt="&lt;h1&gt;The Rogue One&lt;/h1&gt;" class="message_body_gravatar" src="/avatar/&lt;h1&gt;The Rogue One&lt;/h1&gt;?s=30" title="&lt;h1&gt;The Rogue One&lt;/h1&gt;"></p>'},
         {input: ':<h1>The Rogue One</h1>:',
          expected: '<p>:&lt;h1&gt;The Rogue One&lt;/h1&gt;:</p>'},
         {input: '@**O\'Connell**',
@@ -422,7 +415,7 @@ run_test('marked', () => {
     // isn't present in emoji_codes.codepoint_to_name.
     delete emoji_codes.codepoint_to_name['1f6b2'];
 
-    test_cases.forEach(function (test_case) {
+    test_cases.forEach((test_case) => {
         // Disable emoji conversion by default.
         page_params.translate_emoticons = test_case.translate_emoticons || false;
 
@@ -562,7 +555,7 @@ run_test('backend_only_realm_filters', () => {
         'Here is the PR-#123.',
         'Function abc() was introduced in (PR)#123.',
     ];
-    backend_only_realm_filters.forEach(function (content) {
+    backend_only_realm_filters.forEach((content) => {
         assert.equal(markdown.contains_backend_only_syntax(content), true);
     });
 });

@@ -29,11 +29,13 @@ exports.set_up = function () {
 
     $("#demote_inactive_streams").val(page_params.demote_inactive_streams);
 
+    $("#color_scheme").val(page_params.color_scheme);
+
     $("#twenty_four_hour_time").val(JSON.stringify(page_params.twenty_four_hour_time));
 
     $(".emojiset_choice[value=" + page_params.emojiset + "]").prop("checked", true);
 
-    $("#default_language_modal [data-dismiss]").click(function () {
+    $("#default_language_modal [data-dismiss]").click(() => {
         overlays.close_modal('#default_language_modal');
     });
 
@@ -54,7 +56,7 @@ exports.set_up = function () {
         });
     }
 
-    $("#default_language_modal .language").click(function (e) {
+    $("#default_language_modal .language").click((e) => {
         e.preventDefault();
         e.stopPropagation();
         overlays.close_modal('#default_language_modal');
@@ -71,7 +73,7 @@ exports.set_up = function () {
 
     });
 
-    $('#default_language').on('click', function (e) {
+    $('#default_language').on('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         overlays.open_modal('#default_language_modal');
@@ -82,7 +84,12 @@ exports.set_up = function () {
         change_display_setting(data, '#display-settings-status');
     });
 
-    $('body').on('click', '.reload_link', function () {
+    $('#color_scheme').change(function () {
+        const data = {color_scheme: this.value};
+        change_display_setting(data, '#display-settings-status');
+    });
+
+    $('body').on('click', '.reload_link', () => {
         window.location.reload();
     });
 
@@ -146,8 +153,8 @@ exports.update_page = function () {
     $("#left_side_userlist").prop('checked', page_params.left_side_userlist);
     $("#default_language_name").text(page_params.default_language_name);
     $("#translate_emoticons").prop('checked', page_params.translate_emoticons);
-    $("#night_mode").prop('checked', page_params.night_mode);
     $("#twenty_four_hour_time").val(JSON.stringify(page_params.twenty_four_hour_time));
+    $("#color_scheme").val(JSON.stringify(page_params.color_scheme));
 
     // TODO: Set emojiset selector here.
     // Longer term, we'll want to automate this function

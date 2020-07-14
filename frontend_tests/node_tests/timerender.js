@@ -2,6 +2,7 @@ set_global('$', global.make_zjquery());
 set_global('page_params', {
     twenty_four_hour_time: true,
 });
+set_global('moment', require('moment-timezone'));
 set_global('XDate', zrequire('XDate', 'xdate'));
 zrequire('timerender');
 
@@ -130,6 +131,24 @@ run_test('get_full_time', () => {
     assert.equal(expected, actual);
 });
 
+run_test('get_timestamp_for_flatpickr', () => {
+    const unix_timestamp = 1495091573000; // 5/18/2017 7:12:53 AM (UTC+0)
+    const iso_timestamp = '2017-05-18T07:12:53Z'; // ISO 8601 date format
+    const func = timerender.get_timestamp_for_flatpickr;
+    // Freeze time for testing.
+    const date_now = Date.now;
+    Date.now = () => new Date('2020-07-07T10:00:00Z').getTime();
+
+    // Invalid timestamps should show current time.
+    assert.equal(func("random str").valueOf(), moment().valueOf());
+
+    // Valid ISO timestamps should return Date objects.
+    assert.equal(func(iso_timestamp).valueOf(), moment(unix_timestamp).valueOf());
+
+    // Restore the Date object.
+    Date.now = date_now;
+});
+
 run_test('absolute_time_12_hour', () => {
     set_global('page_params', {
         twenty_four_hour_time: false,
@@ -225,49 +244,49 @@ run_test('last_seen_status_from_date', () => {
         assert.equal(actual_status, expected_status);
     }
 
-    assert_same(function (d) { return d.addSeconds(-20); },
+    assert_same((d) => d.addSeconds(-20),
                 i18n.t("Just now"));
 
-    assert_same(function (d) { return d.addMinutes(-1); },
+    assert_same((d) => d.addMinutes(-1),
                 i18n.t("Just now"));
 
-    assert_same(function (d) { return d.addMinutes(-2); },
+    assert_same((d) => d.addMinutes(-2),
                 i18n.t("Just now"));
 
-    assert_same(function (d) { return d.addMinutes(-30); },
+    assert_same((d) => d.addMinutes(-30),
                 i18n.t("30 minutes ago"));
 
-    assert_same(function (d) { return d.addHours(-1); },
+    assert_same((d) => d.addHours(-1),
                 i18n.t("An hour ago"));
 
-    assert_same(function (d) { return d.addHours(-2); },
+    assert_same((d) => d.addHours(-2),
                 i18n.t("2 hours ago"));
 
-    assert_same(function (d) { return d.addHours(-20); },
+    assert_same((d) => d.addHours(-20),
                 i18n.t("20 hours ago"));
 
-    assert_same(function (d) { return d.addDays(-1); },
+    assert_same((d) => d.addDays(-1),
                 i18n.t("Yesterday"));
 
-    assert_same(function (d) { return d.addDays(-2); },
+    assert_same((d) => d.addDays(-2),
                 i18n.t("2 days ago"));
 
-    assert_same(function (d) { return d.addDays(-61); },
+    assert_same((d) => d.addDays(-61),
                 i18n.t("61 days ago"));
 
-    assert_same(function (d) { return d.addDays(-300); },
+    assert_same((d) => d.addDays(-300),
                 i18n.t("May 06,\xa02015"));
 
-    assert_same(function (d) { return d.addDays(-366); },
+    assert_same((d) => d.addDays(-366),
                 i18n.t("Mar 01,\xa02015"));
 
-    assert_same(function (d) { return d.addYears(-3); },
+    assert_same((d) => d.addYears(-3),
                 i18n.t("Mar 01,\xa02013"));
 
     // Set base_dateto to May 1 2016 12.30 AM (months are zero based)
     base_date = new XDate(2016, 4, 1, 0, 30);
 
-    assert_same(function (d) { return d.addDays(-91); },
+    assert_same((d) => d.addDays(-91),
                 i18n.t("Jan\xa031"));
 
 });

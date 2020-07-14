@@ -1,45 +1,90 @@
+# Core implementation of message retention policies and low-level
+# helpers for deleting messages.
+#
+# Because bugs in code that deletes message content can cause
+# irreversible harm in installations without backups, this is a
+# particularly sensitive system that requires careful design,
+# thoughtful database transaction boundaries, and a well-written test
+# suite to make bugs unlikely and mitigate their impact.
+#
+# The core design principle of this system is we never delete a live
+# Message/Reaction/etc. object.  Instead, we use move_rows, which moves
+# objects to a "deleted objects" table like ArchiveMessage, recording
+# the change using a structure linked to an ArchiveTransaction object
+# that can be used to undo that deletion transaction in a clean
+# fashion.
+#
+# We move all of the data associated with a given block of messages in
+# a single database transaction in order to avoid broken intermediate
+# states where, for example, a message's reactions were deleted but
+# not the messages themselves.
+#
+# And then a separate process deletes ArchiveTransaction objects
+# ARCHIVED_DATA_VACUUMING_DELAY_DAYS after they were created.
+#
+# Because of the nice properties of this deletion system, we use the
+# same system for routine deletions via the Zulip UI (deleting a
+# message or group of messages) as we use for message retention policy
+# deletions.
+import logging
+import time
 from datetime import timedelta
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import Model
 from django.utils.timezone import now as timezone_now
-from psycopg2.sql import Composable, Identifier, Literal, SQL
+from psycopg2.sql import SQL, Composable, Identifier, Literal
 
 from zerver.lib.logging_util import log_to_file
-from zerver.models import (Message, UserMessage, ArchivedUserMessage, Realm,
-                           Attachment, ArchivedAttachment, Reaction, ArchivedReaction,
-                           SubMessage, ArchivedSubMessage, Recipient, Stream, ArchiveTransaction,
-                           get_user_including_cross_realm)
-
-from typing import Any, Dict, List, Optional, Tuple
-
-import logging
+from zerver.lib.request import RequestVariableConversionError
+from zerver.models import (
+    ArchivedAttachment,
+    ArchivedReaction,
+    ArchivedSubMessage,
+    ArchivedUserMessage,
+    ArchiveTransaction,
+    Attachment,
+    Message,
+    Reaction,
+    Realm,
+    Recipient,
+    Stream,
+    SubMessage,
+    UserMessage,
+    get_user_including_cross_realm,
+)
 
 logger = logging.getLogger('zulip.retention')
 log_to_file(logger, settings.RETENTION_LOG_PATH)
 
 MESSAGE_BATCH_SIZE = 1000
+STREAM_MESSAGE_BATCH_SIZE = 100
 TRANSACTION_DELETION_BATCH_SIZE = 100
 
+# This data structure declares the details of all database tables that
+# hang off the Message table (with a foreign key to Message being part
+# of its primary lookup key).  This structure allows us to share the
+# code for managing these related tables.
 models_with_message_key: List[Dict[str, Any]] = [
     {
         'class': Reaction,
         'archive_class': ArchivedReaction,
         'table_name': 'zerver_reaction',
-        'archive_table_name': 'zerver_archivedreaction'
+        'archive_table_name': 'zerver_archivedreaction',
     },
     {
         'class': SubMessage,
         'archive_class': ArchivedSubMessage,
         'table_name': 'zerver_submessage',
-        'archive_table_name': 'zerver_archivedsubmessage'
+        'archive_table_name': 'zerver_archivedsubmessage',
     },
     {
         'class': UserMessage,
         'archive_class': ArchivedUserMessage,
         'table_name': 'zerver_usermessage',
-        'archive_table_name': 'zerver_archivedusermessage'
+        'archive_table_name': 'zerver_archivedusermessage',
     },
 ]
 
@@ -52,6 +97,7 @@ def move_rows(
     returning_id: bool=False,
     **kwargs: Composable,
 ) -> List[int]:
+    """Core helper for bulk moving rows between a table and its archive table"""
     if src_db_table is None:
         # Use base_model's db_table unless otherwise specified.
         src_db_table = base_model._meta.db_table
@@ -68,7 +114,7 @@ def move_rows(
     sql_args.update(kwargs)
     with connection.cursor() as cursor:
         cursor.execute(
-            raw_query.format(**sql_args)
+            raw_query.format(**sql_args),
         )
         if returning_id:
             return [id for (id,) in cursor.fetchall()]  # return list of row ids
@@ -92,9 +138,9 @@ def run_archiving_in_chunks(
 
     message_count = 0
     while True:
+        start_time = time.time()
         with transaction.atomic():
             archive_transaction = ArchiveTransaction.objects.create(type=type, realm=realm)
-            logger.info("Archiving in %s", archive_transaction)
             new_chunk = move_rows(
                 Message,
                 query,
@@ -109,11 +155,14 @@ def run_archiving_in_chunks(
                 message_count += len(new_chunk)
             else:
                 archive_transaction.delete()  # Nothing was archived
+        total_time = time.time() - start_time
 
         # This line needs to be outside of the atomic block, to capture the actual moment
         # archiving of the chunk is finished (since Django does some significant additional work
         # when leaving the block).
-        logger.info("Finished. Archived %s messages in this transaction.", len(new_chunk))
+        if len(new_chunk) > 0:
+            logger.info("Archived %s messages in %.2fs in transaction %s.",
+                        len(new_chunk), total_time, archive_transaction.id)
 
         # We run the loop, until the query returns fewer results than chunk_size,
         # which means we are done:
@@ -130,6 +179,8 @@ def run_archiving_in_chunks(
 def move_expired_messages_to_archive_by_recipient(recipient: Recipient,
                                                   message_retention_days: int, realm: Realm,
                                                   chunk_size: int=MESSAGE_BATCH_SIZE) -> int:
+    assert message_retention_days != -1
+
     # This function will archive appropriate messages and their related objects.
     query = SQL("""
     INSERT INTO zerver_archivedmessage ({dst_fields}, archive_transaction_id)
@@ -153,8 +204,12 @@ def move_expired_messages_to_archive_by_recipient(recipient: Recipient,
     )
 
 def move_expired_personal_and_huddle_messages_to_archive(realm: Realm,
-                                                         chunk_size: int=MESSAGE_BATCH_SIZE
+                                                         chunk_size: int=MESSAGE_BATCH_SIZE,
                                                          ) -> int:
+    message_retention_days = realm.message_retention_days
+    assert message_retention_days != -1
+    check_date = timezone_now() - timedelta(days=message_retention_days)
+
     # This function will archive appropriate messages and their related objects.
     cross_realm_bot_ids = [
         get_user_including_cross_realm(email).id
@@ -178,8 +233,6 @@ def move_expired_personal_and_huddle_messages_to_archive(realm: Realm,
     ON CONFLICT (id) DO UPDATE SET archive_transaction_id = {archive_transaction_id}
     RETURNING id
     """)
-    assert realm.message_retention_days is not None
-    check_date = timezone_now() - timedelta(days=realm.message_retention_days)
 
     message_count = run_archiving_in_chunks(
         query,
@@ -244,6 +297,10 @@ def move_models_with_message_key_to_archive(msg_ids: List[int]) -> None:
             message_ids=Literal(tuple(msg_ids)),
         )
 
+# Attachments can't use the common models_with_message_key system,
+# because they can be referenced by more than one Message, and we only
+# want to delete the Attachment if we're deleting the last message
+# referencing them.
 def move_attachments_to_archive(msg_ids: List[int]) -> None:
     assert len(msg_ids) > 0
 
@@ -306,7 +363,7 @@ def archive_personal_and_huddle_messages(realm: Realm, chunk_size: int=MESSAGE_B
     message_count = move_expired_personal_and_huddle_messages_to_archive(realm, chunk_size)
     logger.info("Done. Archived %s messages", message_count)
 
-def archive_stream_messages(realm: Realm, streams: List[Stream], chunk_size: int=MESSAGE_BATCH_SIZE) -> None:
+def archive_stream_messages(realm: Realm, streams: List[Stream], chunk_size: int=STREAM_MESSAGE_BATCH_SIZE) -> None:
     if not streams:
         return
 
@@ -317,14 +374,14 @@ def archive_stream_messages(realm: Realm, streams: List[Stream], chunk_size: int
         if stream.message_retention_days:
             retention_policy_dict[stream.id] = stream.message_retention_days
         else:
-            assert realm.message_retention_days is not None
+            assert realm.message_retention_days != -1
             retention_policy_dict[stream.id] = realm.message_retention_days
 
     recipients = [stream.recipient for stream in streams]
     message_count = 0
     for recipient in recipients:
         message_count += archive_messages_by_recipient(
-            recipient, retention_policy_dict[recipient.type_id], realm, chunk_size
+            recipient, retention_policy_dict[recipient.type_id], realm, chunk_size,
         )
 
     logger.info("Done. Archived %s messages.", message_count)
@@ -333,8 +390,8 @@ def archive_messages(chunk_size: int=MESSAGE_BATCH_SIZE) -> None:
     logger.info("Starting the archiving process with chunk_size %s", chunk_size)
 
     for realm, streams in get_realms_and_streams_for_archiving():
-        archive_stream_messages(realm, streams, chunk_size)
-        if realm.message_retention_days:
+        archive_stream_messages(realm, streams, chunk_size=STREAM_MESSAGE_BATCH_SIZE)
+        if realm.message_retention_days != -1:
             archive_personal_and_huddle_messages(realm, chunk_size)
 
         # Messages have been archived for the realm, now we can clean up attachments:
@@ -354,7 +411,7 @@ def get_realms_and_streams_for_archiving() -> List[Tuple[Realm, List[Stream]]]:
     realm_id_to_streams_list: Dict[int, List[Stream]] = {}
 
     # All realms with a retention policy set qualify for archiving:
-    for realm in Realm.objects.filter(message_retention_days__isnull=False):
+    for realm in Realm.objects.exclude(message_retention_days=-1):
         realm_id_to_realm[realm.id] = realm
         realm_id_to_streams_list[realm.id] = []
 
@@ -362,11 +419,11 @@ def get_realms_and_streams_for_archiving() -> List[Tuple[Realm, List[Stream]]]:
     # First category are streams in retention-enabled realms,
     # that don't have retention explicitly disabled (through the value -1).
     query_one = Stream.objects.exclude(message_retention_days=-1) \
-        .filter(realm__message_retention_days__isnull=False) \
+        .exclude(realm__message_retention_days=-1) \
         .select_related('realm', 'recipient')
     # Second category are streams that are in realms without a realm-wide retention policy,
     # but have their own stream-specific policy enabled.
-    query_two = Stream.objects.filter(realm__message_retention_days__isnull=True) \
+    query_two = Stream.objects.filter(realm__message_retention_days=-1) \
         .exclude(message_retention_days__isnull=True) \
         .exclude(message_retention_days=-1) \
         .select_related('realm', 'recipient')
@@ -521,8 +578,22 @@ def restore_all_data_from_archive(restore_manual_transactions: bool=True) -> Non
 
     if restore_manual_transactions:
         restore_data_from_archive_by_transactions(
-            ArchiveTransaction.objects.exclude(restored=True).filter(type=ArchiveTransaction.MANUAL)
+            ArchiveTransaction.objects.exclude(restored=True).filter(type=ArchiveTransaction.MANUAL),
         )
+
+def restore_retention_policy_deletions_for_stream(stream: Stream) -> None:
+    """
+    Utility function for calling in the Django shell if a stream's policy was
+    set to something too aggressive and the administrator wants to restore
+    the messages deleted as a result.
+    """
+    relevant_transactions = ArchiveTransaction.objects \
+        .filter(archivedmessage__recipient=stream.recipient, type=ArchiveTransaction.RETENTION_POLICY_BASED) \
+        .distinct('id')
+
+    restore_data_from_archive_by_transactions(
+        list(relevant_transactions)
+    )
 
 def clean_archived_data() -> None:
     logger.info("Cleaning old archive data.")
@@ -538,3 +609,14 @@ def clean_archived_data() -> None:
         count += len(transaction_block)
 
     logger.info("Deleted %s old ArchiveTransactions.", count)
+
+def parse_message_retention_days(
+    value: Union[int, str],
+    special_values_map: Mapping[str, Optional[int]],
+) -> Optional[int]:
+    if isinstance(value, str) and value in special_values_map.keys():
+        return special_values_map[value]
+    if isinstance(value, str) or value <= 0:
+        raise RequestVariableConversionError('message_retention_days', value)
+    assert isinstance(value, int)
+    return value

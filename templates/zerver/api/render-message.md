@@ -12,23 +12,8 @@
 {tab|js}
 
 More examples and documentation can be found [here](https://github.com/zulip/zulip-js).
-```js
-const zulip = require('zulip-js');
 
-// Pass the path to your zuliprc file here.
-const config = {
-    zuliprc: 'zuliprc',
-};
-
-zulip(config).then((client) => {
-    // Render a message
-    const params = {
-        content: '**foo**',
-    };
-
-    client.messages.render(params).then(console.log);
-});
-```
+{generate_code_example(javascript)|/messages/render:post|example}
 
 {tab|curl}
 
@@ -36,7 +21,7 @@ zulip(config).then((client) => {
 
 {end_tabs}
 
-## Arguments
+## Parameters
 
 {generate_api_arguments_table|zulip.yaml|/messages/render:post}
 

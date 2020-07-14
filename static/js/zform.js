@@ -15,7 +15,7 @@ exports.validate_extra_data = function (data) {
                 return schema.check_array(
                     field_name,
                     val,
-                    check_choice_item
+                    check_choice_item,
                 );
             }
 
@@ -65,7 +65,7 @@ exports.activate = function (opts) {
         const html = render_widgets_zform_choices(data);
         const elem = $(html);
 
-        elem.find('button').on('click', function (e) {
+        elem.find('button').on('click', (e) => {
             e.stopPropagation();
 
             // Grab our index from the markup.

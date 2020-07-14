@@ -4,6 +4,11 @@ const util = require("./util");
 const waiting_for_id = new Map();
 let waiting_for_ack = new Map();
 
+function failed_message_success(message_id) {
+    message_store.get(message_id).failed_request = false;
+    ui.show_failed_message_success(message_id);
+}
+
 function resend_message(message, row) {
     message.content = message.raw_content;
     const retry_spinner = row.find('.refresh-failed-message');
@@ -24,13 +29,12 @@ function resend_message(message, row) {
         compose.send_message_success(local_id, message_id, locally_echoed);
 
         // Resend succeeded, so mark as no longer failed
-        message_store.get(message_id).failed_request = false;
-        ui.show_failed_message_success(message_id);
+        failed_message_success(message_id);
     }
 
     function on_error(response) {
         exports.message_send_error(message.id, response);
-        setTimeout(function () {
+        setTimeout(() => {
             retry_spinner.toggleClass('rotating', false);
         }, 300);
         blueslip.log("Manual resend of message failed");
@@ -52,7 +56,7 @@ exports.build_display_recipient = function (message) {
     const emails = util.extract_pm_recipients(message.private_message_recipient);
 
     let sender_in_display_recipients = false;
-    const display_recipient = emails.map(email => {
+    const display_recipient = emails.map((email) => {
         email = email.trim();
         const person = people.get_by_email(email);
         if (person === undefined) {
@@ -131,7 +135,7 @@ exports.insert_local_message = function (message_request, local_id_float) {
     waiting_for_id.set(message.local_id, message);
     waiting_for_ack.set(message.local_id, message);
 
-    message.display_recipient = echo.build_display_recipient(message);
+    message.display_recipient = exports.build_display_recipient(message);
     local_message.insert_message(message);
     return message;
 };
@@ -146,7 +150,7 @@ exports.try_deliver_locally = function (message_request) {
         return;
     }
 
-    if (narrow_state.active() && !narrow_state.filter().can_apply_locally()) {
+    if (narrow_state.active() && !narrow_state.filter().can_apply_locally(true)) {
         return;
     }
 
@@ -193,9 +197,10 @@ exports.edit_locally = function (message, request) {
     if (request.new_topic !== undefined || request.new_stream_id !== undefined) {
         const new_stream_id = request.new_stream_id;
         const new_topic = request.new_topic;
-        stream_topic_history.remove_message({
+        stream_topic_history.remove_messages({
             stream_id: message.stream_id,
             topic_name: message.topic,
+            num_messages: 1,
         });
 
         if (new_stream_id !== undefined) {
@@ -272,6 +277,7 @@ exports.reify_message_id = function (local_id, server_id) {
 
     message_store.reify_message_id(opts);
     notifications.reify_message_id(opts);
+    recent_topics.reify_message_id_if_available(opts);
 };
 
 exports.process_from_server = function (messages) {
@@ -292,6 +298,10 @@ exports.process_from_server = function (messages) {
         }
 
         exports.reify_message_id(local_id, message.id);
+
+        if (message_store.get(message.id).failed_request) {
+            failed_message_success(message.id);
+        }
 
         if (client_message.content !== message.content) {
             client_message.content = message.content;

@@ -148,10 +148,10 @@ exports.activate = function (raw_operators, opts) {
     const operators = filter.operators();
 
     update_narrow_title(filter);
-    notifications.hide_history_limit_message();
-    $(".all-messages-search-caution").hide();
+    message_scroll.hide_top_of_narrow_notices();
+    message_scroll.hide_indicators();
 
-    blueslip.debug("Narrowed", {operators: operators.map(e => e.operator),
+    blueslip.debug("Narrowed", {operators: operators.map((e) => e.operator),
                                 trigger: opts ? opts.trigger : undefined,
                                 previous_id: current_msg_list.selected_id()});
 
@@ -290,37 +290,14 @@ exports.activate = function (raw_operators, opts) {
                 msg_list.network_time = new Date();
                 maybe_report_narrow_time(msg_list);
             },
-            pre_scroll_cont: function () {
-                // Potentially display the notice that lets users know
-                // that not all messages were searched.  One could
-                // imagine including `filter.is_search()` in these
-                // conditions, but there's a very legitimate use case
-                // for moderation of searching for all messages sent
-                // by a potential spammer user.
-                if (!filter.contains_only_private_messages() &&
-                    !filter.includes_full_stream_history() &&
-                    !filter.is_personal_filter()) {
-                    $(".all-messages-search-caution").show();
-                    // Set the link to point to this search with streams:public added.
-                    // It's a bit hacky to use the href, but
-                    // !filter.includes_full_stream_history() implies streams:public
-                    // wasn't already present.
-                    $(".all-messages-search-caution a.search-shared-history").attr(
-                        "href", window.location.hash.replace("#narrow/", "#narrow/streams/public/")
-                    );
-                }
-            },
         });
     }());
 
     if (select_immediately) {
-        message_scroll.hide_indicators();
         exports.update_selection({
             id_info: id_info,
             select_offset: then_select_offset,
         });
-    } else {
-        message_scroll.show_loading_older();
     }
 
     // Put the narrow operators in the URL fragment.
@@ -345,12 +322,6 @@ exports.activate = function (raw_operators, opts) {
         compose.update_closed_compose_buttons_for_stream();
     }
 
-    // Put the narrow operators in the search bar.
-    // we append a space to make searching more convenient in some cases.
-    if (filter && !filter.is_search()) {
-        $('#search_query').val(Filter.unparse(operators) + " ");
-    }
-
     search.update_button_visibility();
 
     compose_actions.on_narrow(opts);
@@ -363,7 +334,7 @@ exports.activate = function (raw_operators, opts) {
     tab_bar.initialize();
 
     msg_list.initial_core_time = new Date();
-    setTimeout(function () {
+    setTimeout(() => {
         resize.resize_stream_filters_container();
         msg_list.initial_free_time = new Date();
         maybe_report_narrow_time(msg_list);
@@ -464,7 +435,7 @@ exports.maybe_add_local_messages = function (opts) {
         // need to look at unread here.
         id_info.final_select_id = min_defined(
             id_info.target_id,
-            unread_info.msg_id
+            unread_info.msg_id,
         );
 
         if (!load_local_messages(msg_data)) {
@@ -630,7 +601,7 @@ exports.narrow_to_next_topic = function () {
 
     const next_narrow = topic_generator.get_next_topic(
         curr_info.stream,
-        curr_info.topic
+        curr_info.topic,
     );
 
     if (!next_narrow) {
@@ -754,7 +725,7 @@ exports.to_compose_target = function () {
     if (compose_state.get_message_type() === 'private') {
         const recipient_string = compose_state.private_message_recipient();
         const emails = util.extract_pm_recipients(recipient_string);
-        const invalid = emails.filter(email => !people.is_valid_email_for_compose(email));
+        const invalid = emails.filter((email) => !people.is_valid_email_for_compose(email));
         // If there are no recipients or any recipient is
         // invalid, narrow to all PMs.
         if (emails.length === 0 || invalid.length > 0) {
@@ -782,8 +753,8 @@ function handle_post_narrow_deactivate_processes() {
     tab_bar.initialize();
     exports.narrow_title = "home";
     notifications.redraw_title();
-    notifications.hide_or_show_history_limit_message(home_msg_list);
-    $(".all-messages-search-caution").hide();
+    message_scroll.hide_top_of_narrow_notices();
+    message_scroll.update_top_of_narrow_notices(home_msg_list);
 }
 
 exports.deactivate = function () {
@@ -869,7 +840,7 @@ exports.deactivate = function () {
     handle_post_narrow_deactivate_processes();
 
     unnarrow_times.initial_core_time = new Date();
-    setTimeout(function () {
+    setTimeout(() => {
         resize.resize_stream_filters_container();
         unnarrow_times.initial_free_time = new Date();
         report_unnarrow_time();

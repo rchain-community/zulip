@@ -37,7 +37,7 @@ Logger.prototype = (function () {
                 pad(now.getUTCSeconds(), 2) + '.' +
                 pad(now.getUTCMilliseconds(), 3) + ' UTC';
 
-            const str_args = args.map(x => typeof x === "object" ? JSON.stringify(x) : x);
+            const str_args = args.map((x) => typeof x === "object" ? JSON.stringify(x) : x);
 
             const log_entry = date_str + " " + name.toUpperCase() +
                 ': ' + str_args.join("");
@@ -200,7 +200,7 @@ exports.exception_msg = function blueslip_exception_msg(ex) {
     return message;
 };
 
-$(window).on('error', function (event) {
+$(window).on('error', (event) => {
     const ex = event.originalEvent.error;
     if (!ex || ex instanceof BlueslipError) {
         return;

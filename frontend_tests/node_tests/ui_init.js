@@ -44,6 +44,8 @@ const ignore_modules = [
     'gear_menu',
     'hashchange',
     'hotspots',
+    // Accesses home_msg_list, which is a lot of complexity to setup
+    'message_fetch',
     'message_scroll',
     'message_viewport',
     'panels',
@@ -70,7 +72,7 @@ emoji.emojis_by_name = new Map();
 
 util.is_mobile = () => false;
 global.stub_templates(() => 'some-html');
-ui.get_scroll_element = element => element;
+ui.get_scroll_element = (element) => element;
 
 zrequire('alert_words');
 zrequire('hash_util');
@@ -82,6 +84,7 @@ zrequire('color_data');
 zrequire('stream_data');
 zrequire('muting');
 zrequire('condense');
+zrequire('spoilers');
 zrequire('lightbox');
 zrequire('overlays');
 zrequire('invite');
@@ -93,7 +96,6 @@ zrequire('search_pill_widget');
 zrequire('user_groups');
 zrequire('unread');
 zrequire('bot_data');
-zrequire('message_fetch');
 set_global('marked', zrequire('marked', 'third/marked/lib/marked'));
 zrequire('fenced_code');
 zrequire('markdown');
@@ -105,9 +107,7 @@ zrequire('search_suggestion');
 zrequire('search');
 zrequire('tutorial');
 zrequire('notifications');
-zrequire('pointer');
 zrequire('pm_conversations');
-zrequire('compose_fade');
 zrequire('pm_list');
 zrequire('list_cursor');
 zrequire('keydown_util');
@@ -128,7 +128,7 @@ const ui_init = rewiremock.proxy(
         "../../static/js/emojisets": {
             initialize: () => {},
         },
-    }
+    },
 );
 
 set_global('$', global.make_zjquery());
@@ -186,7 +186,7 @@ const count_stub = $.create('count');
 count_stub.set_find_results('.value', value_stub);
 $(".top_left_starred_messages").set_find_results('.count', count_stub);
 
-$("#tab_list .stream").length = 0;
+$("#tab_bar .stream").length = 0;
 
 // set find results doesn't work here since we call .empty() in the code.
 $tab_bar.find = () => false;

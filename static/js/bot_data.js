@@ -19,7 +19,7 @@ const services = new Map();
 const services_fields = ['base_url', 'interface',
                          'config_data', 'service_name', 'token'];
 
-const send_change_event = _.debounce(function () {
+const send_change_event = _.debounce(() => {
     settings_bots.render_bots();
 }, 50);
 
@@ -30,7 +30,7 @@ exports.all_user_ids = function () {
 exports.add = function (bot) {
     const clean_bot = _.pick(bot, bot_fields);
     bots.set(bot.user_id, clean_bot);
-    const clean_services = bot.services.map(service => _.pick(service, services_fields));
+    const clean_services = bot.services.map((service) => _.pick(service, services_fields));
     services.set(bot.user_id, clean_services);
 
     send_change_event();

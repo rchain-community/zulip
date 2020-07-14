@@ -1,17 +1,30 @@
-from django.contrib.auth.models import UserManager
-from django.utils.timezone import now as timezone_now
-from zerver.models import UserProfile, Recipient, Subscription, Realm, Stream, \
-    PreregistrationUser, get_fake_email_domain
-from zerver.lib.upload import copy_avatar
-from zerver.lib.hotspots import copy_hotpots
-from zerver.lib.utils import generate_api_key
-
-import ujson
-
 from typing import Optional
 
+import ujson
+from django.contrib.auth.models import UserManager
+from django.utils.timezone import now as timezone_now
+
+from zerver.lib.hotspots import copy_hotpots
+from zerver.lib.upload import copy_avatar
+from zerver.lib.utils import generate_api_key
+from zerver.models import (
+    PreregistrationUser,
+    Realm,
+    Recipient,
+    Stream,
+    Subscription,
+    UserProfile,
+    get_fake_email_domain,
+)
+
+
 def copy_user_settings(source_profile: UserProfile, target_profile: UserProfile) -> None:
-    """Warning: Does not save, to avoid extra database queries"""
+    # Important note: Code run from here to configure the user's
+    # settings should not call send_event, as that would cause clients
+    # to throw an exception (we haven't sent the realm_user/add event
+    # yet, so that event will include the updated details of target_profile).
+    #
+    # Note that this function will do at least one save() on target_profile.
     for settings_name in UserProfile.property_types:
         value = getattr(source_profile, settings_name)
         setattr(target_profile, settings_name, value)
@@ -26,18 +39,21 @@ def copy_user_settings(source_profile: UserProfile, target_profile: UserProfile)
 
     if source_profile.avatar_source == UserProfile.AVATAR_FROM_USER:
         from zerver.lib.actions import do_change_avatar_fields
-        do_change_avatar_fields(target_profile, UserProfile.AVATAR_FROM_USER)
+        do_change_avatar_fields(target_profile, UserProfile.AVATAR_FROM_USER,
+                                skip_notify=True, acting_user=target_profile)
         copy_avatar(source_profile, target_profile)
 
     copy_hotpots(source_profile, target_profile)
 
 def get_display_email_address(user_profile: UserProfile, realm: Realm) -> str:
     if not user_profile.email_address_is_realm_public():
-        return "user%s@%s" % (user_profile.id, get_fake_email_domain())
+        return f"user{user_profile.id}@{get_fake_email_domain()}"
     return user_profile.delivery_email
 
 def get_role_for_new_user(invited_as: int, realm_creation: bool=False) -> int:
-    if invited_as == PreregistrationUser.INVITE_AS['REALM_ADMIN'] or realm_creation:
+    if realm_creation or invited_as == PreregistrationUser.INVITE_AS['REALM_OWNER']:
+        return UserProfile.ROLE_REALM_OWNER
+    elif invited_as == PreregistrationUser.INVITE_AS['REALM_ADMIN']:
         return UserProfile.ROLE_REALM_ADMINISTRATOR
     elif invited_as == PreregistrationUser.INVITE_AS['GUEST_USER']:
         return UserProfile.ROLE_GUEST
@@ -55,7 +71,7 @@ def create_user_profile(realm: Realm, email: str, password: Optional[str],
                         short_name: str, bot_owner: Optional[UserProfile],
                         is_mirror_dummy: bool, tos_version: Optional[str],
                         timezone: Optional[str],
-                        tutorial_status: Optional[str] = UserProfile.TUTORIAL_WAITING,
+                        tutorial_status: str = UserProfile.TUTORIAL_WAITING,
                         enter_sends: bool = False) -> UserProfile:
     now = timezone_now()
     email = UserManager.normalize_email(email)
@@ -63,7 +79,7 @@ def create_user_profile(realm: Realm, email: str, password: Optional[str],
     user_profile = UserProfile(is_staff=False, is_active=active,
                                full_name=full_name, short_name=short_name,
                                last_login=now, date_joined=now, realm=realm,
-                               pointer=-1, is_bot=bool(bot_type), bot_type=bot_type,
+                               is_bot=bool(bot_type), bot_type=bot_type,
                                bot_owner=bot_owner, is_mirror_dummy=is_mirror_dummy,
                                tos_version=tos_version, timezone=timezone,
                                tutorial_status=tutorial_status,

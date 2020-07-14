@@ -293,9 +293,10 @@ active users in a realm.
 
     # zerver/lib/actions.py
 
-    def do_set_realm_property(realm: Realm, name: str, value: bool) -> None:
-      """Takes in a realm object, the name of an attribute to update, and the
-      value to update.
+    def do_set_realm_property(realm: Realm, name: str, value: bool,
+                              acting_user: Optional[UserProfile]=None) -> None:
+      """Takes in a realm object, the name of an attribute to update, the
+         value to update and and the user who initiated the update.
       """
       property_type = Realm.property_types[name]
       assert isinstance(value, property_type), (
@@ -453,7 +454,7 @@ with the new value. E.g., for `authentication_methods`, we created
     # ...
     # ...
     if authentication_methods is not None and realm.authentication_methods_dict() != authentication_methods:
-            do_set_realm_authentication_methods(realm, authentication_methods)
+            do_set_realm_authentication_methods(realm, authentication_methods, acting_user=user_profile)
             data['authentication_methods'] = authentication_methods
     # ...
 

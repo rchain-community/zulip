@@ -1,12 +1,13 @@
-from typing import List, Dict, Union, Any
+import datetime
+from typing import Any, Dict, List, Union
 
 import pytz
-import datetime
+
 
 def get_all_timezones() -> List[str]:
     return sorted(pytz.all_timezones)
 
-def get_timezone(tz: str) -> datetime.tzinfo:
+def get_timezone(tz: str) -> pytz.BaseTzInfo:
     return pytz.timezone(tz)
 
 # This method carefully trims a list of common timezones in the pytz
@@ -18,7 +19,6 @@ def _calculate_timezones() -> Dict[str, Union[int, Any]]:
     normal = datetime.datetime(2009, 9, 1)  # Any random date is fine here.
     for str in pytz.all_timezones:
         tz = pytz.timezone(str)
-        offset = tz.utcoffset(normal).seconds  # type: ignore[union-attr] # mypy detects utcoffset returns None.
         timedelta = tz.utcoffset(normal)
         if not timedelta:
             continue

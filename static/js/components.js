@@ -18,7 +18,7 @@ exports.toggle = function (opts) {
             // classes need to be added for correct alignment or other purposes
             _component.addClass(opts.html_class);
         }
-        opts.values.forEach(function (value, i) {
+        opts.values.forEach((value, i) => {
             // create a tab with a tab-id so they don't have to be referenced
             // by text value which can be inconsistent.
             const tab = $("<div class='ind-tab' data-tab-key='" + value.key + "' data-tab-id='" + i + "' tabindex='0'>" + value.label + "</div>");
@@ -55,7 +55,7 @@ exports.toggle = function (opts) {
         if (opts.callback) {
             opts.callback(
                 opts.values[idx].label,
-                opts.values[idx].key
+                opts.values[idx].key,
             );
         }
 
@@ -103,7 +103,7 @@ exports.toggle = function (opts) {
         maybe_go_right: maybe_go_right,
 
         disable_tab: function (name) {
-            const value = opts.values.find(o => o.key === name);
+            const value = opts.values.find((o) => o.key === name);
 
             const idx = opts.values.indexOf(value);
             meta.$ind_tab.eq(idx).addClass('disabled');
@@ -121,7 +121,7 @@ exports.toggle = function (opts) {
         // go through the process of finding the correct tab for a given name,
         // and when found, select that one and provide the proper callback.
         goto: function (name) {
-            const value = opts.values.find(o => o.label === name || o.key === name);
+            const value = opts.values.find((o) => o.label === name || o.key === name);
 
             const idx = opts.values.indexOf(value);
 

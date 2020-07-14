@@ -273,9 +273,9 @@ exports.unread_topic_counter = (function () {
 
         let topic_names = Array.from(per_stream_bucketer.keys());
 
-        topic_names = topic_names.filter(topic_name => !topic_dict.has(topic_name));
+        topic_names = topic_names.filter((topic_name) => !topic_dict.has(topic_name));
 
-        const result = topic_names.map(topic_name => {
+        const result = topic_names.map((topic_name) => {
             const msgs = per_stream_bucketer.get_bucket(topic_name);
 
             return {
@@ -384,11 +384,11 @@ exports.message_unread = function (message) {
 };
 
 exports.get_unread_message_ids = function (message_ids) {
-    return message_ids.filter(message_id => unread_messages.has(message_id));
+    return message_ids.filter((message_id) => unread_messages.has(message_id));
 };
 
 exports.get_unread_messages = function (messages) {
-    return messages.filter(message => unread_messages.has(message.id));
+    return messages.filter((message) => unread_messages.has(message.id));
 };
 
 exports.update_unread_topics = function (msg, event) {
@@ -404,13 +404,13 @@ exports.update_unread_topics = function (msg, event) {
     }
 
     exports.unread_topic_counter.delete(
-        msg.id
+        msg.id,
     );
 
     exports.unread_topic_counter.add(
         new_stream_id || msg.stream_id,
         new_topic || msg.topic,
-        msg.id
+        msg.id,
     );
 };
 
@@ -430,7 +430,7 @@ exports.process_loaded_messages = function (messages) {
             exports.unread_topic_counter.add(
                 message.stream_id,
                 message.topic,
-                message.id
+                message.id,
             );
         }
 

@@ -63,13 +63,13 @@ exports.replace_syntax = function (old_syntax, new_syntax, textarea) {
         textarea = $('#compose-textarea');
     }
 
-    textarea.val(textarea.val().replace(old_syntax, function () {
+    textarea.val(textarea.val().replace(old_syntax, () =>
         // We need this anonymous function to avoid JavaScript's
         // replace() function treating `$`s in new_syntax as special syntax.  See
         // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#Description
         // for details.
-        return new_syntax;
-    }));
+        new_syntax,
+    ));
 };
 
 exports.compute_placeholder_text = function (opts) {
@@ -92,7 +92,7 @@ exports.compute_placeholder_text = function (opts) {
     // For Private Messages
     if (opts.private_message_recipient) {
         const recipient_list = opts.private_message_recipient.split(",");
-        const recipient_names = recipient_list.map(recipient => {
+        const recipient_names = recipient_list.map((recipient) => {
             const user = people.get_by_email(recipient);
             return user.full_name;
         }).join(", ");

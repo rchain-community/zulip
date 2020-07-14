@@ -56,7 +56,7 @@ receive a zip file `slack_data.zip`.
 This step will also generate a different token starting with
 `xoxe-`; you don't need it.
 
-### Import into zulipchat.com
+### Import into Zulip Cloud
 
 Email support@zulip.com with `slack_data.zip`, the Slack API token
 generated above, and your desired subdomain. Your imported organization will
@@ -117,8 +117,9 @@ root domain. Replace the last line above with the following, after replacing
   you'll need to configure these manually.
 
 - Import of [user roles](/help/roles-and-permissions):
-    - Slack's `Workspace Primary Owner`, `Workspace Owner`, and
-      `Workspace Admin` users are mapped to Zulip's `Organization
+    - Slack's `Workspace Primary Owner` and `Workspace Owner` users
+    are mapped to Zulip `Organization Owner` users.
+    - Slack's `Workspace Admin` users are mapped to Zulip's `Organization
       administrator` users.
     - Slack's `Member` users is mapped to Zulip `Member` users.
     - Slack's `Single Channel Guest` and `Multi Channel Guest` users

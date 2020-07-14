@@ -34,7 +34,16 @@
                         {% else %}
                         <p>Your current plan is <strong>{{ plan_name }}</strong>.</p>
                         {% endif %}
-                        <p>You are using <strong>{{ licenses_used }} of {{ licenses }} licenses</strong>.</p>
+                        <p>
+                            You are using <strong>{{ licenses_used }} of {{ licenses }} licenses</strong>.
+                            {% if automanage_licenses %}
+                            Licenses are automatically managed by Zulip; when you add or deactivate a user, the number of
+                            licenses will be immediately updated to reflect your new usage.
+                            {% else %}
+                            Licenses are manually managed. You will not be able to add new users to your organization once
+                            you are using all of your licenses.
+                            {% endif %}
+                        </p>
                         <p>
                             {% if renewal_amount %}
                                 {% if free_trial %}
@@ -42,6 +51,8 @@
                                 <strong>${{ renewal_amount }}</strong>.
                                 {% elif downgrade_at_end_of_cycle %}
                                 Your plan will be downgraded to <strong>Zulip Limited</strong> on <strong>{{ renewal_date }}</strong>.
+                                {% elif switch_to_annual_at_end_of_cycle %}
+                                Your plan will be switched from monthly to annual billing on <strong>{{ renewal_date }}</strong>.
                                 {% else %}
                                 Your plan will renew on <strong>{{ renewal_date }}</strong> for
                                 <strong>${{ renewal_amount }}</strong>.
@@ -141,6 +152,9 @@
                 </div>
                 {% elif admin_access and not has_active_plan %}
                 <div class="tab-content">
+                    {% if sponsorship_pending %}
+                    <h3>Your organization has requested sponsored or discounted hosting.</h3>
+                    {% else %}
                     <center>
                         <p>
                             <h2>Your organization is on the <b>Zulip Free</b> plan.</h2>
@@ -152,6 +166,7 @@
                             </a>
                         </p>
                     </center>
+                    {% endif %}
                 </div>
                 <div class="support-link">
                     <p>

@@ -102,9 +102,7 @@ run_test('create_ajax_request', () => {
     };
 
 
-    $("#autopay-form").serializeArray = () => {
-        return jquery("#autopay-form").serializeArray();
-    };
+    $("#autopay-form").serializeArray = () => jquery("#autopay-form").serializeArray();
 
     $.post = ({url, data, success, error}) => {
         assert.equal(state.form_input_section_hide, 1);
@@ -137,6 +135,11 @@ run_test('create_ajax_request', () => {
 
         location.reload = () => {
             state.location_reload += 1;
+        };
+
+        window.location.replace = (reload_to) => {
+            state.location_reload += 1;
+            assert.equal(reload_to, "/billing");
         };
 
         success();

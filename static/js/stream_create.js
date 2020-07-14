@@ -126,7 +126,7 @@ function update_announce_stream_state() {
 }
 
 function get_principals() {
-    return Array.from($("#stream_creation_form input:checkbox[name=user]:checked"), elem => {
+    return Array.from($("#stream_creation_form input:checkbox[name=user]:checked"), (elem) => {
         const label = $(elem).closest(".add-user-label");
         return parseInt(label.attr("data-user-id"), 10);
     });
@@ -169,6 +169,13 @@ function create_stream() {
 
     data.stream_post_policy = JSON.stringify(stream_post_policy);
 
+    let message_retention_selection = $('#stream_creation_form select[name=stream_message_retention_setting]').val();
+    if (message_retention_selection === "retain_for_period") {
+        message_retention_selection = parseInt($('#stream_creation_form input[name=stream-message-retention-days]').val(), 10);
+    }
+
+    data.message_retention_days = JSON.stringify(message_retention_selection);
+
     const announce = stream_data.realm_has_notifications_stream() &&
         $('#announce-new-stream input').prop('checked');
     data.announce = JSON.stringify(announce);
@@ -176,9 +183,7 @@ function create_stream() {
     // TODO: We can eliminate the user_ids -> principals conversion
     //       once we upgrade the backend to accept user_ids.
     const user_ids = get_principals();
-    const persons = user_ids.map(user_id => people.get_by_user_id(user_id)).filter(Boolean);
-    const principals = persons.map(person => person.email);
-    data.principals = JSON.stringify(principals);
+    data.principals = JSON.stringify(user_ids);
 
     loading.make_indicator($('#stream_creating_indicator'), {text: i18n.t('Creating stream...')});
 
@@ -268,6 +273,8 @@ exports.show_new_stream_modal = function () {
     // Make the options default to the same each time:
     // public, "announce stream" on.
     $('#make-invite-only input:radio[value=public]').prop('checked', true);
+    $("#stream_creation_form .stream-message-retention-days-input").hide();
+    $("#stream_creation_form select[name=stream_message_retention_setting]").val("realm_default");
 
     if (stream_data.realm_has_notifications_stream()) {
         $('#announce-new-stream').show();
@@ -302,8 +309,8 @@ exports.create_handlers_for_users = function (container) {
     container.on('change', '#user-checkboxes input', update_announce_stream_state);
 
     // 'Check all' and 'Uncheck all' visible users
-    container.on('click', '.subs_set_all_users', function (e) {
-        $('#user-checkboxes .checkbox').each(function (idx, li) {
+    container.on('click', '.subs_set_all_users', (e) => {
+        $('#user-checkboxes .checkbox').each((idx, li) => {
             if  (li.style.display !== "none") {
                 $(li.firstElementChild).prop('checked', true);
             }
@@ -312,8 +319,8 @@ exports.create_handlers_for_users = function (container) {
         update_announce_stream_state();
     });
 
-    container.on('click', '.subs_unset_all_users', function (e) {
-        $('#user-checkboxes .checkbox').each(function (idx, li) {
+    container.on('click', '.subs_unset_all_users', (e) => {
+        $('#user-checkboxes .checkbox').each((idx, li) => {
             if (li.style.display !== "none") {
                 // The first checkbox is the one for ourself; this is the code path for:
                 // `stream_subscription_error.cant_create_stream_without_susbscribing`
@@ -327,14 +334,14 @@ exports.create_handlers_for_users = function (container) {
         update_announce_stream_state();
     });
 
-    container.on('click', '#copy-from-stream-expand-collapse', function (e) {
+    container.on('click', '#copy-from-stream-expand-collapse', (e) => {
         $('#stream-checkboxes').toggle();
         $("#copy-from-stream-expand-collapse .toggle").toggleClass('fa-caret-right fa-caret-down');
         e.preventDefault();
     });
 
     // Search People or Streams
-    container.on('input', '.add-user-list-filter', function (e) {
+    container.on('input', '.add-user-list-filter', (e) => {
         const user_list = $(".add-user-list-filter");
         if (user_list === 0) {
             return;
@@ -379,7 +386,7 @@ exports.set_up_handlers = function () {
 
     container.on('change', '#make-invite-only input', update_announce_stream_state);
 
-    container.on("submit", "#stream_creation_form", function (e) {
+    container.on("submit", "#stream_creation_form", (e) => {
         e.preventDefault();
         clear_error_display();
 
@@ -411,23 +418,23 @@ exports.set_up_handlers = function () {
         }
     });
 
-    container.on("click", ".close-invites-warning-modal", function () {
+    container.on("click", ".close-invites-warning-modal", () => {
         $("#invites-warning-overlay").remove();
     });
 
-    container.on("click", ".confirm-invites-warning-modal", function () {
+    container.on("click", ".confirm-invites-warning-modal", () => {
         create_stream();
         $("#invites-warning-overlay").remove();
     });
 
-    container.on("input", "#create_stream_name", function () {
+    container.on("input", "#create_stream_name", () => {
         const stream_name = $.trim($("#create_stream_name").val());
 
         // This is an inexpensive check.
         stream_name_error.pre_validate(stream_name);
     });
 
-    container.on("mouseover", "#announce-stream-docs", function (e) {
+    container.on("mouseover", "#announce-stream-docs", (e) => {
         const announce_stream_docs = $("#announce-stream-docs");
         announce_stream_docs.popover({
             placement: "right",
@@ -441,14 +448,14 @@ exports.set_up_handlers = function () {
         announce_stream_docs.data('popover').tip().find('.popover-content').css('margin', '9px 14px');
         e.stopPropagation();
     });
-    container.on("mouseout", "#announce-stream-docs", function (e) {
+    container.on("mouseout", "#announce-stream-docs", (e) => {
         $("#announce-stream-docs").popover('hide');
         e.stopPropagation();
     });
 
     // Do not allow the user to enter newline characters while typing out the
     // stream's description during it's creation.
-    container.on("keydown", "#create_stream_description", function (e) {
+    container.on("keydown", "#create_stream_description", (e) => {
         if ((e.keyCode || e.which) === 13) {
             e.preventDefault();
         }

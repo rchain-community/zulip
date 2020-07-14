@@ -28,8 +28,8 @@ if (window.electron_bridge && window.electron_bridge.new_notification) {
             Object.assign(
                 this,
                 window.electron_bridge.new_notification(title, options, (type, eventInit) =>
-                    this.dispatchEvent(new Event(type, eventInit))
-                )
+                    this.dispatchEvent(new Event(type, eventInit)),
+                ),
             );
         }
 
@@ -63,7 +63,7 @@ function get_audio_file_path(audio_element, audio_file_without_extension) {
 }
 
 exports.initialize = function () {
-    $(window).focus(function () {
+    $(window).focus(() => {
         window_has_focus = true;
 
         for (const notice_mem_entry of notice_memory.values()) {
@@ -75,7 +75,7 @@ exports.initialize = function () {
         // counts.
         unread_ops.process_visible();
 
-    }).blur(function () {
+    }).blur(() => {
         window_has_focus = false;
     });
 
@@ -171,29 +171,6 @@ exports.redraw_title = function () {
     }
 };
 
-exports.show_history_limit_message = function () {
-    $(".top-messages-logo").hide();
-    $(".history-limited-box").show();
-    narrow.hide_empty_narrow_message();
-};
-
-exports.hide_history_limit_message = function () {
-    $(".top-messages-logo").show();
-    $(".history-limited-box").hide();
-};
-
-exports.hide_or_show_history_limit_message = function (msg_list) {
-    if (msg_list !== current_msg_list) {
-        return;
-    }
-
-    if (msg_list.data.fetch_status.history_limited()) {
-        exports.show_history_limit_message();
-    } else {
-        exports.hide_history_limit_message();
-    }
-};
-
 function flash_pms() {
     // When you have unread PMs, toggle the favicon between the unread count and
     // a special icon indicating that you have unread PMs.
@@ -273,7 +250,7 @@ if (window.electron_bridge !== undefined) {
     if (window.electron_bridge.set_send_notification_reply_message_supported !== undefined) {
         window.electron_bridge.set_send_notification_reply_message_supported(true);
     }
-    window.electron_bridge.on_event('send_notification_reply_message', function (message_id, reply) {
+    window.electron_bridge.on_event('send_notification_reply_message', (message_id, reply) => {
         const message = message_store.get(message_id);
         const data = {
             type: message.type,
@@ -410,16 +387,23 @@ function process_notification(notification) {
             msg_count: msg_count,
             message_id: message.id,
         });
-        notification_object.addEventListener("click", () => {
-            notification_object.close();
-            if (message.type !== "test-notification") {
-                narrow.by_topic(message.id, {trigger: 'notification'});
-            }
-            window.focus();
-        });
-        notification_object.addEventListener("close", () => {
-            notice_memory.delete(key);
-        });
+
+        if (_.isFunction(notification_object.addEventListener)) {
+            // Sadly, some third-party Electron apps like Franz/Ferdi
+            // misimplement the Notification API not inheriting from
+            // EventTarget.  This results in addEventListener being
+            // unavailable for them.
+            notification_object.addEventListener("click", () => {
+                notification_object.close();
+                if (message.type !== "test-notification") {
+                    narrow.by_topic(message.id, {trigger: 'notification'});
+                }
+                window.focus();
+            });
+            notification_object.addEventListener("close", () => {
+                notice_memory.delete(key);
+            });
+        }
     } else {
         in_browser_notify(message, title, content, raw_operators, opts);
     }
@@ -483,7 +467,7 @@ exports.should_send_desktop_notification = function (message) {
     // For streams, send if desktop notifications are enabled for all
     // message on this stream.
     if (message.type === "stream" &&
-        stream_data.receives_notifications(message.stream, "desktop_notifications")) {
+        stream_data.receives_notifications(message.stream_id, "desktop_notifications")) {
         return true;
     }
 
@@ -509,7 +493,7 @@ exports.should_send_desktop_notification = function (message) {
 
     // wildcard mentions
     if (message.mentioned &&
-            stream_data.receives_notifications(message.stream, "wildcard_mentions_notify")) {
+            stream_data.receives_notifications(message.stream_id, "wildcard_mentions_notify")) {
         return true;
     }
 
@@ -520,7 +504,7 @@ exports.should_send_audible_notification = function (message) {
     // For streams, ding if sounds are enabled for all messages on
     // this stream.
     if (message.type === "stream" &&
-        stream_data.receives_notifications(message.stream, "audible_notifications")) {
+        stream_data.receives_notifications(message.stream_id, "audible_notifications")) {
         return true;
     }
 
@@ -545,7 +529,7 @@ exports.should_send_audible_notification = function (message) {
 
     // wildcard mentions
     if (message.mentioned &&
-            stream_data.receives_notifications(message.stream, "wildcard_mentions_notify")) {
+            stream_data.receives_notifications(message.stream_id, "wildcard_mentions_notify")) {
         return true;
     }
 
@@ -589,7 +573,7 @@ exports.received_messages = function (messages) {
 };
 
 exports.send_test_notification = function (content) {
-    notifications.received_messages([{
+    exports.received_messages([{
         id: Math.random(),
         type: "test-notification",
         sender_email: "notification-bot@zulip.com",
@@ -634,7 +618,11 @@ exports.get_local_notify_mix_reason = function (message) {
     // offscreen because it is outside narrow
     // we can only look for these on non-search (can_apply_locally) messages
     // see also: exports.notify_messages_outside_current_search
-    return i18n.t("Sent! Your message is outside your current narrow.");
+    const current_filter = narrow_state.filter();
+    if (current_filter && current_filter.can_apply_locally() &&
+        !current_filter.predicate()(message)) {
+        return i18n.t("Sent! Your message is outside your current narrow.");
+    }
 };
 
 exports.notify_local_mixes = function (messages, need_user_to_scroll) {
@@ -670,7 +658,7 @@ exports.notify_local_mixes = function (messages, need_user_to_scroll) {
             if (need_user_to_scroll) {
                 reason = i18n.t("Sent! Scroll down to view your message.");
                 exports.notify_above_composebox(reason, "", null, "");
-                setTimeout(function () {
+                setTimeout(() => {
                     $('#out-of-view-notification').hide();
                 }, 3000);
             }
@@ -728,20 +716,20 @@ exports.reify_message_id = function (opts) {
 };
 
 exports.register_click_handlers = function () {
-    $('#out-of-view-notification').on('click', '.compose_notification_narrow_by_topic', function (e) {
+    $('#out-of-view-notification').on('click', '.compose_notification_narrow_by_topic', (e) => {
         const message_id = $(e.currentTarget).data('message-id');
         narrow.by_topic(message_id, {trigger: 'compose_notification'});
         e.stopPropagation();
         e.preventDefault();
     });
-    $('#out-of-view-notification').on('click', '.compose_notification_scroll_to_message', function (e) {
+    $('#out-of-view-notification').on('click', '.compose_notification_scroll_to_message', (e) => {
         const message_id = $(e.currentTarget).data('message-id');
         current_msg_list.select_id(message_id);
         navigate.scroll_to_selected();
         e.stopPropagation();
         e.preventDefault();
     });
-    $('#out-of-view-notification').on('click', '.out-of-view-notification-close', function (e) {
+    $('#out-of-view-notification').on('click', '.out-of-view-notification-close', (e) => {
         exports.clear_compose_notifications();
         e.stopPropagation();
         e.preventDefault();

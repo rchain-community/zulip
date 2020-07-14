@@ -14,14 +14,14 @@ exports.message = function (response, status_box, cls, remove_after) {
     status_box.removeClass(common.status_classes).addClass(cls)
         .html(response).stop(true).fadeTo(0, 1);
     if (remove_after) {
-        setTimeout(function () {
-            status_box.fadeTo(200, 0);
+        setTimeout(() => {
+            status_box.fadeOut(400);
         }, remove_after);
     }
     status_box.addClass("show");
 };
 
-exports.error = function (response, xhr, status_box) {
+exports.error = function (response, xhr, status_box, remove_after) {
     if (xhr && xhr.status.toString().charAt(0) === "4") {
         // Only display the error response for 4XX, where we've crafted
         // a nice response.
@@ -33,7 +33,7 @@ exports.error = function (response, xhr, status_box) {
         }
     }
 
-    exports.message(response, status_box, 'alert-error');
+    exports.message(response, status_box, 'alert-error', remove_after);
 };
 
 exports.success = function (response, status_box, remove_after) {
@@ -50,7 +50,7 @@ exports.generic_embed_error = function (error) {
 exports.generic_row_button_error = function (xhr, btn) {
     if (xhr.status.toString().charAt(0) === "4") {
         btn.closest("td").html(
-            $("<p>").addClass("text-error").text(JSON.parse(xhr.responseText).msg)
+            $("<p>").addClass("text-error").text(JSON.parse(xhr.responseText).msg),
         );
     } else {
         btn.text(i18n.t("Failed!"));
@@ -59,7 +59,7 @@ exports.generic_row_button_error = function (xhr, btn) {
 
 exports.hide_error = function ($target) {
     $target.addClass("fade-out");
-    setTimeout(function () {
+    setTimeout(() => {
         $target.removeClass("show fade-out");
     }, 300);
 };

@@ -104,14 +104,14 @@ exports.upload_files = function (uppy, config, files) {
     exports.get_item("send_button", config).attr("disabled", "");
     exports.get_item("send_status", config).addClass("alert-info").removeClass("alert-error").show();
     exports.get_item("send_status_message", config).html($("<p>").text(i18n.t("Uploading…")));
-    exports.get_item("send_status_close_button", config).one('click', function () {
+    exports.get_item("send_status_close_button", config).one('click', () => {
         uppy.getFiles().forEach((file) => {
             compose_ui.replace_syntax(exports.get_translated_status(file), "", exports.get_item("textarea", config));
         });
         compose_ui.autosize_textarea();
         uppy.cancelAll();
         exports.get_item("textarea", config).focus();
-        setTimeout(function () {
+        setTimeout(() => {
             exports.hide_upload_status(config);
         }, 500);
     });
@@ -162,7 +162,7 @@ exports.setup_upload = function (config) {
                     timedOut: i18n.t('Upload stalled for %{seconds} seconds, aborting.'),
                 },
             },
-        }
+        },
     );
 
     uppy.use(ProgressBar, {
@@ -213,7 +213,7 @@ exports.setup_upload = function (config) {
         if (!compose_state.composing()) {
             compose_actions.start('stream');
         }
-        const absolute_uri = upload.make_upload_absolute(uri);
+        const absolute_uri = exports.make_upload_absolute(uri);
         const filename_uri = "[" + filename + "](" + absolute_uri + ")";
         compose_ui.replace_syntax(exports.get_translated_status(file), filename_uri, exports.get_item("textarea", config));
         compose_ui.autosize_textarea();
@@ -221,7 +221,7 @@ exports.setup_upload = function (config) {
 
     uppy.on('complete', () => {
         let uploads_in_progress = false;
-        uppy.getFiles().forEach(file => {
+        uppy.getFiles().forEach((file) => {
             if (file.progress.uploadComplete) {
                 // The uploaded files should be removed since uppy don't allow files in the store
                 // to be re-uploaded again.
@@ -236,7 +236,7 @@ exports.setup_upload = function (config) {
 
         const has_errors = exports.get_item("send_status", config).hasClass("alert-error");
         if (!uploads_in_progress && !has_errors) {
-            setTimeout(function () {
+            setTimeout(() => {
                 exports.hide_upload_status(config);
             }, 500);
         }

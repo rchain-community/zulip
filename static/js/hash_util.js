@@ -56,7 +56,18 @@ exports.encode_stream_name = function (operand) {
 };
 
 exports.decodeHashComponent = function (str) {
-    return decodeURIComponent(str.replace(/\./g, '%'));
+    try {
+        // This fails for URLS containing
+        // foo.foo or foo%foo due to our fault in special handling
+        // of such characters when encoding. This can also,
+        // fail independent of our fault, so just tell the user
+        // that the url is invalid.
+        // TODO: Show possible valid urls to the user.
+        return decodeURIComponent(str.replace(/\./g, '%'));
+    } catch (e) {
+        ui_report.error(i18n.t("Invalid URL"), undefined, $("#home-error"), 2000);
+        return "";
+    }
 };
 
 exports.decode_operand = function (operator, operand) {
@@ -146,6 +157,13 @@ exports.by_conversation_and_time_uri = function (message) {
 exports.stream_edit_uri = function (sub) {
     const hash = "#streams" + "/" + sub.stream_id + "/" + exports.encodeHashComponent(sub.name);
     return hash;
+};
+
+exports.search_public_streams_notice_url = function () {
+    // Computes the URL of the current narrow if streams:public were added.
+    const operators = narrow_state.filter().operators();
+    const public_operator = {operator: 'streams', operand: 'public'};
+    return exports.operators_to_hash([public_operator].concat(operators));
 };
 
 exports.parse_narrow = function (hash) {

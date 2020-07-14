@@ -164,7 +164,7 @@ exports.render_date = function (time, time_above, today) {
     return node;
 };
 
-// Renders the timestamp returned by the !time() markdown syntax.
+// Renders the timestamp returned by the <time:> markdown syntax.
 exports.render_markdown_timestamp = function (time, now, text) {
     now = now || moment();
     if (page_params.timezone) {
@@ -226,6 +226,23 @@ exports.get_full_time = function (timestamp) {
     return new XDate(timestamp * 1000).toISOString();
 };
 
+exports.get_timestamp_for_flatpickr = (timestring) => {
+    let timestamp;
+    moment.suppressDeprecationWarnings = true;
+    try {
+        // If there's already a valid time in the compose box,
+        // we use it to initialize the flatpickr instance.
+        timestamp = moment(timestring);
+    } finally {
+        // Otherwise, default to showing the current time.
+        if (!timestamp || !timestamp.isValid()) {
+            timestamp = moment();
+        }
+    }
+    moment.suppressDeprecationWarnings = false;
+    return timestamp.toDate();
+};
+
 exports.stringify_time = function (time) {
     if (page_params.twenty_four_hour_time) {
         return time.toString('HH:mm');
@@ -278,6 +295,18 @@ exports.absolute_time = (function () {
     };
 }());
 
+exports.get_full_datetime = function (time) {
+    // Convert to number of hours ahead/behind UTC.
+    // The sign of getTimezoneOffset() is reversed wrt
+    // the conventional meaning of UTC+n / UTC-n
+    const tz_offset = -time.getTimezoneOffset() / 60;
+    return {
+        date: time.toLocaleDateString(),
+        time: time.toLocaleTimeString() +
+        ' (UTC' + (tz_offset < 0 ? '' : '+') + tz_offset + ')',
+    };
+};
+
 // XDate.toLocaleDateString and XDate.toLocaleTimeString are
 // expensive, so we delay running the following code until we need
 // the full date and time strings.
@@ -287,14 +316,10 @@ exports.set_full_datetime = function timerender_set_full_datetime(message, time_
     }
 
     const time = new XDate(message.timestamp * 1000);
-    // Convert to number of hours ahead/behind UTC.
-    // The sign of getTimezoneOffset() is reversed wrt
-    // the conventional meaning of UTC+n / UTC-n
-    const tz_offset = -time.getTimezoneOffset() / 60;
+    const full_datetime = exports.get_full_datetime(time);
 
-    message.full_date_str = time.toLocaleDateString();
-    message.full_time_str = time.toLocaleTimeString() +
-        ' (UTC' + (tz_offset < 0 ? '' : '+') + tz_offset + ')';
+    message.full_date_str = full_datetime.date;
+    message.full_time_str = full_datetime.time;
 
     time_elem.attr('title', message.full_date_str + ' ' + message.full_time_str);
 };

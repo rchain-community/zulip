@@ -5,7 +5,6 @@
 from lib import sanity_check
 
 sanity_check.check_venv(__file__)
-
 import os
 import sys
 
@@ -26,30 +25,40 @@ import argparse
 import base64
 import subprocess
 from typing import Any, Dict, Optional
-from urllib.parse import urlencode, parse_qsl
+from urllib.parse import parse_qsl, urlencode
 
 import requests
 import ujson
 
 from scripts.lib.zulip_tools import BOLDRED, ENDC
 from tools.lib.test_script import prepare_puppeteer_run
-from zerver.models import UserProfile, Message, get_user_by_delivery_email, get_realm
 from zerver.lib.actions import (
-    do_create_user, notify_created_bot, bulk_add_subscriptions, do_change_avatar_fields)
+    bulk_add_subscriptions,
+    do_change_avatar_fields,
+    do_create_user,
+    notify_created_bot,
+)
+from zerver.lib.integrations import (
+    DOC_SCREENSHOT_CONFIG,
+    INTEGRATIONS,
+    ScreenshotConfig,
+    WebhookIntegration,
+    get_fixture_and_image_paths,
+    split_fixture_path,
+)
+from zerver.lib.storage import static_path
 from zerver.lib.streams import create_stream_if_needed
 from zerver.lib.upload import upload_avatar_image
-from zerver.lib.integrations import (
-    WebhookIntegration, INTEGRATIONS, split_fixture_path, ScreenshotConfig, get_fixture_and_image_paths,
-    DOC_SCREENSHOT_CONFIG)
 from zerver.lib.webhooks.common import get_fixture_http_headers
-from zerver.lib.storage import static_path
+from zerver.models import Message, UserProfile, get_realm, get_user_by_delivery_email
+
 
 def create_integration_bot(integration: WebhookIntegration, bot_name: Optional[str]=None) -> UserProfile:
     realm = get_realm('zulip')
     owner = get_user_by_delivery_email("iago@zulip.com", realm)
-    bot_email = "{}-bot@example.com".format(integration.name)
+    bot_email = f"{integration.name}-bot@example.com"
     if bot_name is None:
-        bot_name = "{} Bot".format(integration.name.capitalize())
+        bot_name = f"{integration.name.capitalize()} Bot"
     try:
         bot = UserProfile.objects.get(email=bot_email)
     except UserProfile.DoesNotExist:
@@ -61,6 +70,7 @@ def create_integration_bot(integration: WebhookIntegration, bot_name: Optional[s
             short_name=bot_name,
             bot_type=UserProfile.INCOMING_WEBHOOK_BOT,
             bot_owner=owner,
+            acting_user=owner,
         )
         notify_created_bot(bot)
 
@@ -70,7 +80,7 @@ def create_integration_bot(integration: WebhookIntegration, bot_name: Optional[s
             if os.path.isfile(bot_avatar_path):
                 with open(bot_avatar_path, "rb") as f:
                     upload_avatar_image(f, owner, bot)
-                    do_change_avatar_fields(bot, UserProfile.AVATAR_FROM_USER)
+                    do_change_avatar_fields(bot, UserProfile.AVATAR_FROM_USER, acting_user=owner)
 
     return bot
 
@@ -120,19 +130,17 @@ def send_bot_payload_message(bot: UserProfile, integration: WebhookIntegration, 
         data = ''
 
     headers = get_requests_headers(integration.name, fixture_name)
-    if config.custom_headers:
-        headers.update(config.custom_headers)
+    headers.update(config.custom_headers)
     if config.use_basic_auth:
-        credentials = base64.b64encode('{}:{}'.format(bot.email, bot.api_key).encode('utf8')).decode('utf8')
-        auth = 'basic {}'.format(credentials)
+        credentials = base64.b64encode(f'{bot.email}:{bot.api_key}'.encode('utf8')).decode('utf8')
+        auth = f'basic {credentials}'
         headers.update(dict(Authorization=auth))
 
     assert isinstance(bot.bot_owner, UserProfile)
     stream = integration.stream_name or 'devel'
-    url = "{}/{}".format(bot.bot_owner.realm.uri, integration.url)
+    url = f"{bot.bot_owner.realm.uri}/{integration.url}"
     params = {'api_key': bot.api_key, 'stream': stream}
-    if config.extra_params:
-        params.update(config.extra_params)
+    params.update(config.extra_params)
 
     extra_args = {}
     if not json_fixture and data:
@@ -148,7 +156,7 @@ def send_bot_payload_message(bot: UserProfile, integration: WebhookIntegration, 
     else:
         extra_args = {'json': data}
 
-    url = '{}?{}'.format(url, urlencode(params))
+    url = f'{url}?{urlencode(params)}'
 
     try:
         response = requests.post(url=url, headers=headers, **extra_args)
@@ -161,13 +169,13 @@ def send_bot_payload_message(bot: UserProfile, integration: WebhookIntegration, 
         print('Failed to trigger webhook')
         return False
     else:
-        print('Triggered {} webhook'.format(integration.name))
+        print(f'Triggered {integration.name} webhook')
         return True
 
 def capture_last_message_screenshot(bot: UserProfile, image_path: str) -> None:
     message = Message.objects.filter(sender=bot).last()
     if message is None:
-        print('No message found for {}'.format(bot.full_name))
+        print(f'No message found for {bot.full_name}')
         return
     message_id = str(message.id)
     screenshot_script = os.path.join(TOOLS_DIR, 'message-screenshot.js')
@@ -236,5 +244,5 @@ else:
     parser.error(
         "Could not find configuration for integration. "
         "You can specify a fixture file to use, using the --fixture flag. "
-        "Or add a configuration to zerver.lib.integrations.DOC_SCREENSHOT_CONFIG"
+        "Or add a configuration to zerver.lib.integrations.DOC_SCREENSHOT_CONFIG",
     )

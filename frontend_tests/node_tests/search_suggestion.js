@@ -387,11 +387,9 @@ run_test('group_suggestions', () => {
     function message(user_ids, timestamp) {
         return {
             type: 'private',
-            display_recipient: user_ids.map((id) => {
-                return {
-                    id: id,
-                };
-            }),
+            display_recipient: user_ids.map((id) => ({
+                id: id,
+            })),
             timestamp: timestamp,
         };
     }
@@ -960,7 +958,7 @@ run_test('stream_completion', () => {
     stream_topic_history.reset();
 
     let query = 'stream:of';
-    let suggestions = get_suggestions('s', query);
+    let suggestions = get_suggestions('', query);
     let expected = [
         "stream:of",
         "stream:office",

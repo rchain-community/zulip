@@ -34,12 +34,22 @@ run_test("initialize", () => {
         assert.equal(page_name, "upgrade");
     };
 
-    helpers.create_ajax_request = (url, form_name, stripe_token) => {
-        assert.equal(url, "/json/billing/upgrade");
+    helpers.create_ajax_request = (url, form_name, stripe_token, numeric_inputs, redirect_to) => {
         if (form_name === "autopay") {
+            assert.equal(url, "/json/billing/upgrade");
             assert.equal(stripe_token, "stripe_add_card_token");
+            assert.deepEqual(numeric_inputs, ["licenses"]);
+            assert.equal(redirect_to, undefined);
         } else if (form_name === "invoice") {
+            assert.equal(url, "/json/billing/upgrade");
             assert.equal(stripe_token, undefined);
+            assert.deepEqual(numeric_inputs, ["licenses"]);
+            assert.equal(redirect_to, undefined);
+        } else if (form_name === "sponsorship") {
+            assert.equal(url, "/json/billing/sponsorship");
+            assert.equal(stripe_token, undefined);
+            assert.equal(numeric_inputs, undefined);
+            assert.equal(redirect_to, "/");
         } else {
             throw Error("Unhandled case");
         }
@@ -78,17 +88,11 @@ run_test("initialize", () => {
         assert.equal(schedule, "monthly");
     };
 
-    $('input[type=radio][name=license_management]:checked').val = () => {
-        return document.querySelector("input[type=radio][name=license_management]:checked").value;
-    };
+    $('input[type=radio][name=license_management]:checked').val = () => document.querySelector("input[type=radio][name=license_management]:checked").value;
 
-    $('input[type=radio][name=schedule]:checked').val = () => {
-        return document.querySelector("input[type=radio][name=schedule]:checked").value;
-    };
+    $('input[type=radio][name=schedule]:checked').val = () => document.querySelector("input[type=radio][name=schedule]:checked").value;
 
-    $("#autopay-form").data = (key) => {
-        return document.querySelector("#autopay-form").getAttribute("data-" + key);
-    };
+    $("#autopay-form").data = (key) => document.querySelector("#autopay-form").getAttribute("data-" + key);
 
     jquery_init();
 
@@ -98,19 +102,18 @@ run_test("initialize", () => {
 
     const add_card_click_handler = $('#add-card-button').get_on_handler('click');
     const invoice_click_handler = $('#invoice-button').get_on_handler('click');
+    const request_sponsorship_click_handler = $('#sponsorship-button').get_on_handler('click');
 
-    helpers.is_valid_input = () => {
-        return true;
-    };
+    helpers.is_valid_input = () => true;
 
     add_card_click_handler(e);
     invoice_click_handler(e);
 
-    helpers.is_valid_input = () => {
-        return false;
-    };
+    helpers.is_valid_input = () => false;
     add_card_click_handler(e);
     invoice_click_handler(e);
+
+    request_sponsorship_click_handler(e);
 
     helpers.show_license_section = (section) => {
         assert.equal(section, "manual");
@@ -131,6 +134,26 @@ run_test("initialize", () => {
     assert.equal($("#autopay_monthly_price").text(), "6.40");
     assert.equal($("#invoice_annual_price").text(), "64");
     assert.equal($("#invoice_annual_price_per_month").text(), "5.34");
+
+    const organization_type_change_handler = $('select[name=organization-type]').get_on_handler('change');
+    organization_type_change_handler.call({value: "open_source"});
+    assert.equal($("#sponsorship-discount-details").text(),
+                 "Open source projects are eligible for fully sponsored (free) Zulip Standard.");
+    organization_type_change_handler.call({value: "research"});
+    assert.equal($("#sponsorship-discount-details").text(),
+                 "Academic research organizations are eligible for fully sponsored (free) Zulip Standard.");
+    organization_type_change_handler.call({value: "event"});
+    assert.equal($("#sponsorship-discount-details").text(),
+                 "Events are eligible for fully sponsored (free) Zulip Standard.");
+    organization_type_change_handler.call({value: "education"});
+    assert.equal($("#sponsorship-discount-details").text(),
+                 "Education use is eligible for an 85%-100% discount.");
+    organization_type_change_handler.call({value: "non_profit"});
+    assert.equal($("#sponsorship-discount-details").text(),
+                 "Nonprofits are eligible for an 85%-100% discount.");
+    organization_type_change_handler.call({value: "other"});
+    assert.equal($("#sponsorship-discount-details").text(),
+                 "Your organization might be eligible for a discount or sponsorship.");
 });
 
 run_test("autopay_form_fields", () => {

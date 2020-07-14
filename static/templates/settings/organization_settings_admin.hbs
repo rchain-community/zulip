@@ -142,7 +142,9 @@
 
         <div id="org-message-retention" class="org-subsection-parent">
             <div class="subsection-header">
-                <h3>{{t "Message retention" }}</h3>
+                <h3>{{t "Message retention" }}
+                    {{> ../help_link_widget link="/help/message-retention-policy" }}
+                </h3>
                 {{> settings_save_discard_widget section_name="message-retention" }}
             </div>
 
@@ -150,7 +152,10 @@
 
             <div class="inline-block organization-settings-parent">
                 <div class="input-group">
-                    <label for="id_realm_message_retention_setting" class="dropdown-title">{{t "Message retention period" }}</label>
+                    <label for="id_realm_message_retention_setting" class="dropdown-title">{{t "Message retention period" }}
+                        <i class="fa fa-info-circle settings-info-icon realm_allow_message_deleting_tooltip" data-toggle="tooltip"
+                          aria-hidden="true" title="{{t 'Only owners can change message retention policy.' }}"></i>
+                    </label>
                     <select name="realm_message_retention_setting"
                       id="id_realm_message_retention_setting" class="prop-element"
                       {{#unless zulip_plan_is_not_limited}}disabled{{/unless}}>
@@ -188,14 +193,6 @@
                         <option value='{{this.id}}'>{{this.name}}</option>
                         {{/each}}
                     </select>
-                    <div id="google_hangouts_domain">
-                        <label>{{t 'Domain for your <a href="https://gsuite.google.com" target="_blank">G Suite team</a> (required)' }}:</label>
-                        <input type="text" id="id_realm_google_hangouts_domain"
-                          name="realm_google_hangouts_domain"
-                          autocomplete="off"
-                          class="admin-realm-google-hangouts-domain setting-widget prop-element"
-                          data-setting-widget-type="string"/>
-                    </div>
                 </div>
 
                 {{> dropdown_list_widget

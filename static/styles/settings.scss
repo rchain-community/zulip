@@ -97,10 +97,6 @@ h3 .fa-question-circle-o {
     }
 }
 
-.realm-logo-block {
-    margin-bottom: 10px;
-}
-
 .user-avatar-section {
     float: right;
 
@@ -114,29 +110,12 @@ h3 .fa-question-circle-o {
     }
 }
 
-.realm-icon-section {
-    float: none;
-    display: inline-block;
-}
-
-.user-avatar-section,
-.realm-logo-section,
-.realm-icon-section {
-    position: relative;
-
-    .inline-block {
-        margin: 5px 20px 0px 0px;
-        vertical-align: top;
-        border-radius: 4px;
-    }
-}
-
 #change_email_modal {
-    width: 460px;
+    max-width: 460px;
 }
 
 #change_full_name_modal {
-    width: 480px;
+    max-width: 480px;
 }
 
 .admin-realm-description {
@@ -157,7 +136,12 @@ h3 .fa-question-circle-o {
 #notification_sound,
 #play_notification_sound {
     display: inline;
-    margin-right: 8px;
+    margin-right: 4px;
+
+    i {
+        font-size: 22px;
+        cursor: pointer;
+    }
 }
 
 .attributions_title {
@@ -323,46 +307,6 @@ td .button {
         font-size: 0.9em;
     }
 
-    .upgrade-tip,
-    .tip {
-        position: relative;
-        display: block;
-        background-color: hsl(46, 63%, 95%);
-        border: 1px solid hsl(49, 20%, 84%);
-        border-radius: 4px;
-        padding: 10px;
-        margin: 10px 0px;
-        font-size: 1rem;
-        line-height: 1.5;
-        color: hsl(0, 0%, 40%);
-
-        &::before {
-            display: inline;
-            margin-right: 8px;
-
-            font-family: FontAwesome, "Yantramanav", Source Sans Pro;
-            font-weight: 600;
-        }
-    }
-
-    .upgrade-tip {
-        &::before {
-            content: "\f135";
-        }
-
-        &:hover {
-            color: hsl(0, 0%, 20%);
-            border: 1px solid hsl(49, 20%, 60%);
-            box-shadow: 0px 0px 4px hsla(199, 79%, 56%, .2);
-
-            text-decoration: none;
-        }
-    }
-
-    .tip::before {
-        content: "\f0a2";
-    }
-
     #admin_page_users_loading_indicator,
     #attachments_loading_indicator,
     #admin_page_deactivated_users_loading_indicator,
@@ -386,29 +330,6 @@ td .button {
         margin-top: 7px;
         vertical-align: middle;
         display: inline-block;
-    }
-
-    .realm-icon-section {
-        .loading_indicator_text,
-        .loading_indicator_text {
-            font-size: 14px;
-            font-weight: 400;
-            vertical-align: middle;
-            line-height: 20px;
-            display: inline-block;
-            float: none;
-            margin-top: 0px;
-            margin-left: -12px;
-        }
-
-        .loading_indicator_spinner,
-        .loading_indicator_spinner {
-            width: 10%;
-            height: 16px;
-            margin-top: 2px;
-            vertical-align: middle;
-            display: inline-block;
-        }
     }
 
     #default_language {
@@ -623,7 +544,6 @@ input[type=checkbox] {
     }
 }
 
-#google_hangouts_domain,
 .organization-settings-parent div:first-of-type {
     margin-top: 10px;
 }
@@ -632,12 +552,7 @@ input[type=checkbox] {
     margin-top: 0px;
 }
 
-.realm-logo-section {
-    margin-bottom: 20px;
-}
-
-#id_org_profile_preview,
-.realm-icon-section {
+#id_org_profile_preview {
     margin-bottom: 20px;
 }
 
@@ -647,22 +562,6 @@ input[type=checkbox] {
 
 #default_language {
     margin-left: 20px;
-}
-
-#user-settings-avatar,
-#realm-icon-section {
-    border-radius: 5px;
-    box-shadow: 0px 0px 10px hsla(0, 0%, 0%, 0.1);
-}
-
-#user-settings-avatar {
-    width: 200px;
-    height: 200px;
-}
-
-.realm-icon-section .avatar-icon-settings {
-    width: 100px;
-    height: 100px;
 }
 
 .remove-attachment {
@@ -1083,12 +982,6 @@ input[type=checkbox] {
     width: 70%;
 }
 
-#upload_avatar_spinner,
-.upload-logo-spinner {
-    font-size: 14px;
-    margin: auto;
-}
-
 .bot_name_header {
     width: 8em;
 }
@@ -1180,213 +1073,6 @@ input[type=checkbox] {
 
 .right.show .emoji_alt_code {
     font-size: 1.2em;
-}
-
-.avatar-icon-settings {
-    position: relative;
-    border-radius: 5px;
-    box-shadow: 0px 0px 10px hsla(0, 0%, 0%, 0.1);
-
-
-    transition: all 0.3s ease;
-
-    #realm-icon-block,
-    #user-avatar-block {
-        background-size: 100%;
-        height: 100%;
-    }
-
-    #realm-icon-background,
-    #user-avatar-background {
-        content: '';
-        background-color: hsl(0, 0%, 0%);
-        height: 100%;
-        width: 100%;
-        opacity: 0.6;
-        z-index: 99;
-        position: absolute;
-        display: none;
-        cursor: pointer;
-    }
-
-    #realm_icon_delete_button,
-    #user_avatar_delete_button {
-        cursor: pointer;
-        color: hsl(0, 0%, 75%);
-        opacity: 0;
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 99;
-    }
-
-    #realm_icon_delete_button {
-        font-size: 2rem;
-    }
-
-    #user_avatar_delete_button {
-        font-size: 3rem;
-    }
-
-    #realm_icon_delete_button:hover,
-    #user_avatar_delete_button:hover {
-        color: hsl(0, 0%, 100%);
-    }
-
-    #realm_icon_delete_button:hover ~ #realm_icon_upload,
-    #user_avatar_delete_button:hover ~ #user_avatar_upload_button {
-        visibility: hidden;
-    }
-
-
-    #realm_icon_delete_button:hover ~ #realm_icon_delete,
-    #user_avatar_delete_button:hover ~ #user_avatar_delete {
-        visibility: visible;
-    }
-
-    #realm_icon_delete,
-    #user_avatar_delete {
-        color: hsl(0, 0%, 100%);
-        font-size: 0.85rem;
-        position: absolute;
-        visibility: hidden;
-        z-index: 99;
-    }
-
-    #user_avatar_delete {
-        top: 90px;
-        right: 40px;
-    }
-
-    #realm_icon_delete {
-        top: 40px;
-        right: 18px;
-    }
-
-    #realm_icon_upload,
-    #user_avatar_upload_button {
-        cursor: pointer;
-        font-size: 0.85rem;
-        color: hsl(0, 0%, 85%);
-        position: absolute;
-        z-index: 99;
-    }
-
-    #user_avatar_upload_button {
-        top: 90px;
-        right: 20px;
-        opacity: 0;
-    }
-
-    #realm_icon_upload {
-        top: 40px;
-        right: 18px;
-        visibility: hidden;
-    }
-
-    #realm_icon_upload:hover,
-    #user_avatar_upload_button:hover {
-        color: hsl(0, 0%, 100%);
-    }
-
-    #upload_icon_spinner {
-        background-color: hsl(0, 0%, 10%);
-        font-size: 0.80rem;
-        width: 100%;
-        opacity: 0.8;
-        height: 100%;
-        position: absolute;
-        visibility: hidden;
-        z-index: 99;
-        cursor: pointer;
-    }
-
-    #realm-icon-spinner,
-    #user-avatar-spinner {
-        position: absolute;
-        z-index: 99;
-    }
-
-    #user-avatar-spinner {
-        display: none;
-        top: 40%;
-        right: 40%;
-    }
-
-    #realm-icon-spinner {
-        width: 40px;
-        height: 40px;
-        top: 30%;
-        right: 30%;
-        display: block;
-    }
-
-    .guest-avatar::after {
-        outline: 9px solid hsl(0, 0%, 100%);
-    }
-
-    &:hover {
-        #user-avatar-block::after {
-            content: '';
-            background-color: hsl(0, 0%, 0%);
-            height: 100%;
-            width: 100%;
-            opacity: 0.6;
-            z-index: 99;
-            position: absolute;
-            cursor: pointer;
-        }
-
-        #realm_icon_delete_button,
-        #user_avatar_delete_button {
-            opacity: 1;
-        }
-
-        #user_avatar_upload_button {
-            opacity: 1;
-        }
-
-        #realm-icon-background {
-            display: block;
-        }
-
-        #realm_icon_upload {
-            visibility: visible;
-        }
-    }
-}
-
-#user-avatar-source {
-    position: absolute;
-    font-size: 1em;
-    z-index: 99;
-    a {
-        position: relative;
-        top: 10px;
-    }
-}
-
-#realm-icon-block {
-    border-radius: 5px;
-    box-shadow: 0px 0px 10px hsla(0, 0%, 0%, 0.1);
-    width: 100px;
-    height: 100px;
-}
-
-.realm-logo-img {
-    box-shadow: 0px 0px 10px hsla(0, 0%, 0%, 0.2);
-    /* We allow actual images up to 800x100 in the main display, but the
-       settings UI looks bad beyond ~500px, so we limit the width here */
-    height: 55px;
-    max-width: 500px;
-}
-
-#night-logo-section .realm-logo-img {
-    background-color: hsl(212, 28%, 18%);
-}
-
-#day-logo-section .realm-logo-img {
-    background-color: hsla(0, 100%, 100%, 1);
 }
 
 .invite-user-link i {
@@ -1617,10 +1303,6 @@ input[type=checkbox] {
                 border-bottom: none;
             }
 
-            &.no-border {
-                border-color: transparent;
-            }
-
             &.active {
                 background-color: hsl(0, 0%, 93%);
                 border-bottom: 1px solid transparent;
@@ -1757,8 +1439,8 @@ input[type=checkbox] {
             }
         }
 
-        &.datepicker {
-            cursor: pointer;
+        .datepicker {
+            cursor: default;
         }
 
         .person_picker {
@@ -1905,6 +1587,11 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
         margin: 9px;
     }
 
+    .dropdown-menu {
+        top: -7px; // -(margin+padding), both are set by bootstrap.
+        bottom: auto;
+    }
+
     .dropdown-list-body {
         position: relative;
         height: auto;
@@ -1966,7 +1653,7 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
     margin-left: 2px;
 }
 
-@-moz-document url-prefix() {
+@supports (-moz-appearance: none) {
     #settings_page select {
         -moz-appearance: none;
         background: hsl(0, 0%, 100%) url('../images/dropdown.png') right / 20px no-repeat;
@@ -2066,24 +1753,24 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
     .subsection-failed-status p {
         margin: 5px 0 0 0;
     }
-
-    .realm-logo-img {
-        max-width: 400px;
-        height: 50px;
-    }
 }
 
-@media (max-width: 786px) {
-    #user-settings-avatar {
-        width: 220px;
-        height: 220px;
+// This value needs to match with the same in subscriptions.scss, as
+// we have some shared styles declared there
+@media (max-width: 750px) {
+    #settings_overlay_container {
+        // this variable allows JavaScript to detect this media query
+        --single-column: yes;
     }
-}
 
-@media (max-width: 700px) {
     #settings_page {
         .settings-header.mobile {
             display: block;
+
+            &:not(.slide-left) .section {
+                // When viewing the settings list we hide the active section.
+                display: none;
+            }
         }
 
         .content-wrapper {
@@ -2105,6 +1792,12 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
             position: relative;
             width: 250px;
             height: 100%;
+
+            li.active {
+                // Don't highlight the active section in the settings list.
+                background: inherit;
+                border-bottom: 1px solid hsl(0, 0%, 93%);
+            }
         }
     }
 }

@@ -27,33 +27,14 @@
 
         <div>{{t "Organization profile picture" }}</div>
         <div class="realm-icon-section">
-            <div class="inline-block">
-                <div class="avatar-icon-settings">
-                    {{#if is_admin}}
-                    <div id="realm_icon_upload_button">
-                        <div id="realm-icon-background"></div>
-                        <span id="realm_icon_delete_button" aria-label="{{t 'Delete organization icon'}}" role="button" tabindex="0">
-                            &times;
-                        </span>
-                        <span id="realm_icon_delete" aria-label="{{t 'Delete organization icon'}}" tabindex="0">
-                            {{t 'Delete icon' }}
-                        </span>
-                        <span id="realm_icon_upload" aria-label="{{t 'Upload organization icon'}}" role="button" tabindex="0">
-                            {{t 'Upload icon' }}
-                        </span>
-                        <span id="upload_icon_spinner">
-                            <object id="realm-icon-spinner" type="image/svg+xml" data="/static/images/tail-spin.svg"></object>
-                        </span>
-                    </div>
-                    {{/if}}
-                    <img id="realm-icon-block" src="{{ realm_icon_url }}"/>
-                    <input type="file" name="realm_icon_file_input" class="notvisible"
-                      id="realm_icon_file_input" value="{{t 'Upload profile picture' }}"/>
-                </div>
-                <div id="realm_icon_file_input_error" class="text-error m-t-10"></div>
-            </div>
+            {{> image_upload_widget
+              widget = "realm-icon"
+              upload_text = (t "Upload icon")
+              delete_text = (t "Delete icon")
+              is_editable_by_current_user = is_admin
+              image = realm_icon_url }}
         </div>
-        <a href="/login/?preview=true" target="_blank" class="button rounded sea-green w-200 block" id="id_org_profile_preview">
+        <a href="/login/?preview=true" target="_blank" rel="noopener noreferrer" class="button rounded sea-green w-200 block" id="id_org_profile_preview">
             {{t 'Preview organization profile' }}
             <i class="fa fa-external-link" aria-hidden="true" title="{{t 'Preview organization profile' }}"></i>
         </a>
@@ -66,15 +47,28 @@
         </div>
 
         <p>{{t "A wide image for the upper left corner of the app." }}</p>
-        {{> realm-logo-widget
-          theme_mode="day"
-          logo_url=realm_logo_url}}
-
-        {{> realm-logo-widget
-          theme_mode="night"
-          logo_url=realm_night_logo_url}}
-
-        <h3 class="light">{{t "Deactivate organization" }}</h3>
+        <div class="realm-logo-block realm-logo-section">
+            <h5 class="realm-logo-title">{{t 'Day logo' }}</h5>
+            {{> image_upload_widget
+              widget = "realm-day-logo"
+              upload_text = (t "Upload logo")
+              delete_text = (t "Delete logo")
+              is_editable_by_current_user = user_can_change_logo
+              image = realm_logo_url }}
+        </div>
+        <div class="realm-logo-block realm-logo-section">
+            <h5 class="realm-logo-title">{{t 'Night logo' }}</h5>
+            {{> image_upload_widget
+              widget = "realm-night-logo"
+              upload_text = (t "Upload logo")
+              delete_text = (t "Delete logo")
+              is_editable_by_current_user = user_can_change_logo
+              image = realm_night_logo_url }}
+        </div>
+        <h3 class="light">
+            {{t "Deactivate organization" }}
+            <i class="fa fa-info-circle settings-info-icon realm_allow_message_deleting_tooltip" data-toggle="tooltip" aria-hidden="true" title="{{t 'Only owners can deactivate the organization.' }}"></i>
+        </h3>
         <div class="deactivate-realm-section">
             <div class="input-group">
                 <button class="button rounded btn-danger" id="deactivate_realm_button">

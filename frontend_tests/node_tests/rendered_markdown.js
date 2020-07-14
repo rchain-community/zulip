@@ -52,7 +52,7 @@ stream_data.add_sub(stream);
 
 const $array = (array) => {
     const each = (func) => {
-        array.forEach(e => {
+        array.forEach((e) => {
             func.call(e);
         });
     };
@@ -68,8 +68,10 @@ const get_content_element = () => {
     $content.set_find_results('.user-group-mention', $array([]));
     $content.set_find_results('a.stream', $array([]));
     $content.set_find_results('a.stream-topic', $array([]));
-    $content.set_find_results('span.timestamp', $array([]));
+    $content.set_find_results('time', $array([]));
+    $content.set_find_results('span.timestamp-error', $array([]));
     $content.set_find_results('.emoji', $array([]));
+    $content.set_find_results('div.spoiler-header', $array([]));
     return $content;
 };
 
@@ -159,11 +161,11 @@ run_test('timestamp', () => {
     // Setup
     const $content = get_content_element();
     const $timestamp = $.create('timestamp(valid)');
-    $timestamp.attr('data-timestamp', 1);
+    $timestamp.attr('datetime', '1970-01-01T00:00:01Z');
     const $timestamp_invalid = $.create('timestamp(invalid)');
-    $timestamp.addClass('timestamp');
-    $timestamp_invalid.addClass('timestamp');
-    $content.set_find_results('span.timestamp', $array([$timestamp, $timestamp_invalid]));
+    $timestamp_invalid.attr('datetime', 'invalid');
+    $content.set_find_results('time', $array([$timestamp, $timestamp_invalid]));
+    blueslip.expect('error', 'Moment could not parse datetime supplied by backend: invalid');
 
     // Initial asserts
     assert.equal($timestamp.text(), 'never-been-set');
@@ -172,12 +174,25 @@ run_test('timestamp', () => {
     rm.update_elements($content);
 
     // Final asserts
-    assert($timestamp.hasClass('timestamp'));
-    assert(!$timestamp_invalid.hasClass('timestamp'));
     assert.equal($timestamp.text(), 'Thu, Jan 1 1970, 12:00 AM');
     assert.equal($timestamp.attr('title'), "This time is in your timezone. Original text was 'never-been-set'.");
     assert.equal($timestamp_invalid.text(), 'never-been-set');
-    assert.equal($timestamp_invalid.attr('title'), 'Could not parse timestamp.');
+});
+
+run_test('timestamp-error', () => {
+    // Setup
+    const $content = get_content_element();
+    const $timestamp_error = $.create('timestamp-error');
+    $timestamp_error.text('Invalid time format: the-time-format');
+    $content.set_find_results('span.timestamp-error', $array([$timestamp_error]));
+
+    // Initial assert
+    assert.equal($timestamp_error.text(), 'Invalid time format: the-time-format');
+
+    rm.update_elements($content);
+
+    // Final assert
+    assert.equal($timestamp_error.text(), 'translated: Invalid time format: the-time-format');
 });
 
 run_test('emoji', () => {
@@ -197,4 +212,34 @@ run_test('emoji', () => {
     rm.update_elements($content);
 
     assert(called);
+
+    // Set page paramaters back so that test run order is independent
+    page_params.emojiset = 'apple';
+});
+
+run_test('spoiler-header', () => {
+    // Setup
+    const $content = get_content_element();
+    const $header = $.create('div.spoiler-header');
+    $content.set_find_results('div.spoiler-header', $array([$header]));
+
+    // Test that the show/hide button gets added to a spoiler header.
+    const label = 'My Spoiler Header';
+    const toggle_button_html = '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
+    $header.html(label);
+    rm.update_elements($content);
+    assert.equal(toggle_button_html + label, $header.html());
+});
+
+run_test('spoiler-header-empty-fill', () => {
+    // Setup
+    const $content = get_content_element();
+    const $header = $.create('div.spoiler-header');
+    $content.set_find_results('div.spoiler-header', $array([$header]));
+
+    // Test that an empty header gets the default text applied (through i18n filter).
+    const toggle_button_html = '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
+    $header.html('');
+    rm.update_elements($content);
+    assert.equal(toggle_button_html + '<p>translated: Spoiler</p>', $header.html());
 });

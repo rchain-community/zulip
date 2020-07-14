@@ -29,8 +29,8 @@ class zulip::base {
         'moreutils',
         # Used in scripts
         'netcat',
-        # Nagios plugins; needed to ensure $zulip::common::nagios_plugins exists
-        'nagios-plugins-basic',
+        # Nagios monitoring plugins
+        $zulip::common::nagios_plugins,
         # Required for using HTTPS in apt repositories.
         'apt-transport-https',
         # Needed for the cron jobs installed by puppet
@@ -47,7 +47,7 @@ class zulip::base {
         'moreutils',
         'nmap-ncat',
         'nagios-plugins',  # there is no dummy package on CentOS 7
-        'cronie'
+        'cronie',
       ]
     }
     default: {
@@ -56,20 +56,7 @@ class zulip::base {
   }
   package { $base_packages: ensure => 'installed' }
 
-  $postgres_version = zulipconf('postgresql', 'version', $release_name ? {
-    'wheezy'  => '9.1',
-    'jessie'  => '9.4',
-    'stretch' => '9.6',
-    'buster'  => '11',
-    'precise' => '9.1',
-    'trusty'  => '9.3',
-    'vivid'   => '9.4',
-    'wily'    => '9.4',
-    'xenial'  => '9.5',
-    'bionic'  => '10',
-    'CentOS7' => '10',
-    'focal'   => '12',
-  })
+  $postgres_version = zulipconf('postgresql', 'version', undef)
 
   $normal_queues = [
     'deferred_work',

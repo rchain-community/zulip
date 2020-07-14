@@ -1,21 +1,23 @@
+import os
 from unittest.mock import patch
 
-from analytics.models import RealmCount
-
-from django.utils.timezone import now as timezone_now
+import botocore.exceptions
+import ujson
 from django.conf import settings
+from django.utils.timezone import now as timezone_now
 
-from zerver.lib.test_classes import ZulipTestCase
+from analytics.models import RealmCount
 from zerver.lib.exceptions import JsonableError
-from zerver.lib.test_helpers import use_s3_backend, create_s3_buckets, \
-    create_dummy_file, stdout_suppressed
-
+from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.test_helpers import (
+    create_dummy_file,
+    create_s3_buckets,
+    stdout_suppressed,
+    use_s3_backend,
+)
 from zerver.models import RealmAuditLog
 from zerver.views.realm_export import export_realm
 
-import os
-import ujson
-import botocore.exceptions
 
 class RealmExportTest(ZulipTestCase):
     """
@@ -78,7 +80,7 @@ class RealmExportTest(ZulipTestCase):
                                event_type=RealmAuditLog.REALM_EXPORTED).count())
 
         # Finally, delete the file.
-        result = self.client_delete('/json/export/realm/{id}'.format(id=audit_log_entry.id))
+        result = self.client_delete(f'/json/export/realm/{audit_log_entry.id}')
         self.assert_json_success(result)
         with self.assertRaises(botocore.exceptions.ClientError):
             bucket.Object(path_id).load()
@@ -87,7 +89,7 @@ class RealmExportTest(ZulipTestCase):
         audit_log_entry.refresh_from_db()
         export_data = ujson.loads(audit_log_entry.extra_data)
         self.assertIn('deleted_timestamp', export_data)
-        result = self.client_delete('/json/export/realm/{id}'.format(id=audit_log_entry.id))
+        result = self.client_delete(f'/json/export/realm/{audit_log_entry.id}')
         self.assert_json_error(result, "Export already deleted")
 
         # Now try to delete a non-existent export.
@@ -137,7 +139,7 @@ class RealmExportTest(ZulipTestCase):
                                event_type=RealmAuditLog.REALM_EXPORTED).count())
 
         # Finally, delete the file.
-        result = self.client_delete('/json/export/realm/{id}'.format(id=audit_log_entry.id))
+        result = self.client_delete(f'/json/export/realm/{audit_log_entry.id}')
         self.assert_json_success(result)
         response = self.client_get(path_id)
         self.assertEqual(response.status_code, 404)
@@ -146,7 +148,7 @@ class RealmExportTest(ZulipTestCase):
         audit_log_entry.refresh_from_db()
         export_data = ujson.loads(audit_log_entry.extra_data)
         self.assertIn('deleted_timestamp', export_data)
-        result = self.client_delete('/json/export/realm/{id}'.format(id=audit_log_entry.id))
+        result = self.client_delete(f'/json/export/realm/{audit_log_entry.id}')
         self.assert_json_error(result, "Export already deleted")
 
         # Now try to delete a non-existent export.
@@ -184,12 +186,16 @@ class RealmExportTest(ZulipTestCase):
         with patch('zerver.models.Realm.currently_used_upload_space_bytes',
                    return_value=11 * 1024 * 1024 * 1024):
             result = self.client_post('/json/export/realm')
-        self.assert_json_error(result, 'Please request a manual export from %s.' %
-                               settings.ZULIP_ADMINISTRATOR)
+        self.assert_json_error(
+            result,
+            f'Please request a manual export from {settings.ZULIP_ADMINISTRATOR}.',
+        )
 
         # Message limit is set as 250000
         realm_count.value = 250001
         realm_count.save(update_fields=['value'])
         result = self.client_post('/json/export/realm')
-        self.assert_json_error(result, 'Please request a manual export from %s.' %
-                               settings.ZULIP_ADMINISTRATOR)
+        self.assert_json_error(
+            result,
+            f'Please request a manual export from {settings.ZULIP_ADMINISTRATOR}.',
+        )

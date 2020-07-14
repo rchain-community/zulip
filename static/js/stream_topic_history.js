@@ -116,7 +116,7 @@ exports.per_stream_history = function (stream_id) {
         }
     };
 
-    self.maybe_remove = function (topic_name) {
+    self.maybe_remove = function (topic_name, num_messages) {
         const existing = topics.get(topic_name);
 
         if (!existing) {
@@ -130,12 +130,12 @@ exports.per_stream_history = function (stream_id) {
             return;
         }
 
-        if (existing.count <= 1) {
+        if (existing.count <= num_messages) {
             topics.delete(topic_name);
             return;
         }
 
-        existing.count -= 1;
+        existing.count -= num_messages;
     };
 
     self.add_history = function (server_history) {
@@ -180,11 +180,9 @@ exports.per_stream_history = function (stream_id) {
 
         const recents = my_recents.concat(missing_topics);
 
-        recents.sort(function (a, b) {
-            return b.message_id - a.message_id;
-        });
+        recents.sort((a, b) => b.message_id - a.message_id);
 
-        const names = recents.map(obj => obj.pretty_name);
+        const names = recents.map((obj) => obj.pretty_name);
 
         return names;
     };
@@ -196,9 +194,10 @@ exports.per_stream_history = function (stream_id) {
     return self;
 };
 
-exports.remove_message = function (opts) {
+exports.remove_messages = function (opts) {
     const stream_id = opts.stream_id;
     const topic_name = opts.topic_name;
+    const num_messages = opts.num_messages;
     const history = stream_dict.get(stream_id);
 
     // This is the special case of "removing" a message from
@@ -209,7 +208,7 @@ exports.remove_message = function (opts) {
     }
 
     // This is the normal case of an incoming message.
-    history.maybe_remove(topic_name);
+    history.maybe_remove(topic_name, num_messages);
 };
 
 exports.find_or_create = function (stream_id) {

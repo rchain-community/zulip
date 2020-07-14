@@ -117,11 +117,11 @@ run_test('clicks', () => {
     const state = {};
 
     function set_up_click_handlers() {
-        $('#widget1').click(function () {
+        $('#widget1').click(() => {
             state.clicked = true;
         });
 
-        $('.some-class').keydown(function () {
+        $('.some-class').keydown(() => {
             state.keydown = true;
         });
     }
@@ -149,12 +149,12 @@ run_test('events', () => {
     let value;
 
     function initialize_handler() {
-        $('#my-parent').on('click', '.button-red', function (e) {
+        $('#my-parent').on('click', '.button-red', (e) => {
             value = 'red'; // just a dummy side effect
             e.stopPropagation();
         });
 
-        $('#my-parent').on('click', '.button-blue', function (e) {
+        $('#my-parent').on('click', '.button-blue', (e) => {
             value = 'blue';
             e.stopPropagation();
         });
@@ -212,8 +212,8 @@ run_test('extensions', () => {
     // using direct syntax:
 
     const rect = $.create('rectangle');
-    rect.width = () => { return 5; };
-    rect.height = () => { return 7; };
+    rect.width = () => 5;
+    rect.height = () => 7;
 
     assert.equal(rect.width(), 5);
     assert.equal(rect.height(), 7);

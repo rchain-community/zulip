@@ -1,3 +1,5 @@
+const settings_config = require("./settings_config");
+
 exports.dispatch_normal_event = function dispatch_normal_event(event) {
     const noop = function () {};
     switch (event.type) {
@@ -22,19 +24,22 @@ exports.dispatch_normal_event = function dispatch_normal_event(event) {
         break;
 
     case 'delete_message': {
-        const msg_id = event.message_id;
+        const msg_ids = event.message_ids;
         // message is passed to unread.get_unread_messages,
         // which returns all the unread messages out of a given list.
         // So double marking something as read would not occur
-        unread_ops.process_read_messages_event([msg_id]);
+        unread_ops.process_read_messages_event(msg_ids);
+
         if (event.message_type === 'stream') {
-            stream_topic_history.remove_message({
+            stream_topic_history.remove_messages({
                 stream_id: event.stream_id,
                 topic_name: event.topic,
+                num_messages: msg_ids.length,
             });
             stream_list.update_streams_sidebar();
         }
-        ui.remove_message(msg_id);
+
+        ui.remove_messages(msg_ids);
         break;
     }
 
@@ -112,7 +117,6 @@ exports.dispatch_normal_event = function dispatch_normal_event(event) {
             email_address_visibility: noop,
             email_changes_disabled: settings_account.update_email_change_display,
             disallow_disposable_email_addresses: noop,
-            google_hangouts_domain: noop,
             inline_image_preview: noop,
             inline_url_embed_preview: noop,
             invite_by_admins_only: noop,
@@ -328,21 +332,41 @@ exports.dispatch_normal_event = function dispatch_normal_event(event) {
                 }
             }
         } else if (event.op === 'peer_add') {
-            for (const sub of event.subscriptions) {
-                if (stream_data.add_subscriber(sub, event.user_id)) {
-                    $(document).trigger('peer_subscribe.zulip', {stream_name: sub});
-                } else {
+            function add_peer(stream_id, user_id) {
+                const sub = stream_data.get_sub_by_id(stream_id);
+
+                if (!sub) {
+                    blueslip.warn('Cannot find stream for peer_add: ' + stream_id);
+                    return;
+                }
+
+                if (!stream_data.add_subscriber(stream_id, user_id)) {
                     blueslip.warn('Cannot process peer_add event');
+                    return;
                 }
+
+                subs.update_subscribers_ui(sub);
+                compose_fade.update_faded_users();
             }
+            add_peer(event.stream_id, event.user_id);
         } else if (event.op === 'peer_remove') {
-            for (const sub of event.subscriptions) {
-                if (stream_data.remove_subscriber(sub, event.user_id)) {
-                    $(document).trigger('peer_unsubscribe.zulip', {stream_name: sub});
-                } else {
-                    blueslip.warn('Cannot process peer_remove event.');
+            function remove_peer(stream_id, user_id) {
+                const sub = stream_data.get_sub_by_id(stream_id);
+
+                if (!sub) {
+                    blueslip.warn('Cannot find stream for peer_remove: ' + stream_id);
+                    return;
                 }
+
+                if (!stream_data.remove_subscriber(sub.stream_id, user_id)) {
+                    blueslip.warn('Cannot process peer_remove event.');
+                    return;
+                }
+
+                subs.update_subscribers_ui(sub);
+                compose_fade.update_faded_users();
             }
+            remove_peer(event.stream_id, event.user_id);
         } else if (event.op === 'remove') {
             for (const rec of event.subscriptions) {
                 const sub = stream_data.get_sub_by_id(rec.stream_id);
@@ -352,7 +376,7 @@ exports.dispatch_normal_event = function dispatch_normal_event(event) {
             stream_events.update_property(
                 event.stream_id,
                 event.property,
-                event.value
+                event.value,
             );
         }
         break;
@@ -373,13 +397,13 @@ exports.dispatch_normal_event = function dispatch_normal_event(event) {
 
     case 'update_display_settings': {
         const user_display_settings = [
+            'color_scheme',
             'default_language',
             'demote_inactive_streams',
             'dense_mode',
             'emojiset',
             'fluid_layout_width',
             'high_contrast_mode',
-            'night_mode',
             'left_side_userlist',
             'timezone',
             'twenty_four_hour_time',
@@ -411,14 +435,17 @@ exports.dispatch_normal_event = function dispatch_normal_event(event) {
             $("body").toggleClass("less_dense_mode");
             $("body").toggleClass("more_dense_mode");
         }
-        if (event.setting_name === 'night_mode') {
+        if (event.setting_name === 'color_scheme') {
             $("body").fadeOut(300);
-            setTimeout(function () {
-                if (event.setting === true) {
+            setTimeout(() => {
+                if (event.setting === settings_config.color_scheme_values.night.code) {
                     night_mode.enable();
                     realm_logo.rerender();
-                } else {
+                } else if (event.setting === settings_config.color_scheme_values.day.code) {
                     night_mode.disable();
+                    realm_logo.rerender();
+                } else {
+                    night_mode.default_preference_checker();
                     realm_logo.rerender();
                 }
                 $("body").fadeIn(300);

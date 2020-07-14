@@ -38,11 +38,11 @@ exports.update_custom_emoji_ui = function () {
     });
     $('#emoji-settings').find('.emoji-settings-tip-container').html(rendered_tip);
     if (page_params.realm_add_emoji_by_admins_only && !page_params.is_admin) {
+        $('.add-emoji-text').hide();
         $('.admin-emoji-form').hide();
-        $('#emoji-settings').removeClass('can_edit');
     } else {
+        $('.add-emoji-text').show();
         $('.admin-emoji-form').show();
-        $('#emoji-settings').addClass('can_edit');
     }
 
     exports.populate_emoji(page_params.realm_emoji);
@@ -130,7 +130,7 @@ exports.build_emoji_upload_widget = function () {
         clear_button,
         upload_button,
         preview_text,
-        preview_image
+        preview_image,
     );
 };
 

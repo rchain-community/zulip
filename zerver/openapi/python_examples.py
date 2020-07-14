@@ -1,40 +1,40 @@
-from typing import Dict, Any, Optional, Iterable, Callable, Set, List
-
 import json
 import os
 import sys
 from functools import wraps
-
-from zerver.lib import mdiff
-from zerver.openapi.openapi import validate_against_openapi_schema
-
-from zerver.models import get_realm, get_user
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, TypeVar, cast
 
 from zulip import Client
 
+from zerver.lib import mdiff
+from zerver.models import get_realm, get_user
+from zerver.openapi.openapi import validate_against_openapi_schema
+
 ZULIP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-TEST_FUNCTIONS: Dict[str, Callable[..., None]] = dict()
+TEST_FUNCTIONS: Dict[str, Callable[..., object]] = dict()
 REGISTERED_TEST_FUNCTIONS: Set[str] = set()
 CALLED_TEST_FUNCTIONS: Set[str] = set()
 
-def openapi_test_function(endpoint: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+FuncT = TypeVar("FuncT", bound=Callable[..., object])
+
+def openapi_test_function(endpoint: str) -> Callable[[FuncT], FuncT]:
     """This decorator is used to register an openapi test function with
     its endpoint. Example usage:
 
     @openapi_test_function("/messages/render:post")
     def ...
     """
-    def wrapper(test_func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(test_func: FuncT) -> FuncT:
         @wraps(test_func)
-        def _record_calls_wrapper(*args: Any, **kwargs: Any) -> Any:
+        def _record_calls_wrapper(*args: object, **kwargs: object) -> object:
             CALLED_TEST_FUNCTIONS.add(test_func.__name__)
             return test_func(*args, **kwargs)
 
         REGISTERED_TEST_FUNCTIONS.add(test_func.__name__)
         TEST_FUNCTIONS[endpoint] = _record_calls_wrapper
 
-        return _record_calls_wrapper
+        return cast(FuncT, _record_calls_wrapper)  # https://github.com/python/mypy/issues/1927
     return wrapper
 
 def ensure_users(ids_list: List[int], user_names: List[str]) -> None:
@@ -54,9 +54,9 @@ def add_subscriptions(client: Client) -> None:
         streams=[
             {
                 'name': 'new stream',
-                'description': 'New stream for testing'
-            }
-        ]
+                'description': 'New stream for testing',
+            },
+        ],
     )
     # {code_example|end}
 
@@ -64,13 +64,14 @@ def add_subscriptions(client: Client) -> None:
                                     '200_0')
 
     # {code_example|start}
-    # To subscribe another user to a stream, you may pass in
+    # To subscribe other users to a stream, you may pass
     # the `principals` argument, like so:
+    user_id = 25
     result = client.add_subscriptions(
         streams=[
-            {'name': 'new stream', 'description': 'New stream for testing'}
+            {'name': 'new stream', 'description': 'New stream for testing'},
         ],
-        principals=['newbie@zulip.com']
+        principals=[user_id],
     )
     # {code_example|end}
     assert result['result'] == 'success'
@@ -79,9 +80,9 @@ def add_subscriptions(client: Client) -> None:
 def test_add_subscriptions_already_subscribed(client: Client) -> None:
     result = client.add_subscriptions(
         streams=[
-            {'name': 'new stream', 'description': 'New stream for testing'}
+            {'name': 'new stream', 'description': 'New stream for testing'},
         ],
-        principals=['newbie@zulip.com']
+        principals=['newbie@zulip.com'],
     )
 
     validate_against_openapi_schema(result, '/users/me/subscriptions', 'post',
@@ -90,20 +91,20 @@ def test_add_subscriptions_already_subscribed(client: Client) -> None:
 def test_authorization_errors_fatal(client: Client, nonadmin_client: Client) -> None:
     client.add_subscriptions(
         streams=[
-            {'name': 'private_stream'}
+            {'name': 'private_stream'},
         ],
     )
 
     stream_id = client.get_stream_id('private_stream')['stream_id']
     client.call_endpoint(
-        'streams/{}'.format(stream_id),
+        f'streams/{stream_id}',
         method='PATCH',
-        request={'is_private': True}
+        request={'is_private': True},
     )
 
     result = nonadmin_client.add_subscriptions(
         streams=[
-            {'name': 'private_stream'}
+            {'name': 'private_stream'},
         ],
         authorization_errors_fatal=False,
     )
@@ -113,7 +114,7 @@ def test_authorization_errors_fatal(client: Client, nonadmin_client: Client) -> 
 
     result = nonadmin_client.add_subscriptions(
         streams=[
-            {'name': 'private_stream'}
+            {'name': 'private_stream'},
         ],
         authorization_errors_fatal=True,
     )
@@ -136,7 +137,7 @@ def update_presence(client: Client) -> None:
     request = {
         'status': 'active',
         'ping_only': False,
-        'new_user_input': False
+        'new_user_input': False,
     }
 
     result = client.update_presence(request)
@@ -152,7 +153,7 @@ def create_user(client: Client) -> None:
         'email': 'newbie@zulip.com',
         'password': 'temp',
         'full_name': 'New User',
-        'short_name': 'newbie'
+        'short_name': 'newbie',
     }
     result = client.create_user(request)
     # {code_example|end}
@@ -252,6 +253,19 @@ def update_user(client: Client) -> None:
     # {code_example|end}
     validate_against_openapi_schema(result, '/users/{user_id}', 'patch', '400')
 
+@openapi_test_function("/users/{user_id}/subscriptions/{stream_id}:get")
+def get_subscription_status(client: Client) -> None:
+    # {code_example|start}
+    # Check whether a user is a subscriber to a given stream.
+    user_id = 7
+    stream_id = 1
+    result = client.call_endpoint(
+        url=f'/users/{user_id}/subscriptions/{stream_id}',
+        method='GET',
+    )
+    # {code_example|end}
+    validate_against_openapi_schema(result, '/users/{user_id}/subscriptions/{stream_id}', 'get', '200')
+
 @openapi_test_function("/realm/filters:get")
 def get_realm_filters(client: Client) -> None:
 
@@ -278,8 +292,8 @@ def add_realm_filter(client: Client) -> None:
 def remove_realm_filter(client: Client) -> None:
 
     # {code_example|start}
-    # Remove the organization filter with ID 42
-    result = client.remove_realm_filter(42)
+    # Remove the linkifier (realm_filter) with ID 1
+    result = client.remove_realm_filter(1)
     # {code_example|end}
 
     validate_against_openapi_schema(result, '/realm/filters/{filter_id}', 'delete', '200')
@@ -314,9 +328,9 @@ def delete_stream(client: Client, stream_id: int) -> None:
         streams=[
             {
                 'name': 'stream to be deleted',
-                'description': 'New stream for testing'
-            }
-        ]
+                'description': 'New stream for testing',
+            },
+        ],
     )
 
     # {code_example|start}
@@ -417,7 +431,7 @@ def remove_subscriptions(client: Client) -> None:
     # {code_example|start}
     # Unsubscribe from the stream "new stream"
     result = client.remove_subscriptions(
-        ['new stream']
+        ['new stream'],
     )
     # {code_example|end}
 
@@ -434,7 +448,7 @@ def remove_subscriptions(client: Client) -> None:
     # Unsubscribe another user from the stream "new stream"
     result = client.remove_subscriptions(
         ['new stream'],
-        principals=['newbie@zulip.com']
+        principals=['newbie@zulip.com'],
     )
     # {code_example|end}
 
@@ -448,12 +462,12 @@ def toggle_mute_topic(client: Client) -> None:
     message = {
         'type': 'stream',
         'to': 'Denmark',
-        'topic': 'boat party'
+        'topic': 'boat party',
     }
     client.call_endpoint(
         url='messages',
         method='POST',
-        request=message
+        request=message,
     )
 
     # {code_example|start}
@@ -461,7 +475,7 @@ def toggle_mute_topic(client: Client) -> None:
     request = {
         'stream': 'Denmark',
         'topic': 'boat party',
-        'op': 'add'
+        'op': 'add',
     }
     result = client.mute_topic(request)
     # {code_example|end}
@@ -475,7 +489,7 @@ def toggle_mute_topic(client: Client) -> None:
     request = {
         'stream': 'Denmark',
         'topic': 'boat party',
-        'op': 'remove'
+        'op': 'remove',
     }
 
     result = client.mute_topic(request)
@@ -527,11 +541,11 @@ def update_subscription_settings(client: Client) -> None:
     request = [{
         'stream_id': 1,
         'property': 'pin_to_top',
-        'value': True
+        'value': True,
     }, {
         'stream_id': 3,
         'property': 'color',
-        'value': 'f00'
+        'value': '#f00f00',
     }]
     result = client.update_subscription_settings(request)
     # {code_example|end}
@@ -546,7 +560,7 @@ def render_message(client: Client) -> None:
     # {code_example|start}
     # Render a message
     request = {
-        'content': '**foo**'
+        'content': '**foo**',
     }
     result = client.render_message(request)
     # {code_example|end}
@@ -571,6 +585,37 @@ def get_messages(client: Client) -> None:
     validate_against_openapi_schema(result, '/messages', 'get', '200')
     assert len(result['messages']) <= request['num_before']
 
+@openapi_test_function("/messages/matches_narrow:get")
+def check_messages_match_narrow(client: Client) -> None:
+    message = {
+        "type": "stream",
+        "to": "Verona",
+        "topic": "test_topic",
+        "content": "http://foo.com"
+    }
+    msg_ids = []
+    response = client.send_message(message)
+    msg_ids.append(response['id'])
+    message['content'] = "no link here"
+    response = client.send_message(message)
+    msg_ids.append(response['id'])
+
+    # {code_example|start}
+    # Check which messages within an array match a narrow.
+    request = {
+        'msg_ids': msg_ids,
+        'narrow': [{'operator': 'has', 'operand': 'link'}],
+    }
+
+    result = client.call_endpoint(
+        url='messages/matches_narrow',
+        method='GET',
+        request=request
+    )
+    # {code_example|end}
+
+    validate_against_openapi_schema(result, '/messages/matches_narrow', 'get', '200')
+
 @openapi_test_function("/messages/{message_id}:get")
 def get_raw_message(client: Client, message_id: int) -> None:
 
@@ -584,6 +629,15 @@ def get_raw_message(client: Client, message_id: int) -> None:
     validate_against_openapi_schema(result, '/messages/{message_id}', 'get',
                                     '200')
 
+@openapi_test_function("/attachments:get")
+def get_attachments(client: Client) -> None:
+    # {code_example|start}
+    # Get your attachments.
+
+    result = client.get_attachments()
+    # {code_example|end}
+    validate_against_openapi_schema(result, '/attachments', 'get', '200')
+
 @openapi_test_function("/messages:post")
 def send_message(client: Client) -> int:
 
@@ -595,7 +649,7 @@ def send_message(client: Client) -> int:
         "type": "stream",
         "to": "Denmark",
         "topic": "Castle",
-        "content": "I come not, friends, to steal away your hearts."
+        "content": "I come not, friends, to steal away your hearts.",
     }
     result = client.send_message(request)
     # {code_example|end}
@@ -607,7 +661,7 @@ def send_message(client: Client) -> int:
     url = 'messages/' + str(message_id)
     result = client.call_endpoint(
         url=url,
-        method='GET'
+        method='GET',
     )
     assert result['result'] == 'success'
     assert result['raw_content'] == request['content']
@@ -620,7 +674,7 @@ def send_message(client: Client) -> int:
     request = {
         "type": "private",
         "to": [user_id],
-        "content": "With mirth and laughter let old wrinkles come."
+        "content": "With mirth and laughter let old wrinkles come.",
     }
     result = client.send_message(request)
     # {code_example|end}
@@ -632,7 +686,7 @@ def send_message(client: Client) -> int:
     url = 'messages/' + str(message_id)
     result = client.call_endpoint(
         url=url,
-        method='GET'
+        method='GET',
     )
     assert result['result'] == 'success'
     assert result['raw_content'] == request['content']
@@ -670,7 +724,7 @@ def test_nonexistent_stream_error(client: Client) -> None:
         "type": "stream",
         "to": "nonexistent_stream",
         "topic": "Castle",
-        "content": "I come not, friends, to steal away your hearts."
+        "content": "I come not, friends, to steal away your hearts.",
     }
     result = client.send_message(request)
 
@@ -681,7 +735,7 @@ def test_private_message_invalid_recipient(client: Client) -> None:
     request = {
         "type": "private",
         "to": "eeshan@zulip.com",
-        "content": "With mirth and laughter let old wrinkles come."
+        "content": "With mirth and laughter let old wrinkles come.",
     }
     result = client.send_message(request)
 
@@ -699,7 +753,7 @@ def update_message(client: Client, message_id: int) -> None:
     # message you wish to update)
     request = {
         "message_id": message_id,
-        "content": "New content"
+        "content": "New content",
     }
     result = client.update_message(request)
     # {code_example|end}
@@ -711,7 +765,7 @@ def update_message(client: Client, message_id: int) -> None:
     url = 'messages/' + str(message_id)
     result = client.call_endpoint(
         url=url,
-        method='GET'
+        method='GET',
     )
     assert result['result'] == 'success'
     assert result['raw_content'] == request['content']
@@ -721,13 +775,13 @@ def test_update_message_edit_permission_error(client: Client, nonadmin_client: C
         "type": "stream",
         "to": "Denmark",
         "topic": "Castle",
-        "content": "I come not, friends, to steal away your hearts."
+        "content": "I come not, friends, to steal away your hearts.",
     }
     result = client.send_message(request)
 
     request = {
         "message_id": result["id"],
-        "content": "New content"
+        "content": "New content",
     }
     result = nonadmin_client.update_message(request)
 
@@ -749,7 +803,7 @@ def test_delete_message_edit_permission_error(client: Client, nonadmin_client: C
         "type": "stream",
         "to": "Denmark",
         "topic": "Castle",
-        "content": "I come not, friends, to steal away your hearts."
+        "content": "I come not, friends, to steal away your hearts.",
     }
     result = client.send_message(request)
 
@@ -786,7 +840,7 @@ def update_message_flags(client: Client) -> None:
         "type": "stream",
         "to": "Denmark",
         "topic": "Castle",
-        "content": "I come not, friends, to steal away your hearts."
+        "content": "I come not, friends, to steal away your hearts.",
     }
     message_ids = []
     for i in range(0, 3):
@@ -797,7 +851,7 @@ def update_message_flags(client: Client) -> None:
     request = {
         'messages': message_ids,
         'op': 'add',
-        'flag': 'read'
+        'flag': 'read',
     }
     result = client.update_message_flags(request)
     # {code_example|end}
@@ -810,7 +864,7 @@ def update_message_flags(client: Client) -> None:
     request = {
         'messages': message_ids,
         'op': 'remove',
-        'flag': 'starred'
+        'flag': 'starred',
     }
     result = client.update_message_flags(request)
     # {code_example|end}
@@ -824,7 +878,7 @@ def register_queue(client: Client) -> str:
     # {code_example|start}
     # Register the queue
     result = client.register(
-        event_types=['message', 'realm_emoji']
+        event_types=['message', 'realm_emoji'],
     )
     # {code_example|end}
 
@@ -880,14 +934,14 @@ def upload_file(client: Client) -> None:
         result = client.call_endpoint(
             'user_uploads',
             method='POST',
-            files=[fp]
+            files=[fp],
         )
 
     client.send_message({
         "type": "stream",
         "to": "Denmark",
         "topic": "Castle",
-        "content": "Check out [this picture](%s) of my castle!" % (result['uri'],)
+        "content": "Check out [this picture]({}) of my castle!".format(result['uri']),
     })
     # {code_example|end}
 
@@ -944,9 +998,9 @@ def upload_custom_emoji(client: Client) -> None:
     with open(emoji_path, 'rb') as fp:
         emoji_name = 'my_custom_emoji'
         result = client.call_endpoint(
-            'realm/emoji/{}'.format(emoji_name),
+            f'realm/emoji/{emoji_name}',
             method='POST',
-            files=[fp]
+            files=[fp],
         )
     # {code_example|end}
 
@@ -1022,7 +1076,7 @@ def update_user_group_members(client: Client, group_id: int) -> None:
     request = {
         'group_id': group_id,
         'delete': [8, 10],
-        'add': [11]
+        'add': [11],
     }
 
     result = client.update_user_group_members(request)
@@ -1046,25 +1100,25 @@ def test_invalid_stream_error(client: Client) -> None:
 
 
 # SETUP METHODS FOLLOW
-def test_against_fixture(result: Dict[str, Any], fixture: Dict[str, Any], check_if_equal: Optional[Iterable[str]] = [], check_if_exists: Optional[Iterable[str]] = []) -> None:
+def test_against_fixture(result: Dict[str, Any], fixture: Dict[str, Any], check_if_equal: Optional[Iterable[str]] = None, check_if_exists: Optional[Iterable[str]] = None) -> None:
     assertLength(result, fixture)
 
-    if not check_if_equal and not check_if_exists:
+    if check_if_equal is None and check_if_exists is None:
         for key, value in fixture.items():
             assertEqual(key, result, fixture)
 
-    if check_if_equal:
+    if check_if_equal is not None:
         for key in check_if_equal:
             assertEqual(key, result, fixture)
 
-    if check_if_exists:
+    if check_if_exists is not None:
         for key in check_if_exists:
             assertIn(key, result)
 
 def assertEqual(key: str, result: Dict[str, Any], fixture: Dict[str, Any]) -> None:
     if result[key] != fixture[key]:
-        first = "{key} = {value}".format(key=key, value=result[key])
-        second = "{key} = {value}".format(key=key, value=fixture[key])
+        first = f"{key} = {result[key]}"
+        second = f"{key} = {fixture[key]}"
         raise AssertionError("Actual and expected outputs do not match; showing diff:\n" +
                              mdiff.diff_strings(first, second))
     else:
@@ -1082,7 +1136,7 @@ def assertLength(result: Dict[str, Any], fixture: Dict[str, Any]) -> None:
 def assertIn(key: str, result: Dict[str, Any]) -> None:
     if key not in result.keys():
         raise AssertionError(
-            "The actual output does not contain the the key `{key}`.".format(key=key)
+            f"The actual output does not contain the the key `{key}`.",
         )
     else:
         assert key in result
@@ -1096,6 +1150,7 @@ def test_messages(client: Client, nonadmin_client: Client) -> None:
     update_message(client, message_id)
     get_raw_message(client, message_id)
     get_messages(client)
+    check_messages_match_narrow(client)
     get_message_history(client, message_id)
     delete_message(client, message_id)
     mark_all_as_read(client)
@@ -1116,12 +1171,14 @@ def test_users(client: Client) -> None:
     deactivate_user(client)
     reactivate_user(client)
     update_user(client)
+    get_subscription_status(client)
     get_profile(client)
     update_notification_settings(client)
     upload_file(client)
+    get_attachments(client)
     set_typing_status(client)
-    get_user_presence(client)
     update_presence(client)
+    get_user_presence(client)
     create_user_group(client)
     group_id = get_user_groups(client)
     update_user_group(client, group_id)
@@ -1152,7 +1209,7 @@ def test_streams(client: Client, nonadmin_client: Client) -> None:
 
 
 def test_queues(client: Client) -> None:
-    # Note that the example for api/get-events-from-queue is not tested.
+    # Note that the example for api/get-events is not tested.
     # Since, methods such as client.get_events() or client.call_on_each_message
     # are blocking calls and since the event queue backend is already
     # thoroughly tested in zerver/tests/test_event_queue.py, it is not worth

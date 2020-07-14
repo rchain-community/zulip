@@ -24,7 +24,7 @@ function sort_email(a, b) {
     const email_b = settings_data.email_for_user_settings(b) || '';
     return compare_a_b(
         email_a.toLowerCase(),
-        email_b.toLowerCase()
+        email_b.toLowerCase(),
     );
 }
 
@@ -52,14 +52,14 @@ function sort_bot_owner(a, b) {
 
     return compare_a_b(
         owner_name(a),
-        owner_name(b)
+        owner_name(b),
     );
 }
 
 function sort_last_active(a, b) {
     return compare_a_b(
         presence.last_active_date(a.user_id) || 0,
-        presence.last_active_date(b.user_id) || 0
+        presence.last_active_date(b.user_id) || 0,
     );
 }
 
@@ -69,7 +69,9 @@ function get_user_info_row(user_id) {
 
 function set_user_role_dropdown(person) {
     let role_value = settings_config.user_role_values.member.code;
-    if (person.is_admin) {
+    if (person.is_owner) {
+        role_value = settings_config.user_role_values.owner.code;
+    } else if (person.is_admin) {
         role_value = settings_config.user_role_values.admin.code;
     } else if (person.is_guest) {
         role_value = settings_config.user_role_values.guest.code;
@@ -127,33 +129,23 @@ function get_status_field() {
     }
 }
 
-function failed_listing_users(xhr) {
+function failed_listing_users() {
     loading.destroy_indicator($('#subs_page_loading_indicator'));
     const status = get_status_field();
-    ui_report.error(i18n.t("Error listing users"), xhr, status);
+    const user_id = people.my_current_user_id();
+    blueslip.error('Error while listing users for user_id ' + user_id, status);
 }
 
-function populate_users(realm_people_data) {
-    let active_users = [];
-    let deactivated_users = [];
+function populate_users() {
+    const active_user_ids = people.get_active_human_ids();
+    const deactivated_user_ids = people.get_non_active_human_ids();
 
-    for (const user of realm_people_data.members) {
-        if (user.is_bot) {
-            continue;
-        }
-
-        if (user.is_active) {
-            active_users.push(user);
-        } else {
-            deactivated_users.push(user);
-        }
+    if (active_user_ids.length === 0 && deactivated_user_ids.length === 0) {
+        failed_listing_users();
     }
 
-    active_users = _.sortBy(active_users, 'full_name');
-    deactivated_users = _.sortBy(deactivated_users, 'full_name');
-
-    section.active.create_table(active_users);
-    section.deactivated.create_table(deactivated_users);
+    section.active.create_table(active_user_ids);
+    section.deactivated.create_table(deactivated_user_ids);
 }
 
 function reset_scrollbar($sel) {
@@ -228,16 +220,18 @@ function human_info(person) {
     info.is_bot = false;
     info.is_admin = person.is_admin;
     info.is_guest = person.is_guest;
-    info.is_active = person.is_active;
+    info.is_owner = person.is_owner;
+    info.is_active = people.is_person_active(person.user_id);
     info.user_id = person.user_id;
     info.full_name = person.full_name;
     info.bot_owner_id = person.bot_owner_id;
 
     info.can_modify = page_params.is_admin;
     info.is_current_user = people.is_my_user_id(person.user_id);
+    info.cannot_deactivate = info.is_current_user || person.is_owner && !page_params.is_owner;
     info.display_email = settings_data.email_for_user_settings(person);
 
-    if (person.is_active) {
+    if (info.is_active) {
         // TODO: We might just want to show this
         // for deactivated users, too, even though
         // it might usually just be undefined.
@@ -287,6 +281,7 @@ section.active.create_table = (active_users) => {
     const $users_table = $("#admin_users_table");
     list_render.create($users_table, active_users, {
         name: "users_table_list",
+        get_item: people.get_by_user_id,
         modifier: function (item) {
             const info = human_info(item);
             return render_admin_user_list(info);
@@ -313,6 +308,7 @@ section.deactivated.create_table = (deactivated_users) => {
     const $deactivated_users_table = $("#admin_deactivated_users_table");
     list_render.create($deactivated_users_table, deactivated_users, {
         name: "deactivated_users_table_list",
+        get_item: people.get_by_user_id,
         modifier: function (item) {
             const info = human_info(item);
             return render_admin_user_list(info);
@@ -375,14 +371,7 @@ function start_data_load() {
     $("#admin_deactivated_users_table").hide();
     $("#admin_users_table").hide();
 
-    // Populate users and bots tables
-    channel.get({
-        url: '/json/users',
-        idempotent: true,
-        timeout: 10 * 1000,
-        success: populate_users,
-        error: failed_listing_users,
-    });
+    populate_users();
 }
 
 function open_human_form(person) {
@@ -393,12 +382,16 @@ function open_human_form(person) {
         email: person.email,
         full_name: person.full_name,
         user_role_values: settings_config.user_role_values,
+        disable_role_dropdown: person.is_owner && !page_params.is_owner,
     });
     const div = $(html);
     const modal_container = $('#user-info-form-modal-container');
     modal_container.empty().append(div);
     overlays.open_modal('#admin-human-form');
     set_user_role_dropdown(person);
+    if (!page_params.is_owner) {
+        $('#user-role-select').find('option[value=' + settings_config.user_role_values.owner.code + ']').hide();
+    }
 
     const element = "#admin-human-form .custom-profile-field-form";
     $(element).html("");
@@ -408,7 +401,7 @@ function open_human_form(person) {
         element,
         user_id,
         true,
-        false
+        false,
     );
 
     return {
@@ -464,10 +457,14 @@ function open_bot_form(person) {
     // NOTE: building `owner_dropdown` is quite expensive!
     const owner_id = bot_data.get(person.user_id).owner_id;
 
-    const users_list = people.get_active_humans();
+    const user_ids = people.get_active_human_ids();
+    const users_list = user_ids.map((user_id) => ({
+        name: people.get_full_name(user_id),
+        value: user_id.toString(),
+    }));
     const opts = {
         widget_name: 'edit_bot_owner',
-        data: users_list.map(u => ({name: u.full_name, value: u.user_id.toString()})),
+        data: users_list,
         default_text: i18n.t("No owner"),
         value: owner_id,
     };
@@ -515,7 +512,7 @@ function confirm_deactivation(row, user_id, status_field) {
 }
 
 function handle_deactivation(tbody, status_field) {
-    tbody.on("click", ".deactivate", function (e) {
+    tbody.on("click", ".deactivate", (e) => {
         // This click event must not get propagated to parent container otherwise the modal
         // will not show up because of a call to `close_active_modal` in `settings.js`.
         e.preventDefault();
@@ -528,7 +525,7 @@ function handle_deactivation(tbody, status_field) {
 }
 
 function handle_bot_deactivation(tbody, status_field) {
-    tbody.on("click", ".deactivate", function (e) {
+    tbody.on("click", ".deactivate", (e) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -551,7 +548,7 @@ function handle_bot_deactivation(tbody, status_field) {
 }
 
 function handle_reactivation(tbody, status_field) {
-    tbody.on("click", ".reactivate", function (e) {
+    tbody.on("click", ".reactivate", (e) => {
         e.preventDefault();
         e.stopPropagation();
         // Go up the tree until we find the user row, then grab the email element
@@ -575,7 +572,7 @@ function handle_reactivation(tbody, status_field) {
 }
 
 function handle_bot_owner_profile(tbody) {
-    tbody.on('click', '.user_row .view_user_profile', function (e) {
+    tbody.on('click', '.user_row .view_user_profile', (e) => {
         const owner_id = parseInt($(e.target).attr('data-owner-id'), 10);
         const owner = people.get_by_user_id(owner_id);
         popovers.show_user_profile(owner);
@@ -585,7 +582,9 @@ function handle_bot_owner_profile(tbody) {
 }
 
 function handle_human_form(tbody, status_field) {
-    tbody.on("click", ".open-user-form", function (e) {
+    tbody.on("click", ".open-user-form", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         const user_id = parseInt($(e.currentTarget).attr("data-user-id"), 10);
         const person = people.get_by_user_id(user_id);
 
@@ -597,7 +596,7 @@ function handle_human_form(tbody, status_field) {
         const modal = ret.modal;
         const fields_user_pills = ret.fields_user_pills;
 
-        modal.find('.submit_human_change').on("click", function (e) {
+        modal.find('.submit_human_change').on("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
 
@@ -619,7 +618,9 @@ function handle_human_form(tbody, status_field) {
 }
 
 function handle_bot_form(tbody, status_field) {
-    tbody.on("click", ".open-user-form", function (e) {
+    tbody.on("click", ".open-user-form", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         const user_id = parseInt($(e.currentTarget).attr("data-user-id"), 10);
         const bot = people.get_by_user_id(user_id);
 
@@ -629,7 +630,7 @@ function handle_bot_form(tbody, status_field) {
 
         const {modal, owner_widget} = open_bot_form(bot);
 
-        modal.find('.submit_bot_change').on("click", function (e) {
+        modal.find('.submit_bot_change').on("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
 

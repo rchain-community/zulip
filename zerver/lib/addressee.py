@@ -1,14 +1,16 @@
 from typing import Iterable, List, Optional, Sequence, Union, cast
 
 from django.utils.translation import ugettext as _
+
 from zerver.lib.exceptions import JsonableError
 from zerver.models import (
     Realm,
-    UserProfile,
-    get_user_including_cross_realm,
-    get_user_by_id_in_realm_including_cross_realm,
     Stream,
+    UserProfile,
+    get_user_by_id_in_realm_including_cross_realm,
+    get_user_including_cross_realm,
 )
+
 
 def get_user_profiles(emails: Iterable[str], realm: Realm) -> List[UserProfile]:
     user_profiles: List[UserProfile] = []
@@ -16,7 +18,7 @@ def get_user_profiles(emails: Iterable[str], realm: Realm) -> List[UserProfile]:
         try:
             user_profile = get_user_including_cross_realm(email, realm)
         except UserProfile.DoesNotExist:
-            raise JsonableError(_("Invalid email '%s'") % (email,))
+            raise JsonableError(_("Invalid email '{}'").format(email))
         user_profiles.append(user_profile)
     return user_profiles
 
@@ -127,11 +129,9 @@ class Addressee:
                 raise JsonableError(_("Missing topic"))
 
             if isinstance(stream_name_or_id, int):
-                stream_id = cast(int, stream_name_or_id)
-                return Addressee.for_stream_id(stream_id, topic_name)
+                return Addressee.for_stream_id(stream_name_or_id, topic_name)
 
-            stream_name = cast(str, stream_name_or_id)
-            return Addressee.for_stream_name(stream_name, topic_name)
+            return Addressee.for_stream_name(stream_name_or_id, topic_name)
         elif message_type_name == 'private':
             if not message_to:
                 raise JsonableError(_("Message must have recipients"))

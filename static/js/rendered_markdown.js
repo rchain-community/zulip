@@ -137,21 +137,50 @@ exports.update_elements = (content) => {
         }
     });
 
-    content.find('span.timestamp').each(function () {
+    content.find('time').each(function () {
         // Populate each timestamp span with mentioned time
         // in user's local timezone.
-        const timestamp = moment.unix($(this).attr('data-timestamp'));
-        if (timestamp.isValid() && $(this).attr('data-timestamp') !== null) {
+        const time_str = $(this).attr('datetime');
+        if (time_str === undefined) {
+            return;
+        }
+
+        // Moment throws a large deprecation warning when it has to
+        // fallback to the Date() constructor.  This isn't really a
+        // problem for us except in local echo, as the backend always
+        // uses a format that ensures that is unnecessary.
+        moment.suppressDeprecationWarnings = true;
+        const timestamp = moment(time_str);
+        if (timestamp.isValid()) {
             const text = $(this).text();
             const rendered_time = timerender.render_markdown_timestamp(timestamp,
                                                                        null, text);
             $(this).text(rendered_time.text);
             $(this).attr('title', rendered_time.title);
         } else {
-            $(this).removeClass('timestamp');
-            $(this).attr('title', 'Could not parse timestamp.');
+            // This shouldn't happen. If it does, we're very interested in debugging it.
+            blueslip.error(`Moment could not parse datetime supplied by backend: ${time_str}`);
         }
     });
+
+    content.find('span.timestamp-error').each(function () {
+        const time_str = $(this).text().replace('Invalid time format: ', '');
+        const text = i18n.t('Invalid time format: __timestamp__', { timestamp: time_str });
+        $(this).text(text);
+    });
+
+    content.find('div.spoiler-header').each(function () {
+        // If a spoiler block has no header content, it should have a default header.
+        // We do this client side to allow for i18n by the client.
+        if ($.trim($(this).html()).length === 0) {
+            $(this).append(`<p>${i18n.t('Spoiler')}</p>`);
+        }
+
+        // Add the expand/collapse button to spoiler blocks
+        const toggle_button_html = '<span class="spoiler-button" aria-expanded="false"><span class="spoiler-arrow"></span></span>';
+        $(this).prepend(toggle_button_html);
+    });
+
 
     // Display emoji (including realm emoji) as text if
     // page_params.emojiset is 'text'.

@@ -67,7 +67,7 @@ exports.show_error_for_unsupported_platform = function () {
         const error = "Hello! You're using the unsupported old Zulip desktop app," +
             " which is no longer developed. We recommend switching to the new, " +
             "modern desktop app, which you can download at " +
-            "<a href='https://zulipchat.com/apps'>zulipchat.com/apps</a>.";
+            "<a href='https://zulip.com/apps'>zulip.com/apps</a>.";
 
         ui_report.generic_embed_error(error);
     }
@@ -93,12 +93,15 @@ exports.update_starred_view = function (message_id, new_value) {
 
     // Avoid a full re-render, but update the star in each message
     // table in which it is visible.
-    update_message_in_all_views(message_id, function update_row(row) {
+    update_message_in_all_views(message_id, (row) => {
         const elt = row.find(".star");
+        const star_container = row.find(".star_container");
         if (starred) {
-            elt.addClass("fa-star").removeClass("fa-star-o").removeClass("empty-star");
+            elt.addClass("fa-star").removeClass("fa-star-o");
+            star_container.removeClass("empty-star");
         } else {
-            elt.removeClass("fa-star").addClass("fa-star-o").addClass("empty-star");
+            elt.removeClass("fa-star").addClass("fa-star-o");
+            star_container.addClass("empty-star");
         }
         const title_state = starred ? i18n.t("Unstar") : i18n.t("Star");
         elt.attr("title", i18n.t("__starred_status__ this message", {starred_status: title_state}));
@@ -107,28 +110,32 @@ exports.update_starred_view = function (message_id, new_value) {
 
 exports.show_message_failed = function (message_id, failed_msg) {
     // Failed to send message, so display inline retry/cancel
-    update_message_in_all_views(message_id, function update_row(row) {
+    update_message_in_all_views(message_id, (row) => {
         const failed_div = row.find('.message_failed');
         failed_div.toggleClass('notvisible', false);
         failed_div.find('.failed_text').attr('title', failed_msg);
     });
 };
 
-exports.remove_message = function (message_id) {
+exports.remove_messages = function (message_ids) {
+    const msg_ids_to_rerender = [];
     for (const list of [message_list.all, home_msg_list, message_list.narrowed]) {
         if (list === undefined) {
             continue;
         }
-        const row = list.get_row(message_id);
-        if (row !== undefined) {
-            list.remove_and_rerender([{id: message_id}]);
+        for (const message_id of message_ids) {
+            const row = list.get_row(message_id);
+            if (row !== undefined) {
+                msg_ids_to_rerender.push({id: message_id});
+            }
         }
+        list.remove_and_rerender(msg_ids_to_rerender);
     }
 };
 
 exports.show_failed_message_success = function (message_id) {
     // Previously failed message succeeded
-    update_message_in_all_views(message_id, function update_row(row) {
+    update_message_in_all_views(message_id, (row) => {
         row.find('.message_failed').toggleClass('notvisible', true);
     });
 };
@@ -137,7 +144,7 @@ exports.get_hotkey_deprecation_notice = function (originalHotkey, replacementHot
     return i18n.t(
         'We\'ve replaced the "__originalHotkey__" hotkey with "__replacementHotkey__" '
             + 'to make this common shortcut easier to trigger.',
-        { originalHotkey: originalHotkey, replacementHotkey: replacementHotkey }
+        { originalHotkey: originalHotkey, replacementHotkey: replacementHotkey },
     );
 };
 

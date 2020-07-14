@@ -2,6 +2,7 @@ const pygments_data = require("../generated/pygments_data.json");
 const typeahead = require("../shared/js/typeahead");
 const autosize = require('autosize');
 const settings_data = require("./settings_data");
+const confirmDatePlugin = require("flatpickr/dist/plugins/confirmDate/confirmDate.js");
 
 //************************************
 // AN IMPORTANT NOTE ABOUT TYPEAHEADS
@@ -256,12 +257,12 @@ function select_on_focus(field_id) {
     // conditions in Chrome so we need to protect against infinite
     // recursion.
     let in_handler = false;
-    $("#" + field_id).focus(function () {
+    $("#" + field_id).focus(() => {
         if (in_handler) {
             return;
         }
         in_handler = true;
-        $("#" + field_id).select().one('mouseup', function (e) {
+        $("#" + field_id).select().one('mouseup', (e) => {
             e.preventDefault();
         });
         in_handler = false;
@@ -330,6 +331,11 @@ exports.tokenize_compose_str = function (s) {
         }
     }
 
+    const timestamp_index = s.indexOf('<time');
+    if (timestamp_index >= 0) {
+        return s.slice(timestamp_index);
+    }
+
     return '';
 };
 
@@ -375,7 +381,7 @@ function should_show_custom_query(query, items) {
     if (!query) {
         return false;
     }
-    const matched = items.some(elem => elem.toLowerCase() === query.toLowerCase());
+    const matched = items.some((elem) => elem.toLowerCase() === query.toLowerCase());
     return !matched;
 }
 
@@ -436,13 +442,9 @@ exports.get_pm_people = function (query) {
 exports.get_person_suggestions = function (query, opts) {
     query = typeahead.clean_query_lowercase(query);
 
-    const person_matcher = (item) => {
-        return exports.query_matches_person(query, item);
-    };
+    const person_matcher = (item) => exports.query_matches_person(query, item);
 
-    const group_matcher = (item) => {
-        return query_matches_name_description(query, item);
-    };
+    const group_matcher = (item) => query_matches_name_description(query, item);
 
     function filter_persons(all_persons) {
         let persons;
@@ -494,7 +496,7 @@ exports.get_person_suggestions = function (query, opts) {
     const cutoff_length = exports.max_num_items;
 
     const filtered_message_persons = filter_persons(
-        people.get_active_message_people()
+        people.get_active_message_people(),
     );
 
     let filtered_persons;
@@ -503,7 +505,7 @@ exports.get_person_suggestions = function (query, opts) {
         filtered_persons = filtered_message_persons;
     } else {
         filtered_persons = filter_persons(
-            people.get_realm_users()
+            people.get_realm_users(),
         );
     }
 
@@ -513,7 +515,7 @@ exports.get_person_suggestions = function (query, opts) {
         opts.stream,
         opts.topic,
         filtered_groups,
-        exports.max_num_items
+        exports.max_num_items,
     );
 };
 
@@ -584,7 +586,7 @@ exports.get_sorted_filtered_items = function (query) {
 exports.filter_and_sort_candidates = function (completing, candidates, token) {
     const matcher = exports.compose_content_matcher(completing, token);
 
-    const small_results = candidates.filter(item => matcher(item));
+    const small_results = candidates.filter((item) => matcher(item));
 
     const sorted_results = exports.sort_results(completing, small_results, token);
 
@@ -605,7 +607,7 @@ exports.get_candidates = function (query) {
     // already-completed object.
 
     // We will likely want to extend this list to be more i18n-friendly.
-    const terminal_symbols = ',.;?!()[] "\'\n\t';
+    const terminal_symbols = ',.;?!()[]> "\'\n\t';
     if (rest !== '' && !terminal_symbols.includes(rest[0])) {
         return false;
     }
@@ -733,6 +735,13 @@ exports.get_candidates = function (query) {
             }
         }
     }
+    if (this.options.completions.timestamp) {
+        const time_jump_regex = /<time(\:([^>]*?)>?)?$/;
+        if (time_jump_regex.test(split[0])) {
+            this.completing = 'time_jump';
+            return [i18n.t('Mention a timezone-aware time')];
+        }
+    }
     return false;
 };
 
@@ -753,7 +762,40 @@ exports.content_highlighter = function (item) {
         return typeahead_helper.render_typeahead_item({ primary: item });
     } else if (this.completing === 'topic_list') {
         return typeahead_helper.render_typeahead_item({ primary: item });
+    } else if (this.completing === 'time_jump') {
+        return typeahead_helper.render_typeahead_item({ primary: item });
     }
+};
+
+const show_flatpickr = (element, callback, default_timestamp) => {
+    const flatpickr_input = $("<input id='#timestamp_flatpickr'>");
+
+    const instance = flatpickr_input.flatpickr({
+        mode: 'single',
+        enableTime: true,
+        clickOpens: false,
+        defaultDate: default_timestamp,
+        plugins: [new confirmDatePlugin({})], // eslint-disable-line new-cap, no-undef
+        positionElement: element,
+        dateFormat: 'Z',
+        formatDate: (date) => {
+            const dt = moment(date);
+            return dt.local().format();
+        },
+    });
+    const container = $($(instance.innerContainer).parent());
+    container.on('click', '.flatpickr-calendar', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+    });
+
+    container.on('click', '.flatpickr-confirm', () => {
+        callback(flatpickr_input.val());
+        instance.close();
+        instance.destroy();
+    });
+    instance.open();
+    container.find('.flatpickr-monthDropdown-months').focus();
 };
 
 exports.content_typeahead_selected = function (item, event) {
@@ -841,11 +883,30 @@ exports.content_typeahead_selected = function (item, event) {
         // with the topic and the final **.
         const start = beginning.length - this.token.length;
         beginning = beginning.substring(0, start) + item + '** ';
+    } else if (this.completing === 'time_jump') {
+        let timestring = beginning.substring(beginning.lastIndexOf('<time:'));
+        if (timestring.startsWith('<time:') && timestring.endsWith('>')) {
+            timestring = timestring.substring(6, timestring.length - 1);
+        }
+        const timestamp = timerender.get_timestamp_for_flatpickr(timestring);
+
+        const on_timestamp_selection = (val) => {
+            const datestr = val;
+            beginning = beginning.substring(0, beginning.lastIndexOf('<time')) +  `<time:${datestr}> `;
+            if (rest.startsWith('>')) {
+                rest = rest.slice(1);
+            }
+            textbox.val(beginning + rest);
+            textbox.caret(beginning.length, beginning.length);
+            compose_ui.autosize_textarea();
+        };
+        show_flatpickr(this.$element[0], on_timestamp_selection, timestamp);
+        return beginning + rest;
     }
 
     // Keep the cursor after the newly inserted text, as Bootstrap will call textbox.change() to
     // overwrite the text in the textbox.
-    setTimeout(function () {
+    setTimeout(() => {
         textbox.caret(beginning.length, beginning.length);
         // Also, trigger autosize to check if compose box needs to be resized.
         compose_ui.autosize_textarea();
@@ -870,7 +931,8 @@ exports.compose_content_matcher = function (completing, token) {
     return function () {
         switch (completing) {
         case 'topic_jump':
-            // topic_jump doesn't actually have a typeahead popover, so we return quickly here.
+        case 'time_jump':
+            // these don't actually have a typeahead popover, so we return quickly here.
             return true;
         }
     };
@@ -887,10 +949,11 @@ exports.sort_results = function (completing, matches, token) {
     case 'syntax':
         return typeahead_helper.sort_languages(matches, token);
     case 'topic_jump':
+    case 'time_jump':
         // topic_jump doesn't actually have a typeahead popover, so we return quickly here.
         return matches;
     case 'topic_list':
-        return typeahead_helper.sorter(token, matches, function (x) {return x;});
+        return typeahead_helper.sorter(token, matches, (x) => x);
     }
 };
 
@@ -921,7 +984,7 @@ function get_header_text() {
         tip_text = i18n.t('User will not be notified');
         break;
     case 'syntax':
-        if (page_params.realm_default_code_block_language !== '') {
+        if (page_params.realm_default_code_block_language !== null) {
             tip_text = i18n.t("Default is __language__. Use 'text' to disable highlighting.",
                               {language: page_params.realm_default_code_block_language});
             break;
@@ -942,6 +1005,7 @@ exports.initialize_compose_typeahead = function (selector) {
         stream: true,
         syntax: true,
         topic: true,
+        timestamp: true,
     };
 
     $(selector).typeahead({
@@ -979,7 +1043,7 @@ exports.initialize = function () {
     $("form#send_message_form").keydown(handle_keydown);
     $("form#send_message_form").keyup(handle_keyup);
 
-    $("#enter_sends").click(function () {
+    $("#enter_sends").click(() => {
         const send_button = $("#compose-send-button");
         page_params.enter_sends = $("#enter_sends").is(":checked");
         if (page_params.enter_sends) {
@@ -1032,7 +1096,7 @@ exports.initialize = function () {
             return typeahead_helper.render_typeahead_item({ primary: item });
         },
         sorter: function (items) {
-            const sorted = typeahead_helper.sorter(this.query, items, function (x) {return x;});
+            const sorted = typeahead_helper.sorter(this.query, items, (x) => x);
             if (sorted.length > 0 && !sorted.includes(this.query)) {
                 sorted.unshift(this.query);
             }

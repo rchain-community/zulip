@@ -34,10 +34,10 @@ run_test('extract_pm_recipients', () => {
 });
 
 run_test('is_pm_recipient', () => {
-    const message = { reply_to: 'alice@example.com,bOb@exaMple.com,fred@example.com' };
-    assert(util.is_pm_recipient('alice@example.com', message));
-    assert(util.is_pm_recipient('bob@example.com', message));
-    assert(!util.is_pm_recipient('unknown@example.com', message));
+    const message = { to_user_ids: '31,32,33' };
+    assert(util.is_pm_recipient(31, message));
+    assert(util.is_pm_recipient(32, message));
+    assert(!util.is_pm_recipient(34, message));
 });
 
 run_test('lower_bound', () => {
@@ -101,7 +101,7 @@ run_test('robust_uri_decode', () => {
     assert.equal(util.robust_uri_decode('xxx%3Ayyy'), 'xxx:yyy');
     assert.equal(util.robust_uri_decode('xxx%3'), 'xxx');
 
-    set_global('decodeURIComponent', function () { throw 'foo'; });
+    set_global('decodeURIComponent', () => { throw 'foo'; });
     try {
         util.robust_uri_decode('%E0%A4%A');
     } catch (e) {
@@ -151,7 +151,7 @@ run_test('random_int', () => {
     const min = 0;
     const max = 100;
 
-    _.times(500, function () {
+    _.times(500, () => {
         const val = util.random_int(min, max);
         assert(min <= val);
         assert(val <= max);
@@ -299,12 +299,12 @@ run_test("clean_user_content_links", () => {
             '<a href="http://zulip.zulipdev.com/user_uploads/w/ha/tever/file.png">upload</a> ' +
             '<a href="http://localhost:NNNN">invalid</a> ' +
             '<a href="javascript:alert(1)">unsafe</a> ' +
-            '<a href="/#fragment" target="_blank">fragment</a>'
+            '<a href="/#fragment" target="_blank">fragment</a>',
         ),
         '<a href="http://example.com" target="_blank" rel="noopener noreferrer" title="http://example.com/">good</a> ' +
         '<a href="http://zulip.zulipdev.com/user_uploads/w/ha/tever/file.png" target="_blank" rel="noopener noreferrer" title="file.png">upload</a> ' +
         '<a>invalid</a> ' +
         '<a>unsafe</a> ' +
-        '<a href="/#fragment" title="http://zulip.zulipdev.com/#fragment">fragment</a>'
+        '<a href="/#fragment" title="http://zulip.zulipdev.com/#fragment">fragment</a>',
     );
 });

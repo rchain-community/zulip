@@ -1,17 +1,18 @@
 # Webhooks for external integrations.
+import re
 from typing import Any, Dict, Optional
 
+import ujson
 from django.http import HttpRequest, HttpResponse
+from django.utils.translation import ugettext as _
 
 from zerver.decorator import api_key_only_webhook_view
+from zerver.lib.exceptions import InvalidJSONError
 from zerver.lib.request import REQ, has_request_variables
 from zerver.lib.response import json_success
 from zerver.lib.webhooks.common import check_send_webhook_message
-from zerver.lib.exceptions import InvalidJSONError
-from django.utils.translation import ugettext as _
 from zerver.models import UserProfile
-import re
-import ujson
+
 
 @api_key_only_webhook_view('SlackIncoming')
 @has_request_variables
@@ -67,7 +68,7 @@ def add_block(block: Dict[str, Any], body: str) -> str:
             text = block["text"]
             while type(text) == dict:  # handle stuff like block["text"]["text"]
                 text = text["text"]
-            body += "\n\n{}".format(text)
+            body += f"\n\n{text}"
 
         if "accessory" in block:
             accessory = block["accessory"]

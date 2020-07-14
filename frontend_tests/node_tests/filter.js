@@ -3,6 +3,9 @@ zrequire('unread');
 zrequire('stream_data');
 zrequire('people');
 set_global('Handlebars', global.make_handlebars());
+global.stub_out_jquery();
+set_global('$', global.make_zjquery());
+zrequire('message_util', 'js/message_util');
 zrequire('Filter', 'js/filter');
 
 set_global('message_store', {});
@@ -32,7 +35,7 @@ people.add_active_user(steve);
 people.initialize_current_user(me.user_id);
 
 function assert_same_operators(result, terms) {
-    terms = terms.map(term => {
+    terms = terms.map((term) => {
         // If negated flag is undefined, we explicitly
         // set it to false.
         let negated = term.negated;
@@ -121,7 +124,8 @@ run_test('basics', () => {
     ];
     filter = new Filter(operators);
     assert(filter.has_operator('has'));
-    assert(!filter.can_apply_locally());
+    assert(filter.can_apply_locally());
+    assert(!filter.can_apply_locally(true));
     assert(!filter.includes_full_stream_history());
     assert(!filter.can_mark_messages_read());
     assert(!filter.is_personal_filter());
@@ -567,7 +571,7 @@ run_test('canonicalizations', () => {
 });
 
 function get_predicate(operators) {
-    operators = operators.map(op => ({
+    operators = operators.map((op) => ({
         operator: op[0],
         operand: op[1],
     }));
@@ -715,6 +719,62 @@ run_test('predicate_basics', () => {
         display_recipient: [{id: steve.user_id}, {id: me.user_id}],
     }));
     assert(!predicate({type: 'stream'}));
+
+    const img_msg = {
+        content: `<p><a href="/user_uploads/randompath/test.jpeg">test.jpeg</a></p><div class="message_inline_image"><a href="/user_uploads/randompath/test.jpeg" title="test.jpeg"><img src="/user_uploads/randompath/test.jpeg"></a></div>`,
+    };
+
+    const link_msg = {
+        content: `<p><a href="http://chat.zulip.org">chat.zulip.org</a></p>`,
+    };
+
+    const non_img_attachment_msg = {
+        content: `<p><a href="/user_uploads/randompath/attachment.ext">attachment.ext</a></p>`,
+    };
+
+    const no_has_filter_matching_msg = {
+        content: "<p>Testing</p>",
+    };
+
+    predicate = get_predicate([['has', 'non_valid_operand']]);
+    assert(!predicate(img_msg));
+    assert(!predicate(non_img_attachment_msg));
+    assert(!predicate(link_msg));
+    assert(!predicate(no_has_filter_matching_msg));
+
+    // HTML content of message is used to determine if image have link, image or attachment.
+    // We are using jquery to parse the html and find existence of relevant tags/elements.
+    // In tests we need to stub the calls to jquery so using zjquery's .set_find_results method.
+    const has_link = get_predicate([['has', 'link']]);
+    $(img_msg.content).set_find_results("a", [$("<a>")]);
+    assert(has_link(img_msg));
+    $(non_img_attachment_msg.content).set_find_results("a", [$("<a>")]);
+    assert(has_link(non_img_attachment_msg));
+    $(link_msg.content).set_find_results("a", [$("<a>")]);
+    assert(has_link(link_msg));
+    $(no_has_filter_matching_msg.content).set_find_results("a", false);
+    assert(!has_link(no_has_filter_matching_msg));
+
+    const has_attachment = get_predicate([['has', 'attachment']]);
+    $(img_msg.content).set_find_results("a[href^='/user_uploads']", [$("<a>")]);
+    assert(has_attachment(img_msg));
+    $(non_img_attachment_msg.content).set_find_results("a[href^='/user_uploads']", [$("<a>")]);
+    assert(has_attachment(non_img_attachment_msg));
+    $(link_msg.content).set_find_results("a[href^='/user_uploads']", false);
+    assert(!has_attachment(link_msg));
+    $(no_has_filter_matching_msg.content).set_find_results("a[href^='/user_uploads']", false);
+    assert(!has_attachment(no_has_filter_matching_msg));
+
+    const has_image = get_predicate([['has', 'image']]);
+    $(img_msg.content).set_find_results(".message_inline_image", [$("<img>")]);
+    assert(has_image(img_msg));
+    $(non_img_attachment_msg.content).set_find_results(".message_inline_image", false);
+    assert(!has_image(non_img_attachment_msg));
+    $(link_msg.content).set_find_results(".message_inline_image", false);
+    assert(!has_image(link_msg));
+    $(no_has_filter_matching_msg.content).set_find_results(".message_inline_image", false);
+    assert(!has_image(no_has_filter_matching_msg));
+
 });
 
 run_test('negated_predicates', () => {
@@ -1216,26 +1276,26 @@ run_test('term_type', () => {
 
     assert_term_sort(
         ['topic', 'stream', 'sender'],
-        ['stream', 'topic', 'sender']
+        ['stream', 'topic', 'sender'],
     );
 
     assert_term_sort(
         ['has-link', 'near', 'is-unread', 'pm-with'],
-        ['pm-with', 'near', 'is-unread', 'has-link']
+        ['pm-with', 'near', 'is-unread', 'has-link'],
     );
 
     assert_term_sort(
         ['bogus', 'stream', 'topic'],
-        ['stream', 'topic', 'bogus']
+        ['stream', 'topic', 'bogus'],
     );
     assert_term_sort(
         ['stream', 'topic', 'stream'],
-        ['stream', 'stream', 'topic']
+        ['stream', 'stream', 'topic'],
     );
 
     assert_term_sort(
         ['search', 'streams-public'],
-        ['streams-public', 'search']
+        ['streams-public', 'search'],
     );
 
     const terms = [
@@ -1318,6 +1378,15 @@ function make_private_sub(name, stream_id) {
     global.stream_data.add_sub(sub);
 }
 
+function make_web_public_sub(name, stream_id) {
+    const sub = {
+        name: name,
+        stream_id: stream_id,
+        is_web_public: true,
+    };
+    global.stream_data.add_sub(sub);
+}
+
 run_test('navbar_helpers', () => {
     // make sure title has names separated with correct delimiters
     function properly_separated_names(names) {
@@ -1329,7 +1398,7 @@ run_test('navbar_helpers', () => {
         const filter = new Filter(test_case.operator);
         assert.equal(
             filter.generate_redirect_url(),
-            test_case.redirect_url_with_search
+            test_case.redirect_url_with_search,
         );
     }
 
@@ -1366,9 +1435,17 @@ run_test('navbar_helpers', () => {
         { operator: 'stream', operand: 'foo' },
         { operator: 'topic', operand: 'bar' },
     ];
+    // foo stream exists
     const stream_operator = [{ operator: 'stream', operand: 'foo'}];
     make_private_sub('psub', '22');
     const private_stream_operator = [{ operator: 'stream', operand: 'psub'}];
+    make_web_public_sub('webPublicSub', '12'); // capitalized just to try be tricky and robust.
+    const web_public_stream_operator = [{ operator: 'stream', operand: 'webPublicSub'}];
+    const non_existent_stream = [{ operator: 'stream', operand: 'Elephant' }];
+    const non_existent_stream_topic = [
+        { operator: 'stream', operand: 'Elephant' },
+        { operator: 'topic', operand: 'pink' },
+    ];
     const pm_with = [{ operator: 'pm-with', operand: 'joe@example.com'}];
     const group_pm = [{ operator: 'pm-with', operand: 'joe@example.com,STEVE@foo.com'}];
     const group_pm_including_missing_person = [{ operator: 'pm-with', operand: 'joe@example.com,STEVE@foo.com,sally@doesnotexist.com'}];
@@ -1431,11 +1508,32 @@ run_test('navbar_helpers', () => {
             redirect_url_with_search: '/#narrow/stream/42-Foo',
         },
         {
+            operator: non_existent_stream,
+            is_common_narrow: true,
+            icon: 'question-circle-o',
+            title: 'translated: Unknown stream',
+            redirect_url_with_search: '#',
+        },
+        {
+            operator: non_existent_stream_topic,
+            is_common_narrow: true,
+            icon: 'question-circle-o',
+            title: 'translated: Unknown stream',
+            redirect_url_with_search: '#',
+        },
+        {
             operator: private_stream_operator,
             is_common_narrow: true,
             icon: 'lock',
             title: 'psub',
             redirect_url_with_search: '/#narrow/stream/22-psub',
+        },
+        {
+            operator: web_public_stream_operator,
+            is_common_narrow: true,
+            icon: 'globe',
+            title: 'webPublicSub',
+            redirect_url_with_search: '/#narrow/stream/12-webPublicSub',
         },
         {
             operator: pm_with,
@@ -1460,7 +1558,7 @@ run_test('navbar_helpers', () => {
         },
     ];
 
-    test_cases.forEach(test_case => {
+    test_cases.forEach((test_case) => {
         test_helpers(test_case);
     });
 
@@ -1481,7 +1579,7 @@ run_test('navbar_helpers', () => {
         },
     ];
 
-    redirect_edge_cases.forEach(test_case => {
+    redirect_edge_cases.forEach((test_case) => {
         test_redirect_url_with_search(test_case);
     });
 
@@ -1502,7 +1600,7 @@ run_test('navbar_helpers', () => {
     let filter = new Filter(complex_operators_test_case.operator);
     assert.equal(
         filter.generate_redirect_url(),
-        complex_operators_test_case.redirect_url
+        complex_operators_test_case.redirect_url,
     );
     assert.equal(filter.is_common_narrow(), false);
 
@@ -1529,7 +1627,7 @@ run_test('navbar_helpers', () => {
     filter = new Filter(default_redirect.operator);
     assert.equal(
         filter.generate_redirect_url(),
-        default_redirect.redirect_url
+        default_redirect.redirect_url,
     );
 });
 

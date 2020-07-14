@@ -69,7 +69,7 @@ function fade_messages() {
     }
 
     // Defer updating all message groups so that the compose box can open sooner
-    setTimeout(function (expected_msg_list, expected_recipient) {
+    setTimeout((expected_msg_list, expected_recipient) => {
         const all_groups = rows.get_table(current_msg_list.table_name).find(".recipient_row");
 
         if (current_msg_list !== expected_msg_list ||
@@ -92,22 +92,21 @@ function fade_messages() {
     }, 0, current_msg_list, compose_state.private_message_recipient());
 }
 
-exports.would_receive_message = function (email) {
+exports.would_receive_message = function (user_id) {
     if (focused_recipient.type === 'stream') {
-        const user = people.get_active_user_for_email(email);
-        const sub = stream_data.get_sub(focused_recipient.stream);
-        if (!sub || !user) {
-            // If the stream or user isn't valid, there is no risk of a mix
+        const sub = stream_data.get_sub_by_id(focused_recipient.stream_id);
+        if (!sub) {
+            // If the stream isn't valid, there is no risk of a mix
             // yet, so we sort of "lie" and say they would receive a
             // message.
             return true;
         }
 
-        return stream_data.is_user_subscribed(focused_recipient.stream, user.user_id);
+        return stream_data.is_user_subscribed(focused_recipient.stream_id, user_id);
     }
 
     // PM, so check if the given email is in the recipients list.
-    return util.is_pm_recipient(email, focused_recipient);
+    return util.is_pm_recipient(user_id, focused_recipient);
 };
 
 const user_fade_config = {
@@ -124,8 +123,7 @@ const user_fade_config = {
 
 function update_user_row_when_fading(li, conf) {
     const user_id = conf.get_user_id(li);
-    const email = people.get_by_user_id(user_id).email;
-    const would_receive = exports.would_receive_message(email);
+    const would_receive = exports.would_receive_message(user_id);
 
     if (would_receive || people.is_my_user_id(user_id)) {
         conf.unfade(li);
@@ -156,7 +154,7 @@ function want_normal_display() {
     if (focused_recipient.type === "stream") {
         // If a stream doesn't exist, there is no real chance of a mix, so fading
         // is just noise to the user.
-        if (!stream_data.get_sub(focused_recipient.stream)) {
+        if (!stream_data.get_sub_by_id(focused_recipient.stream_id)) {
             return true;
         }
 
@@ -240,12 +238,5 @@ exports.update_rendered_message_groups = function (message_groups, get_element) 
         change_fade_state(elt, should_fade);
     }
 };
-
-exports.initialize = function () {
-    $(document).on('peer_subscribe.zulip peer_unsubscribe.zulip', function () {
-        exports.update_faded_users();
-    });
-};
-
 
 window.compose_fade = exports;

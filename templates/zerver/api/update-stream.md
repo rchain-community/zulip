@@ -1,4 +1,4 @@
-# Update stream
+# Update a stream
 
 {generate_api_description(/streams/{stream_id}:patch)}
 
@@ -15,7 +15,7 @@
 
 {end_tabs}
 
-## Arguments
+## Parameters
 
 {generate_api_arguments_table|zulip.yaml|/streams/{stream_id}:patch}
 

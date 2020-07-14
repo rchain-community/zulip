@@ -39,26 +39,20 @@ class GitlabHookTests(WebhookTestCase):
     def test_push_multiple_committers_with_others(self) -> None:
         expected_topic = "my-awesome-project / tomek"
         commit_info = "* b ([eb6ae1e](https://gitlab.com/tomaszkolek0/my-awesome-project/commit/eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9))\n"
-        expected_message = "Tomasz Kolek [pushed](https://gitlab.com/tomaszkolek0/my-awesome-project/compare/5fcdd5551fc3085df79bece2c32b1400802ac407...eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9) 7 commits to branch tomek. Commits by Ben (3), baxterthehacker (2), James (1) and others (1).\n\n{}* b ([eb6ae1e](https://gitlab.com/tomaszkolek0/my-awesome-project/commit/eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9))".format(commit_info * 6)
+        expected_message = f"Tomasz Kolek [pushed](https://gitlab.com/tomaszkolek0/my-awesome-project/compare/5fcdd5551fc3085df79bece2c32b1400802ac407...eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9) 7 commits to branch tomek. Commits by Ben (3), baxterthehacker (2), James (1) and others (1).\n\n{commit_info * 6}* b ([eb6ae1e](https://gitlab.com/tomaszkolek0/my-awesome-project/commit/eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9))"
         self.send_and_test_stream_message('push_hook__push_multiple_committers_with_others', expected_topic, expected_message)
 
     def test_push_commits_more_than_limit_event_message(self) -> None:
         expected_topic = "my-awesome-project / tomek"
         commits_info = '* b ([66abd2d](https://gitlab.com/tomaszkolek0/my-awesome-project/commit/66abd2da28809ffa128ed0447965cf11d7f863a7))\n'
-        expected_message = "Tomasz Kolek [pushed](https://gitlab.com/tomaszkolek0/my-awesome-project/compare/5fcdd5551fc3085df79bece2c32b1400802ac407...eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9) 50 commits to branch tomek.\n\n{}[and {} more commit(s)]".format(
-            commits_info * COMMITS_LIMIT,
-            50 - COMMITS_LIMIT,
-        )
+        expected_message = f"Tomasz Kolek [pushed](https://gitlab.com/tomaszkolek0/my-awesome-project/compare/5fcdd5551fc3085df79bece2c32b1400802ac407...eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9) 50 commits to branch tomek.\n\n{commits_info * COMMITS_LIMIT}[and {50 - COMMITS_LIMIT} more commit(s)]"
         self.send_and_test_stream_message('push_hook__push_commits_more_than_limit', expected_topic, expected_message)
 
     def test_push_commits_more_than_limit_message_filtered_by_branches(self) -> None:
         self.url = self.build_webhook_url(branches='master,tomek')
         expected_topic = "my-awesome-project / tomek"
         commits_info = '* b ([66abd2d](https://gitlab.com/tomaszkolek0/my-awesome-project/commit/66abd2da28809ffa128ed0447965cf11d7f863a7))\n'
-        expected_message = "Tomasz Kolek [pushed](https://gitlab.com/tomaszkolek0/my-awesome-project/compare/5fcdd5551fc3085df79bece2c32b1400802ac407...eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9) 50 commits to branch tomek.\n\n{}[and {} more commit(s)]".format(
-            commits_info * COMMITS_LIMIT,
-            50 - COMMITS_LIMIT,
-        )
+        expected_message = f"Tomasz Kolek [pushed](https://gitlab.com/tomaszkolek0/my-awesome-project/compare/5fcdd5551fc3085df79bece2c32b1400802ac407...eb6ae1e591e0819dc5bf187c6bfe18ec065a80e9) 50 commits to branch tomek.\n\n{commits_info * COMMITS_LIMIT}[and {50 - COMMITS_LIMIT} more commit(s)]"
         self.send_and_test_stream_message('push_hook__push_commits_more_than_limit', expected_topic, expected_message)
 
     def test_remove_branch_event_message(self) -> None:
@@ -431,7 +425,7 @@ class GitlabHookTests(WebhookTestCase):
             'build_created',
             expected_topic,
             expected_message,
-            HTTP_X_GITLAB_EVENT="Job Hook"
+            HTTP_X_GITLAB_EVENT="Job Hook",
         )
 
     def test_build_started_event_message(self) -> None:
@@ -442,7 +436,7 @@ class GitlabHookTests(WebhookTestCase):
             'build_started',
             expected_topic,
             expected_message,
-            HTTP_X_GITLAB_EVENT="Job Hook"
+            HTTP_X_GITLAB_EVENT="Job Hook",
         )
 
     def test_build_succeeded_event_message(self) -> None:
@@ -453,7 +447,7 @@ class GitlabHookTests(WebhookTestCase):
             'build_succeeded',
             expected_topic,
             expected_message,
-            HTTP_X_GITLAB_EVENT="Job Hook"
+            HTTP_X_GITLAB_EVENT="Job Hook",
         )
 
     def test_build_created_event_message_legacy_event_name(self) -> None:
@@ -464,7 +458,7 @@ class GitlabHookTests(WebhookTestCase):
             'build_created',
             expected_topic,
             expected_message,
-            HTTP_X_GITLAB_EVENT="Build Hook"
+            HTTP_X_GITLAB_EVENT="Build Hook",
         )
 
     def test_build_started_event_message_legacy_event_name(self) -> None:
@@ -475,7 +469,7 @@ class GitlabHookTests(WebhookTestCase):
             'build_started',
             expected_topic,
             expected_message,
-            HTTP_X_GITLAB_EVENT="Build Hook"
+            HTTP_X_GITLAB_EVENT="Build Hook",
         )
 
     def test_build_succeeded_event_message_legacy_event_name(self) -> None:
@@ -486,37 +480,47 @@ class GitlabHookTests(WebhookTestCase):
             'build_succeeded',
             expected_topic,
             expected_message,
-            HTTP_X_GITLAB_EVENT="Build Hook"
+            HTTP_X_GITLAB_EVENT="Build Hook",
+        )
+
+    def test_pipeline_succeeded_with_artifacts_event_message(self) -> None:
+        expected_topic = "onlysomeproject / test/links-in-zulip-pipeline-message"
+        expected_message = "[Pipeline (22668)](https://gitlab.example.com/group1/onlysomeproject/pipelines/22668) changed status to success with build(s):\n* [cleanup:cleanup docker image](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58592) - success\n* [pages](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58591) - success\n  * built artifact: *artifacts.zip* [[Browse](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58591/artifacts/browse)|[Download](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58591/artifacts/download)]\n* [black+pytest:future environment](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58590) - success\n* [docs:anaconda environment](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58589) - success\n  * built artifact: *sphinx-docs.zip* [[Browse](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58589/artifacts/browse)|[Download](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58589/artifacts/download)]\n* [pytest:current environment](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58588) - success\n* [black:current environment](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58587) - success\n* [setup:docker image](https://gitlab.example.com/group1/onlysomeproject/-/jobs/58586) - success."
+
+        self.send_and_test_stream_message(
+            'pipeline_hook__pipline_succeeded_with_artifacts',
+            expected_topic,
+            expected_message,
         )
 
     def test_pipeline_succeeded_event_message(self) -> None:
         expected_topic = "my-awesome-project / master"
-        expected_message = "[Pipeline](https://gitlab.com/TomaszKolek/my-awesome-project/pipelines/4414206) changed status to success with build(s):\n* [job_name2](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541113) - success\n* [job_name](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541112) - success."
+        expected_message = "[Pipeline (4414206)](https://gitlab.com/TomaszKolek/my-awesome-project/pipelines/4414206) changed status to success with build(s):\n* [job_name2](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541113) - success\n* [job_name](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541112) - success."
 
         self.send_and_test_stream_message(
             'pipeline_hook__pipeline_succeeded',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def test_pipeline_started_event_message(self) -> None:
         expected_topic = "my-awesome-project / master"
-        expected_message = "[Pipeline](https://gitlab.com/TomaszKolek/my-awesome-project/pipelines/4414206) started with build(s):\n* [job_name](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541112) - running\n* [job_name2](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541113) - pending."
+        expected_message = "[Pipeline (4414206)](https://gitlab.com/TomaszKolek/my-awesome-project/pipelines/4414206) started with build(s):\n* [job_name](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541112) - running\n* [job_name2](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541113) - pending."
 
         self.send_and_test_stream_message(
             'pipeline_hook__pipeline_started',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def test_pipeline_pending_event_message(self) -> None:
         expected_topic = "my-awesome-project / master"
-        expected_message = "[Pipeline](https://gitlab.com/TomaszKolek/my-awesome-project/pipelines/4414206) was created with build(s):\n* [job_name2](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541113) - pending\n* [job_name](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541112) - created."
+        expected_message = "[Pipeline (4414206)](https://gitlab.com/TomaszKolek/my-awesome-project/pipelines/4414206) was created with build(s):\n* [job_name2](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541113) - pending\n* [job_name](https://gitlab.com/TomaszKolek/my-awesome-project/-/jobs/4541112) - created."
 
         self.send_and_test_stream_message(
             'pipeline_hook__pipeline_pending',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     def test_issue_type_test_payload(self) -> None:
@@ -526,7 +530,7 @@ class GitlabHookTests(WebhookTestCase):
         self.send_and_test_stream_message(
             'test_hook__issue_test_payload',
             expected_topic,
-            expected_message
+            expected_message,
         )
 
     @patch('zerver.lib.webhooks.common.check_send_webhook_message')

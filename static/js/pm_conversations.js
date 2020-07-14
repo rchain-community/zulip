@@ -53,9 +53,7 @@ exports.recent = (function () {
             conversation.max_message_id = message_id;
         }
 
-        recent_private_messages.sort(function (a, b) {
-            return b.max_message_id - a.max_message_id;
-        });
+        recent_private_messages.sort((a, b) => b.max_message_id - a.max_message_id);
     };
 
     self.get = function () {
@@ -67,7 +65,7 @@ exports.recent = (function () {
     self.get_strings = function () {
         // returns array of structs with user_ids_string and
         // message_id
-        return recent_private_messages.map(conversation => conversation.user_ids_string);
+        return recent_private_messages.map((conversation) => conversation.user_ids_string);
     };
 
     self.initialize = function (params) {

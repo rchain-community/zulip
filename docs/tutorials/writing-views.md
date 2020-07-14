@@ -20,7 +20,7 @@ A view in Zulip is everything that helps implement a server endpoint.
 Every path that the Zulip server supports (doesn't show a 404 page
 for) is a view. The obvious ones are those you can visit in your
 browser, for example
-[/integrations](https://zulipchat.com/integrations/), which shows the
+[/integrations](https://zulip.com/integrations/), which shows the
 integration documentation. These paths show up in the address bar of
 the browser. There are other views that are only seen by software,
 namely the API views. They are used to build the various clients that
@@ -50,8 +50,8 @@ to `i18n_urls` in `zproject/urls.py`
 ```diff
      i18n_urls = [
      ...
-+    url(r'^quote-of-the-day/$', TemplateView.as_view(template_name='zerver/qotd.html')),
-+    url(r'^postcards/$', 'zerver.views.postcards'),
++    path('quote-of-the-day', TemplateView.as_view(template_name='zerver/qotd.html')),
++    path('postcards', 'zerver.views.postcards'),
 ]
 ```
 
@@ -266,7 +266,7 @@ def update_realm(
 ):
     realm = user_profile.realm
     # ...
-            do_set_realm_property(realm, k, v)
+            do_set_realm_property(realm, k, v, acting_user=user_profile)
     # ...
 ```
 
@@ -324,9 +324,8 @@ preferable from a security perspective, and it is generally a good idea
 to make your feature available to other clients, especially the mobile
 clients.
 
-These endpoints make use of some older authentication decorators,
-`authenticated_json_api_view`, `authenticated_json_post_view`, and
-`authenticated_json_view`, so you may see them in the code.
+These endpoints make use the older authentication decorator
+`authenticated_json_view`, so you may see it in the code.
 
 ## Incoming webhook integrations
 

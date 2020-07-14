@@ -1,8 +1,8 @@
 from typing import Any
 
-from django.views.generic import TemplateView
 from django.conf.urls import include
 from django.urls import path
+from django.views.generic import TemplateView
 
 import corporate.views
 from zerver.lib.rest import rest_dispatch
@@ -22,6 +22,8 @@ i18n_urlpatterns: Any = [
 v1_api_and_json_patterns = [
     path('billing/upgrade', rest_dispatch,
          {'POST': 'corporate.views.upgrade'}),
+    path('billing/sponsorship', rest_dispatch,
+         {'POST': 'corporate.views.sponsorship'}),
     path('billing/plan/change', rest_dispatch,
          {'POST': 'corporate.views.change_plan_status'}),
     path('billing/sources/change', rest_dispatch,

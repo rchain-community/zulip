@@ -162,7 +162,7 @@ exports.poll_data_holder = function (is_my_poll, question, options) {
 
     // function to check whether option already exists
     self.is_option_present = function (data, latest_option) {
-        return data.some(el => el.option === latest_option);
+        return data.some((el) => el.option === latest_option);
     };
 
     // function to add all options added along with the /poll command
@@ -284,12 +284,12 @@ exports.activate = function (opts) {
         const html = render_widgets_poll_widget();
         elem.html(html);
 
-        elem.find('input.poll-question').on('keyup', function (e) {
+        elem.find('input.poll-question').on('keyup', (e) => {
             e.stopPropagation();
             update_edit_controls();
         });
 
-        elem.find('input.poll-question').on('keydown', function (e) {
+        elem.find('input.poll-question').on('keydown', (e) => {
             e.stopPropagation();
 
             if (e.keyCode === 13) {
@@ -303,27 +303,27 @@ exports.activate = function (opts) {
             }
         });
 
-        elem.find('.poll-edit-question').on('click', function (e) {
+        elem.find('.poll-edit-question').on('click', (e) => {
             e.stopPropagation();
             start_editing();
         });
 
-        elem.find("button.poll-question-check").on('click', function (e) {
+        elem.find("button.poll-question-check").on('click', (e) => {
             e.stopPropagation();
             submit_question();
         });
 
-        elem.find("button.poll-question-remove").on('click', function (e) {
+        elem.find("button.poll-question-remove").on('click', (e) => {
             e.stopPropagation();
             abort_edit();
         });
 
-        elem.find("button.poll-option").on('click', function (e) {
+        elem.find("button.poll-option").on('click', (e) => {
             e.stopPropagation();
             submit_option();
         });
 
-        elem.find('input.poll-option').on('keydown', function (e) {
+        elem.find('input.poll-option').on('keydown', (e) => {
             e.stopPropagation();
 
             if (e.keyCode === 13) {
@@ -345,7 +345,7 @@ exports.activate = function (opts) {
         const html = render_widgets_poll_widget_results(widget_data);
         elem.find('ul.poll-widget').html(html);
 
-        elem.find("button.poll-vote").off('click').on('click', function (e) {
+        elem.find("button.poll-vote").off('click').on('click', (e) => {
             e.stopPropagation();
             const key = $(e.target).attr('data-key');
             submit_vote(key);

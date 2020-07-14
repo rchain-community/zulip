@@ -11,11 +11,9 @@ exports.get_message_events = function (message) {
         return;
     }
 
-    message.submessages.sort(function (m1, m2) {
-        return parseInt(m1.id, 10) - parseInt(m2.id, 10);
-    });
+    message.submessages.sort((m1, m2) => parseInt(m1.id, 10) - parseInt(m2.id, 10));
 
-    const events = message.submessages.map(obj => ({
+    const events = message.submessages.map((obj) => ({
         sender_id: obj.sender_id,
         data: JSON.parse(obj.content),
     }));
@@ -90,7 +88,7 @@ exports.update_message = function (submsg) {
         message.submessages = [];
     }
 
-    const existing = message.submessages.find(sm => sm.id === submsg.id);
+    const existing = message.submessages.find((sm) => sm.id === submsg.id);
 
     if (existing !== undefined) {
         blueslip.warn("Got submessage multiple times: " + submsg.id);

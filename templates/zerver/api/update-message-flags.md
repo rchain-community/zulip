@@ -1,4 +1,4 @@
-# Update a message's flags
+# Update personal message flags
 
 {generate_api_description(/messages/flags:post)}
 
@@ -12,29 +12,8 @@
 {tab|js}
 
 More examples and documentation can be found [here](https://github.com/zulip/zulip-js).
-```js
-const zulip = require('zulip-js');
 
-// Pass the path to your zuliprc file here.
-const config = {
-    zuliprc: 'zuliprc',
-};
-
-const flagParams = {
-    messages: [4, 8, 15],
-    flag: 'read',
-};
-
-zulip(config).then((client) => {
-    // Add the "read" flag to messages with IDs 4, 8 and 15
-    client.messages.flags.add(flagParams)
-    .then(console.log)
-
-    // Remove the "read" flag from said messages
-    client.messages.flags.remove(flagParams)
-    .then(console.log);
-});
-```
+{generate_code_example(javascript)|/messages/flags:post|example}
 
 {tab|curl}
 
@@ -42,7 +21,7 @@ zulip(config).then((client) => {
 
 {end_tabs}
 
-## Arguments
+## Parameters
 
 {generate_api_arguments_table|zulip.yaml|/messages/flags:post}
 

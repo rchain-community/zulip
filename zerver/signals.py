@@ -3,8 +3,7 @@ from typing import Any, Optional
 from django.conf import settings
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.dispatch import receiver
-from django.utils.timezone import \
-    get_current_timezone_name as timezone_get_current_timezone_name
+from django.utils.timezone import get_current_timezone_name as timezone_get_current_timezone_name
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import ugettext as _
 
@@ -12,8 +11,8 @@ from confirmation.models import one_click_unsubscribe_link
 from zerver.lib.actions import do_set_zoom_token
 from zerver.lib.queue import queue_json_publish
 from zerver.lib.send_email import FromAddress
-from zerver.models import UserProfile
 from zerver.lib.timezone import get_timezone
+from zerver.models import UserProfile
 
 JUST_CREATED_THRESHOLD = 60
 
@@ -87,7 +86,7 @@ def email_on_new_login(sender: Any, user: UserProfile, request: Any, **kwargs: A
             hhmm_string = local_time.strftime('%H:%M')
         else:
             hhmm_string = local_time.strftime('%I:%M%p')
-        context['login_time'] = local_time.strftime('%A, %B %d, %Y at {} %Z'.format(hhmm_string))
+        context['login_time'] = local_time.strftime(f'%A, %B %d, %Y at {hhmm_string} %Z')
         context['device_ip'] = request.META.get('REMOTE_ADDR') or _("Unknown IP address")
         context['device_os'] = get_device_os(user_agent) or _("an unknown operating system")
         context['device_browser'] = get_device_browser(user_agent) or _("An unknown browser")

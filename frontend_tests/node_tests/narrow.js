@@ -17,7 +17,7 @@ set_global('resize', {
 zrequire('narrow');
 
 function set_filter(operators) {
-    operators = operators.map(op => ({
+    operators = operators.map((op) => ({
         operator: op[0],
         operand: op[1],
     }));
@@ -74,7 +74,7 @@ run_test('show_empty_narrow_message', () => {
     assert($('#empty_narrow_message').visible());
     assert.equal(
         $('#left_bar_compose_reply_button_big').attr('title'),
-        'translated: There are no messages to reply to.'
+        'translated: There are no messages to reply to.',
     );
 
     // for non-existent or private stream

@@ -12,19 +12,8 @@
 {tab|js}
 
 More examples and documentation can be found [here](https://github.com/zulip/zulip-js).
-```js
-const zulip = require('zulip-js');
 
-// Pass the path to your zuliprc file here.
-const config = {
-    zuliprc: 'zuliprc',
-};
-
-zulip(config).then((client) => {
-    // Get the ID of a given stream
-    client.streams.getStreamId('Denmark').then(console.log);
-});
-```
+{generate_code_example(javascript)|/get_stream_id:get|example}
 
 {tab|curl}
 
@@ -32,9 +21,9 @@ zulip(config).then((client) => {
 
 {end_tabs}
 
-## Arguments
+## Parameters
 
-**Note**: The following arguments are all URL query parameters.
+**Note**: The following parameters are all URL query parameters.
 
 {generate_api_arguments_table|zulip.yaml|/get_stream_id:get}
 

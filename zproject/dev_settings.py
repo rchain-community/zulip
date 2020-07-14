@@ -1,9 +1,10 @@
-# For the Dev VM environment, we use the same settings as the
-# sample prod_settings.py file, with a few exceptions.
-from .prod_settings_template import *
 import os
 import pwd
-from typing import Set
+from typing import Optional, Set, Tuple
+
+from scripts.lib.zulip_tools import deport
+
+ZULIP_ADMINISTRATOR = "desdemona+admin@zulip.com"
 
 # We want LOCAL_UPLOADS_DIR to be an absolute path so that code can
 # chdir without having problems accessing it.  Unfortunately, this
@@ -30,7 +31,7 @@ if external_host_env is None:
         # Serve the main dev realm at the literal name "localhost",
         # so it works out of the box even when not on the Internet.
         REALM_HOSTS = {
-            'zulip': 'localhost:9991'
+            'zulip': 'localhost:9991',
         }
 else:
     EXTERNAL_HOST = external_host_env
@@ -38,11 +39,13 @@ else:
         'zulip': EXTERNAL_HOST,
     }
 
+EXTERNAL_HOST_WITHOUT_PORT = deport(EXTERNAL_HOST)
+
 ALLOWED_HOSTS = ['*']
 
 # Uncomment extra backends if you want to test with them.  Note that
 # for Google and GitHub auth you'll need to do some pre-setup.
-AUTHENTICATION_BACKENDS = (
+AUTHENTICATION_BACKENDS: Tuple[str, ...] = (
     'zproject.backends.DevAuthBackend',
     'zproject.backends.EmailAuthBackend',
     'zproject.backends.GitHubAuthBackend',
@@ -50,14 +53,16 @@ AUTHENTICATION_BACKENDS = (
     'zproject.backends.SAMLAuthBackend',
     # 'zproject.backends.AzureADAuthBackend',
     'zproject.backends.GitLabAuthBackend',
+    'zproject.backends.AppleAuthBackend',
 )
 
 EXTERNAL_URI_SCHEME = "http://"
-EMAIL_GATEWAY_PATTERN = "%s@" + EXTERNAL_HOST.split(':')[0]
+EMAIL_GATEWAY_PATTERN = "%s@" + EXTERNAL_HOST_WITHOUT_PORT
 NOTIFICATION_BOT = "notification-bot@zulip.com"
 ERROR_BOT = "error-bot@zulip.com"
 EMAIL_GATEWAY_BOT = "emailgateway@zulip.com"
 PHYSICAL_ADDRESS = "Zulip Headquarters, 123 Octo Stream, South Pacific Ocean"
+STAFF_SUBDOMAIN = "zulip"
 EXTRA_INSTALLED_APPS = ["zilencer", "analytics", "corporate"]
 # Disable Camo in development
 CAMO_URI = ''
@@ -71,10 +76,10 @@ SAVE_FRONTEND_STACKTRACES = True
 EVENT_LOGS_ENABLED = True
 STAGING_ERROR_NOTIFICATIONS = True
 
-SYSTEM_ONLY_REALMS = set()  # type: Set[str]
+SYSTEM_ONLY_REALMS: Set[str] = set()
 USING_PGROONGA = True
 # Flush cache after migration.
-POST_MIGRATION_CACHE_FLUSHING = True  # type: bool
+POST_MIGRATION_CACHE_FLUSHING = True
 
 # Don't require anything about password strength in development
 PASSWORD_MIN_LENGTH = 0
@@ -93,7 +98,7 @@ TWO_FACTOR_SMS_GATEWAY = 'two_factor.gateways.fake.Fake'
 SENDFILE_BACKEND = 'django_sendfile.backends.development'
 
 # Set this True to send all hotspots in development
-ALWAYS_SEND_ALL_HOTSPOTS = False  # type: bool
+ALWAYS_SEND_ALL_HOTSPOTS = False
 
 # FAKE_LDAP_MODE supports using a fake LDAP database in the
 # development environment, without needing an LDAP server!
@@ -107,12 +112,13 @@ ALWAYS_SEND_ALL_HOTSPOTS = False  # type: bool
 #   (C) If LDAP usernames are completely unrelated to email addresses.
 #
 # Fake LDAP data has e.g. ("ldapuser1", "ldapuser1@zulip.com") for username/email.
-FAKE_LDAP_MODE = None  # type: Optional[str]
+FAKE_LDAP_MODE: Optional[str] = None
 # FAKE_LDAP_NUM_USERS = 8
 
 if FAKE_LDAP_MODE:
     import ldap
     from django_auth_ldap.config import LDAPSearch
+
     # To understand these parameters, read the docs in
     # prod_settings_template.py and on ReadTheDocs.
     LDAP_APPEND_DOMAIN = None

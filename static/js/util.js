@@ -62,13 +62,13 @@ exports.same_stream_and_topic = function util_same_stream_and_topic(a, b) {
         lower_same(a.topic, b.topic);
 };
 
-exports.is_pm_recipient = function (email, message) {
-    const recipients = message.reply_to.toLowerCase().split(',');
-    return recipients.includes(email.toLowerCase());
+exports.is_pm_recipient = function (user_id, message) {
+    const recipients = message.to_user_ids.split(',');
+    return recipients.includes(user_id.toString());
 };
 
 exports.extract_pm_recipients = function (recipients) {
-    return recipients.split(/\s*[,;]\s*/).filter(recipient => recipient.trim() !== "");
+    return recipients.split(/\s*[,;]\s*/).filter((recipient) => recipient.trim() !== "");
 };
 
 exports.same_recipient = function util_same_recipient(a, b) {
@@ -102,9 +102,9 @@ exports.normalize_recipients = function (recipients) {
     // Converts a string listing emails of message recipients
     // into a canonical formatting: emails sorted ASCIIbetically
     // with exactly one comma and no spaces between each.
-    recipients = recipients.split(',').map(s => s.trim());
-    recipients = recipients.map(s => s.toLowerCase());
-    recipients = recipients.filter(s => s.length > 0);
+    recipients = recipients.split(',').map((s) => s.trim());
+    recipients = recipients.map((s) => s.toLowerCase());
+    recipients = recipients.filter((s) => s.length > 0);
     recipients.sort();
     return recipients.join(',');
 };
@@ -223,9 +223,7 @@ exports.sorted_ids = function (ids) {
     // This mapping makes sure we are using ints, and
     // it also makes sure we don't mutate the list.
     let id_list = ids.map(to_int);
-    id_list.sort(function (a, b) {
-        return a - b;
-    });
+    id_list.sort((a, b) => a - b);
     id_list = _.uniq(id_list, true);
 
     return id_list;

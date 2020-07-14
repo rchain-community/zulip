@@ -3,7 +3,7 @@ from typing import Any
 
 from django.core.management.base import CommandError
 
-from zerver.lib.actions import do_change_user_role, do_change_is_api_super_user
+from zerver.lib.actions import do_change_is_api_super_user, do_change_user_role
 from zerver.lib.management import ZulipBaseCommand
 from zerver.models import UserProfile
 
@@ -29,7 +29,7 @@ ONLY perform this on customer request from an authorized person.
                             dest='permission',
                             action="store",
                             default='administer',
-                            choices=['administer', 'api_super_user', ],
+                            choices=['administer', 'api_super_user'],
                             help='Permission to grant/remove.')
         parser.add_argument('email', metavar='<email>', type=str,
                             help="email of user to knight")
@@ -50,10 +50,10 @@ ONLY perform this on customer request from an authorized person.
                     if options['permission'] == "api_super_user":
                         do_change_is_api_super_user(user, True)
                     elif options['permission'] == "administer":
-                        do_change_user_role(user, UserProfile.ROLE_REALM_ADMINISTRATOR)
+                        do_change_user_role(user, UserProfile.ROLE_REALM_ADMINISTRATOR, acting_user=None)
                     print("Done!")
                 else:
-                    print("Would have granted %s %s rights for %s" % (
+                    print("Would have granted {} {} rights for {}".format(
                           email, options['permission'], user.realm.string_id))
         else:
             if (user.is_realm_admin and options['permission'] == "administer" or
@@ -62,10 +62,10 @@ ONLY perform this on customer request from an authorized person.
                     if options['permission'] == "api_super_user":
                         do_change_is_api_super_user(user, False)
                     elif options['permission'] == "administer":
-                        do_change_user_role(user, UserProfile.ROLE_MEMBER)
+                        do_change_user_role(user, UserProfile.ROLE_MEMBER, acting_user=None)
                     print("Done!")
                 else:
-                    print("Would have removed %s's %s rights on %s" % (email, options['permission'],
-                                                                       user.realm.string_id))
+                    print("Would have removed {}'s {} rights on {}".format(email, options['permission'],
+                                                                           user.realm.string_id))
             else:
                 raise CommandError("User did not have permission for this realm!")

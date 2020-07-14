@@ -30,11 +30,9 @@ export function check_duplicate_ids() {
     const collisions = [];
     let total_collisions = 0;
 
-    Array.prototype.slice.call(document.querySelectorAll("*")).forEach(function (o) {
+    Array.prototype.slice.call(document.querySelectorAll("*")).forEach((o) => {
         if (o.id && ids.has(o.id)) {
-            const el = collisions.find(function (c) {
-                return c.id === o.id;
-            });
+            const el = collisions.find((c) => c.id === o.id);
 
             ids.add(o.id);
             total_collisions += 1;
@@ -107,7 +105,7 @@ IterationProfiler.prototype = {
         if (diff > 1) {
             this.sections.set(
                 "_rest_of_iteration",
-                (this.sections.get("_rest_of_iteration") || 0) + diff
+                (this.sections.get("_rest_of_iteration") || 0) + diff,
             );
         }
         this.last_time = now;

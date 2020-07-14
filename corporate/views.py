@@ -1,30 +1,48 @@
 import logging
 from decimal import Decimal
-import stripe
-from typing import Any, Dict, cast, Optional, Union
+from typing import Any, Dict, Optional, Union
+from urllib.parse import urlencode, urljoin, urlunsplit
 
+import stripe
+from django.conf import settings
 from django.core import signing
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
-from django.utils.timezone import now as timezone_now
-from django.utils.translation import ugettext as _
 from django.shortcuts import render
 from django.urls import reverse
-from django.conf import settings
+from django.utils.timezone import now as timezone_now
+from django.utils.translation import ugettext as _
 
-from zerver.decorator import zulip_login_required, require_billing_access
+from corporate.lib.stripe import (
+    DEFAULT_INVOICE_DAYS_UNTIL_DUE,
+    MAX_INVOICED_LICENSES,
+    MIN_INVOICED_LICENSES,
+    STRIPE_PUBLISHABLE_KEY,
+    BillingError,
+    do_change_plan_status,
+    do_replace_payment_source,
+    downgrade_now,
+    get_latest_seat_count,
+    make_end_of_cycle_updates_if_needed,
+    process_initial_upgrade,
+    renewal_amount,
+    sign_string,
+    start_of_next_billing_cycle,
+    stripe_get_customer,
+    unsign_string,
+    update_sponsorship_status,
+)
+from corporate.models import (
+    CustomerPlan,
+    get_current_plan_by_customer,
+    get_current_plan_by_realm,
+    get_customer_by_realm,
+)
+from zerver.decorator import require_billing_access, zulip_login_required
 from zerver.lib.request import REQ, has_request_variables
 from zerver.lib.response import json_error, json_success
-from zerver.lib.validator import check_string, check_int
-from zerver.models import UserProfile
-from corporate.lib.stripe import STRIPE_PUBLISHABLE_KEY, \
-    stripe_get_customer, get_latest_seat_count, \
-    process_initial_upgrade, sign_string, \
-    unsign_string, BillingError, do_change_plan_status, do_replace_payment_source, \
-    MIN_INVOICED_LICENSES, MAX_INVOICED_LICENSES, DEFAULT_INVOICE_DAYS_UNTIL_DUE, \
-    start_of_next_billing_cycle, renewal_amount, \
-    make_end_of_cycle_updates_if_needed, downgrade_now
-from corporate.models import CustomerPlan, get_current_plan_by_customer, \
-    get_customer_by_realm, get_current_plan_by_realm
+from zerver.lib.send_email import FromAddress, send_email
+from zerver.lib.validator import check_int, check_string
+from zerver.models import UserProfile, get_realm
 
 billing_logger = logging.getLogger('corporate.stripe')
 
@@ -70,14 +88,17 @@ def payment_method_string(stripe_customer: stripe.Customer) -> str:
     if stripe_source is None:  # nocoverage
         return _("No payment method on file")
     if stripe_source.object == "card":
-        return _("%(brand)s ending in %(last4)s") % {
-            'brand': cast(stripe.Card, stripe_source).brand,
-            'last4': cast(stripe.Card, stripe_source).last4}
+        assert isinstance(stripe_source, stripe.Card)
+        return _("{brand} ending in {last4}").format(
+            brand=stripe_source.brand, last4=stripe_source.last4,
+        )
     # There might be one-off stuff we do for a particular customer that
     # would land them here. E.g. by default we don't support ACH for
     # automatic payments, but in theory we could add it for a customer via
     # the Stripe dashboard.
-    return _("Unknown payment method. Please contact %s.") % (settings.ZULIP_ADMINISTRATOR,)  # nocoverage
+    return _("Unknown payment method. Please contact {email}.").format(
+        email=settings.ZULIP_ADMINISTRATOR,
+    )  # nocoverage
 
 @has_request_variables
 def upgrade(request: HttpRequest, user: UserProfile,
@@ -113,8 +134,8 @@ def upgrade(request: HttpRequest, user: UserProfile,
                 schedule, license_management, licenses, stripe_token is not None,
             )
         return json_error(e.message, data={'error_description': e.description})
-    except Exception as e:
-        billing_logger.exception("Uncaught exception in billing: %s" % (e,))
+    except Exception:
+        billing_logger.exception("Uncaught exception in billing:")
         error_message = BillingError.CONTACT_SUPPORT
         error_description = "uncaught exception during upgrade"
         return json_error(error_message, data={'error_description': error_description})
@@ -127,11 +148,12 @@ def initial_upgrade(request: HttpRequest) -> HttpResponse:
         return render(request, "404.html")
 
     user = request.user
+
     customer = get_customer_by_realm(user.realm)
-    if customer is not None and get_current_plan_by_customer(customer) is not None:
+    if customer is not None and (get_current_plan_by_customer(customer) is not None or customer.sponsorship_pending):
         billing_page_url = reverse('corporate.views.billing_home')
         if request.GET.get("onboarding") is not None:
-            billing_page_url = "{}?onboarding=true".format(billing_page_url)
+            billing_page_url = f"{billing_page_url}?onboarding=true"
         return HttpResponseRedirect(billing_page_url)
 
     percent_off = Decimal(0)
@@ -141,6 +163,7 @@ def initial_upgrade(request: HttpRequest) -> HttpResponse:
     seat_count = get_latest_seat_count(user.realm)
     signed_seat_count, salt = sign_string(str(seat_count))
     context: Dict[str, Any] = {
+        'realm': user.realm,
         'publishable_key': STRIPE_PUBLISHABLE_KEY,
         'email': user.delivery_email,
         'seat_count': seat_count,
@@ -161,17 +184,72 @@ def initial_upgrade(request: HttpRequest) -> HttpResponse:
     response = render(request, 'corporate/upgrade.html', context=context)
     return response
 
+@has_request_variables
+def sponsorship(request: HttpRequest, user: UserProfile,
+                organization_type: str=REQ("organization-type", validator=check_string),
+                website: str=REQ("website", validator=check_string),
+                description: str=REQ("description", validator=check_string)) -> HttpResponse:
+    realm = user.realm
+
+    requested_by = user.full_name
+
+    role_id_to_name_map = {
+        UserProfile.ROLE_REALM_OWNER: "Realm owner",
+        UserProfile.ROLE_REALM_ADMINISTRATOR: "Realm adminstrator",
+        UserProfile.ROLE_MEMBER: "Member",
+        UserProfile.ROLE_GUEST: "Guest"
+    }
+    user_role = role_id_to_name_map[user.role]
+
+    support_realm_uri = get_realm(settings.STAFF_SUBDOMAIN).uri
+    support_url = urljoin(support_realm_uri, urlunsplit(("", "", reverse('analytics.views.support'),
+                          urlencode({"q": realm.string_id}), "")))
+
+    context = {
+        "requested_by": requested_by,
+        "user_role": user_role,
+        "string_id": realm.string_id,
+        "support_url": support_url,
+        "organization_type": organization_type,
+        "website": website,
+        "description": description,
+    }
+    send_email(
+        "zerver/emails/sponsorship_request",
+        to_emails=[FromAddress.SUPPORT],
+        from_name="Zulip sponsorship",
+        from_address=FromAddress.tokenized_no_reply_address(),
+        reply_to_email=user.delivery_email,
+        context=context,
+    )
+
+    update_sponsorship_status(realm, True)
+    user.is_billing_admin = True
+    user.save(update_fields=["is_billing_admin"])
+
+    return json_success()
+
 @zulip_login_required
 def billing_home(request: HttpRequest) -> HttpResponse:
     user = request.user
     customer = get_customer_by_realm(user.realm)
+    context: Dict[str, Any] = {}
+
     if customer is None:
         return HttpResponseRedirect(reverse('corporate.views.initial_upgrade'))
+
+    if customer.sponsorship_pending:
+        if user.has_billing_access:
+            context = {"admin_access": True, "sponsorship_pending": True}
+        else:
+            context = {"admin_access": False}
+        return render(request, 'corporate/billing.html', context=context)
+
     if not CustomerPlan.objects.filter(customer=customer).exists():
         return HttpResponseRedirect(reverse('corporate.views.initial_upgrade'))
 
-    if not user.is_realm_admin and not user.is_billing_admin:
-        context: Dict[str, Any] = {'admin_access': False}
+    if not user.has_billing_access:
+        context = {'admin_access': False}
         return render(request, 'corporate/billing.html', context=context)
 
     context = {
@@ -182,14 +260,18 @@ def billing_home(request: HttpRequest) -> HttpResponse:
     plan = get_current_plan_by_customer(customer)
     if plan is not None:
         now = timezone_now()
-        last_ledger_entry = make_end_of_cycle_updates_if_needed(plan, now)
+        new_plan, last_ledger_entry = make_end_of_cycle_updates_if_needed(plan, now)
         if last_ledger_entry is not None:
+            if new_plan is not None:  # nocoverage
+                plan = new_plan
+            assert(plan is not None)  # for mypy
             plan_name = {
                 CustomerPlan.STANDARD: 'Zulip Standard',
                 CustomerPlan.PLUS: 'Zulip Plus',
             }[plan.tier]
             free_trial = plan.status == CustomerPlan.FREE_TRIAL
             downgrade_at_end_of_cycle = plan.status == CustomerPlan.DOWNGRADE_AT_END_OF_CYCLE
+            switch_to_annual_at_end_of_cycle = plan.status == CustomerPlan.SWITCH_TO_ANNUAL_AT_END_OF_CYCLE
             licenses = last_ledger_entry.licenses
             licenses_used = get_latest_seat_count(user.realm)
             # Should do this in javascript, using the user's timezone
@@ -207,10 +289,12 @@ def billing_home(request: HttpRequest) -> HttpResponse:
                 'has_active_plan': True,
                 'free_trial': free_trial,
                 'downgrade_at_end_of_cycle': downgrade_at_end_of_cycle,
+                'automanage_licenses': plan.automanage_licenses,
+                'switch_to_annual_at_end_of_cycle': switch_to_annual_at_end_of_cycle,
                 'licenses': licenses,
                 'licenses_used': licenses_used,
                 'renewal_date': renewal_date,
-                'renewal_amount': '{:,.2f}'.format(renewal_cents / 100.),
+                'renewal_amount': f'{renewal_cents / 100.:,.2f}',
                 'payment_method': payment_method,
                 'charge_automatically': charge_automatically,
                 'publishable_key': STRIPE_PUBLISHABLE_KEY,
@@ -225,7 +309,8 @@ def billing_home(request: HttpRequest) -> HttpResponse:
 @has_request_variables
 def change_plan_status(request: HttpRequest, user: UserProfile,
                        status: int=REQ("status", validator=check_int)) -> HttpResponse:
-    assert(status in [CustomerPlan.ACTIVE, CustomerPlan.DOWNGRADE_AT_END_OF_CYCLE, CustomerPlan.ENDED])
+    assert(status in [CustomerPlan.ACTIVE, CustomerPlan.DOWNGRADE_AT_END_OF_CYCLE,
+                      CustomerPlan.SWITCH_TO_ANNUAL_AT_END_OF_CYCLE, CustomerPlan.ENDED])
 
     plan = get_current_plan_by_realm(user.realm)
     assert(plan is not None)  # for mypy
@@ -235,6 +320,11 @@ def change_plan_status(request: HttpRequest, user: UserProfile,
         do_change_plan_status(plan, status)
     elif status == CustomerPlan.DOWNGRADE_AT_END_OF_CYCLE:
         assert(plan.status == CustomerPlan.ACTIVE)
+        do_change_plan_status(plan, status)
+    elif status == CustomerPlan.SWITCH_TO_ANNUAL_AT_END_OF_CYCLE:
+        assert(plan.billing_schedule == CustomerPlan.MONTHLY)
+        assert(plan.status == CustomerPlan.ACTIVE)
+        assert(plan.fixed_price is None)
         do_change_plan_status(plan, status)
     elif status == CustomerPlan.ENDED:
         assert(plan.status == CustomerPlan.FREE_TRIAL)

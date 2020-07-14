@@ -36,6 +36,10 @@ exports.drafts_open = function () {
     return open_overlay_name === 'drafts';
 };
 
+exports.recent_topics_open = function () {
+    return open_overlay_name === 'recent_topics';
+};
+
 // To address bugs where mouse might apply to the streams/settings
 // overlays underneath an open modal within those settings UI, we add
 // this inline style to '.overlay.show', overriding the
@@ -217,7 +221,7 @@ exports.open_settings = function () {
 };
 
 exports.initialize = function () {
-    $("body").on("click", ".overlay, .overlay .exit", function (e) {
+    $("body").on("click", ".overlay, .overlay .exit", (e) => {
         let $target = $(e.target);
 
         // if the target is not the .overlay element, search up the node tree

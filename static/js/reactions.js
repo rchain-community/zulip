@@ -53,7 +53,7 @@ function update_ui_and_send_reaction_ajax(message_id, reaction_info) {
     const local_id = exports.get_local_reaction_id(reaction_info);
     const has_reacted = exports.current_user_has_reacted_to_emoji(
         message,
-        local_id
+        local_id,
     );
     const operation = has_reacted ? 'remove' : 'add';
     const reaction = create_reaction(message_id, reaction_info);
@@ -113,10 +113,6 @@ exports.toggle_emoji_reaction = function (message_id, emoji_name) {
     }
 
     update_ui_and_send_reaction_ajax(message_id, reaction_info);
-
-    // The next line isn't always necessary, but it is harmless/quick
-    // when no popovers are there.
-    emoji_picker.hide_emoji_popover();
 };
 
 exports.process_reaction_click = function (message_id, local_id) {
@@ -347,7 +343,7 @@ exports.remove_reaction = function (event) {
         return;
     }
 
-    r.user_ids = r.user_ids.filter(id => id !== user_id);
+    r.user_ids = r.user_ids.filter((id) => id !== user_id);
     if (r.user_ids.length > 0) {
         exports.update_user_fields(r);
     } else {

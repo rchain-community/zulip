@@ -29,7 +29,7 @@ exports.get = function get(message_id) {
     if (typeof message_id !== 'number') {
         blueslip.error('message_store got non-number: ' + message_id);
 
-        // Try to solider on, assuming the caller treats message
+        // Try to soldier on, assuming the caller treats message
         // ids as strings.
         message_id = parseFloat(message_id);
     }
@@ -208,9 +208,6 @@ exports.add_message_metadata = function (message) {
 exports.reify_message_id = function (opts) {
     const old_id = opts.old_id;
     const new_id = opts.new_id;
-    if (pointer.furthest_read === old_id) {
-        pointer.set_furthest_read(new_id);
-    }
     if (stored_messages.has(old_id)) {
         stored_messages.set(new_id, stored_messages.get(old_id));
         stored_messages.delete(old_id);

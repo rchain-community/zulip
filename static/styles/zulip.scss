@@ -123,7 +123,7 @@ p.n-margin {
 .all-messages-search-caution {
     border-radius: 4px;
     display: none;
-    height: 28x;
+    height: 28px;
     font-size: 16px;
     margin: 0 auto 12px;
     padding: 5px;
@@ -546,6 +546,10 @@ li.actual-dropdown-menu i {
     margin-right: 3px;
 }
 
+.settings-dropdown-cog {
+    padding: 6px 12px;
+}
+
 .message_area_padder {
     /* The height of the header and the tabbar plus a small gap */
     margin-top: 57px;
@@ -590,7 +594,7 @@ td.pointer {
     }
 
     .message_controls {
-        top: -3px;
+        top: -5px;
     }
 
     .message_top_line {
@@ -647,27 +651,6 @@ td.pointer {
     transition: background-color 1.5s ease-in, color 1.5s ease-in;
 }
 
-#message-edit-history {
-    .message_time {
-        position: static;
-    }
-
-    .message_author {
-        position: relative;
-    }
-
-    .author_details {
-        display: block;
-        font-size: 12px;
-        padding: 1px;
-        text-align: right;
-    }
-
-    .messagebox-content {
-        padding: 0px 10px;
-    }
-}
-
 /* The way this overrides the menus with a background-color and a high
    z-index is kinda hacky, and requires some annoying color-matching,
    but it works. */
@@ -691,15 +674,27 @@ td.pointer {
 .message_controls {
     display: inline-block;
     position: absolute;
-    top: 1px;
+    top: -1px;
     right: -56px;
+    width: 54px;
+    height: 22px;
     z-index: 1;
 
+    // This is a bit tricky; we need to reserve space for the message
+    // controls even when the message isn't hovered, so that hover
+    // doesn't disturb the layout.  Usually that would be just
+    // visibility: hidden, but that cannot be animated, so we set
+    // opacity as well, which can be animated.
     > div {
         opacity: 0;
-        pointer-events: none;
+        visibility: hidden;
         transition: all 0.2s ease;
-        padding: 0px 1px;
+        width: 16px;
+        text-align: center;
+
+        > i {
+            vertical-align: middle;
+        }
     }
 
     > .reaction_button {
@@ -732,21 +727,26 @@ td.pointer {
             animation: rotate 1s infinite linear;
         }
     }
+
+    .star_container {
+        display: inline-block;
+
+        &:not(.empty-star) {
+            color: hsl(106, 77%, 29%);
+
+            // Opacity/visibility as though the message is hovered.
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+    }
 }
 
 .star {
-    display: inline-block;
     font-size: 14px;
 
     &:hover {
         cursor: pointer;
         color: hsl(153, 80%, 25%);
-    }
-
-    &:not(.empty-star) {
-        opacity: 1 !important;
-        pointer-events: all !important;
-        color: hsl(106, 77%, 29%);
     }
 }
 
@@ -769,7 +769,7 @@ td.pointer {
 
         > div {
             opacity: 1;
-            pointer-events: all;
+            visibility: visible;
         }
     }
 
@@ -881,17 +881,18 @@ td.pointer {
 
 .stream_topic {
     display: inline-block;
-    padding: 3px 3px 2px 12px;
-    margin-left: -5px;
+    padding: 3px 3px 2px 9px;
     height: 17px;
     line-height: 17px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recipient_bar_controls {
+    flex-grow: 1;
 }
 
 .recipient_row_date {
-    position: absolute;
-    right: 0;
-    top: 0;
-
     color: hsl(0, 0%, 53%);
     font-size: 12px;
     font-weight: 600;
@@ -1026,6 +1027,9 @@ td.pointer {
 }
 
 .message-header-contents {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     border-right: 1px solid hsl(0, 0%, 88%);
     background-color: hsl(0, 0%, 88%);
 }
@@ -1133,7 +1137,8 @@ td.pointer {
 }
 
 .on_hover_topic_edit,
-.on_hover_topic_mute {
+.on_hover_topic_mute,
+.on_hover_topic_read {
     opacity: 0.2;
 }
 
@@ -1143,7 +1148,9 @@ td.pointer {
 
 .on_hover_topic_edit,
 .always_visible_topic_edit,
-.on_hover_topic_mute {
+.on_hover_topic_mute,
+.on_hover_topic_unmute,
+.on_hover_topic_read {
     &:hover {
         cursor: pointer;
         opacity: 1.0;
@@ -1164,6 +1171,7 @@ td.pointer {
 
 .has_actions_popover .info {
     opacity: 1;
+    visibility: visible;
 }
 
 /* Brighten text because of the dark background */
@@ -1205,7 +1213,7 @@ a.dark_background:hover,
 .info {
     display: inline-block;
     position: relative;
-    font-size: 15px;
+    font-size: 14px;
     color: hsl(0, 0%, 73%);
 }
 
@@ -1336,8 +1344,8 @@ div.focused_table {
     margin-bottom: 5px !important;
     border-left: 0px;
     padding-left: 0px;
-    border-radius: 0px 3px 3px 0px;
-    margin-left: -11px;
+    border-radius: 3px;
+    margin-left: -10px;
     text-indent: 10px;
 }
 
@@ -1352,6 +1360,31 @@ div.focused_table {
     width: 300px;
     margin-bottom: 5px !important;
     max-width: 100%;
+}
+
+.topic_move_breadcrumb_messages,
+.message_edit_breadcrumb_messages {
+    margin: 0 5px 5px 0 !important;
+    align-self: center;
+    width: 100%;
+
+    label.checkbox {
+        margin-right: 0 !important;
+
+        input {
+            margin: 0;
+            vertical-align: baseline;
+        }
+    }
+
+    label {
+        display: inline-block;
+        margin-right: 10px;
+    }
+}
+
+.topic_move_breadcrumb_messages {
+    margin-top: 10px !important;
 }
 
 .message_length_controller {
@@ -1433,164 +1466,169 @@ div.focused_table {
 }
 
 #tab_bar {
-    width: 100%;
     z-index: 2;
-    padding-top: 0px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     float: left;
-    letter-spacing: normal;
     height: $header_height;
-    #tab_list {
-        display: flex;
-        align-content: flex-start;
-        flex-wrap: nowrap;
-        margin: 0px 0px 0px 0px;
-        height: $header_height;
-        line-height: $header_height;
-        font-size: 16px;
-        border: none;
+    width: 100%;
+    line-height: $header_height;
+    font-size: 16px;
+    display: flex;
+    align-content: flex-start;
+    flex-wrap: nowrap;
+    margin: 0px 0px 0px 0px;
+    border: none;
+    white-space: nowrap;
+    cursor: default;
+    .hidden {
+        display: none;
+    }
+    .sub_count,
+    .stream,
+    & > span {
         white-space: nowrap;
-        width: calc(100% - 1px);
-        cursor: default;
-        .hidden {
-            display: none;
+        list-style-type: none;
+        display: inline-block;
+        vertical-align: top;
+        position: relative;
+        font-weight: 600;
+        font-size: 16px;
+        line-height: 16px;
+        margin: 0 -4px 0 0;
+        padding: 12px 6px;
+
+        @media (max-width: 500px) {
+            padding: 7px 3.5px; // based on having ~41.66% decrease
         }
-        & > span {
-            white-space: nowrap;
-            list-style-type: none;
-            display: inline-block;
-            vertical-align: top;
-            position: relative;
-            font-weight: 600;
-            font-size: 16px;
-            line-height: 16px;
-            margin: 0 -4px 0 0;
-            padding: 12px 6px;
-
-            @media (max-width: 500px) {
-                padding: 7px 3.5px; // based on having ~41.66% decrease
+        i {
+            margin-right: 3px;
+        }
+        .fa {
+            margin: 0px 3px 0px 5px;
+            .fa-envelope {
+                font-size: 14px;
+                margin: 0px 5px 0px 5px;
             }
-            &:not(.search_closed):not(.sub_count):not(.narrow_description) {
-                flex-shrink: 1;
-                overflow: hidden;
-            }
-            &:not(.stream) {
-                text-overflow: ellipsis;
-            }
-            &:nth-last-child(2) {
-                flex-grow: 1;
-            }
-
-            // We extend the clickable area for the search_closed icon over the
-            // 2nd last navbar element for better design (user convenience) this
-            // selector makes it so mousing over that element also gives the user
-            // a visual cue about the results of clicking the element
-            &:nth-last-child(2) {
-                cursor: pointer;
-                &:hover + .search_closed {
-                    color: hsl(0, 0%, 0%);
-                }
-            }
-            i {
-                margin-right: 3px;
-            }
-            .fa {
-                margin: 0px 3px 0px 5px;
-                .fa-envelope {
-                    font-size: 14px;
-                    margin: 0px 5px 0px 5px;
-                }
-                .fa-hashtag {
-                    font-size: 1.2rem;
-                    // font-weight: 800;
-                    margin: 0px 2px 0px 5px;
-                }
+            .fa-hashtag {
+                font-size: 1.2rem;
+                // font-weight: 800;
+                margin: 0px 2px 0px 5px;
             }
         }
+    }
 
-        .stream {
-            text-overflow: clip;
-            overflow: hidden;
-            a {
-                color: inherit;
-                text-decoration: none;
-                padding-right: 2px;
-            }
+    .stream {
+        text-overflow: clip;
+        overflow: hidden;
+        color: inherit;
+        text-decoration: none;
+        // The first ~3px of padding here overlaps with the left padding from sub_count for some reason.
+        padding-right: calc(3px + 10px);
+    }
+
+    .sub_count,
+    .narrow_description {
+        background: none;
+        font-size: 14px;
+        color: hsl(0, 0%, 40%);
+        font-weight: 400;
+        line-height: 20px;
+    }
+
+    .sub_count {
+        padding-left: 10px;
+        margin-left: 1px;
+        padding-right: 10px;
+        margin-right: 1px;
+        .fa.fa-user-o {
+            margin-left: 0px;
         }
 
-        .sub_count,
-        .narrow_description {
-            background: none;
-            font-size: 14px;
-            color: hsl(0, 0%, 40%);
-            font-weight: 400;
-            line-height: 20px;
-        }
-
-        .sub_count {
-            margin-left: 10px;
-            margin-right: 10px;
-            .fa.fa-user-o {
-                margin-left: 0px;
-            }
-
-            &::before,
-            &::after {
-                content: "|";
-                position: absolute;
-                top: 25%;
-                height: 50%;
-                color: hsl(0, 0%, 88%);
-                font-size: 20px;
-                @media (max-width: 500px) {
-                    top: 10%;
-                }
-            }
-
-            &::before {
-                left: -5px;
-            }
-
-            &::after {
-                right: -5px;
-            }
-        }
-
-        .narrow_description {
-            // the actual value of flex shrink does not matter, it is the
-            // ratio of this value to other flex items that determines the
-            // behavior while shrinking, here the other item has the .stream
-            // class and a flex of 1, so the value here *is* the ratio, and
-            // is chosen such that the narrow description shrinks to close
-            // before the stream name must begin to shrink
-            flex-shrink: 100;
-            overflow: hidden;
-            white-space: nowrap;
-            margin: 0;
-            padding: 12px 0px;
-            padding-left: 2px;
-
-            @media (max-width: 500px) {
-                padding: 7px 0;
-                padding-left: 2px;
-            }
-
-            & > a {
-                padding: 12px 0px;
-            }
-        }
-
-        .search_closed {
-            flex: 0; // makes sure search icon is always visible
-
-            cursor: pointer;
+        &::before,
+        &::after {
+            content: "|";
+            position: absolute;
+            top: 25%;
+            height: 50%;
+            color: hsl(0, 0%, 88%);
             font-size: 20px;
-
-            padding: 10px 15px 0px 0px;
             @media (max-width: 500px) {
-                padding: 5px 15px 0px 0px;
+                top: 10%;
             }
+        }
+
+        &::before {
+            left: -3px;
+            @media (max-width: 500px) {
+                // this ensures the before "|" doesn't overlap
+                // with the stream name text on small narrows
+                left: 0px;
+            }
+        }
+
+        &::after {
+            right: -3px;
+        }
+    }
+
+    .narrow_description {
+        // the actual value of flex shrink does not matter, it is the
+        // ratio of this value to other flex items that determines the
+        // behavior while shrinking, here the other item has the .stream
+        // class and a flex of 1, so the value here *is* the ratio, and
+        // is chosen such that the narrow description shrinks to close
+        // before the stream name must begin to shrink
+        flex-shrink: 100;
+        overflow: hidden;
+        white-space: nowrap;
+        margin: 0;
+        padding: 12px 0px;
+        padding-left: 10px;
+
+        @media (max-width: 500px) {
+            padding: 7px 0;
+            padding-left: 10px;
+        }
+
+        & > a {
+            padding: 12px 0px;
+        }
+    }
+
+    .search_closed {
+        flex: 0; // makes sure search icon is always visible
+
+        cursor: pointer;
+        font-size: 20px;
+
+        padding: 10px 15px 0px 0px;
+        @media (max-width: 500px) {
+            padding: 5px 15px 0px 0px;
+        }
+    }
+
+    > :not(.search_closed):not(.sub_count):not(.narrow_description) {
+        flex-shrink: 1;
+        overflow: hidden;
+    }
+
+    > :not(.stream) {
+        text-overflow: ellipsis;
+    }
+
+    // The very last element in the navbar is the search icon, the second
+    // last element is either the narrow description (for stream narrows) or
+    // the "title" (for other narrows). The flex-grow property ensures these
+    // elements take up the entirety of the white space.
+    > :nth-last-child(2) {
+        flex-grow: 1;
+
+        // We extend the clickable area for the search_closed icon over the
+        // 2nd last navbar element for better design (user convenience) this
+        // selector makes it so mousing over that element also gives the user
+        // a visual cue about the results of clicking the element
+        cursor: pointer;
+        &:hover + .search_closed {
+            color: hsl(0, 0%, 0%);
         }
     }
 }
@@ -1607,18 +1645,19 @@ div.focused_table {
     .navbar-search.expanded {
         overflow: hidden;
         margin-top: 0px;
-        right: 2;
         width: calc(100% - 2px);
         position: absolute;
         .search_button {
             display: inline;
-            margin-right: 16px;
+            margin-right: 15px;
         }
     }
 
     .input-append {
         position: relative;
         width: 100%;
+        width: max-content;
+        min-width: 100%;
 
         .fa-search {
             padding: 0px;
@@ -1655,7 +1694,7 @@ div.focused_table {
     .search_button,
     .search_button[disabled]:hover {
         position: absolute;
-        right: 20px;
+        right: 35px;
         top: 6px;
         background: none;
         border-radius: 0px;
@@ -1680,7 +1719,6 @@ div.focused_table {
 
     .search_icon {
         position: absolute;
-        display: table;
         height: 100%;
         color: hsl(0, 0%, 80%);
         text-decoration: none;
@@ -1696,12 +1734,15 @@ div.focused_table {
     }
 
     #search_arrows {
-        padding-left: 30px;
+        padding-left: 35px;
         font-size: 90%;
         letter-spacing: normal;
     }
 
     .pill-container {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
         border: none;
         padding: 0px;
     }
@@ -1719,6 +1760,23 @@ div.focused_table {
             .exit {
                 top: 0;
             }
+        }
+    }
+}
+
+#searchbox_legacy {
+    #search_arrows {
+        padding-left: 0px;
+    }
+    #search_query {
+        padding-left: 35px;
+    }
+    .search_button {
+        right: 0px;
+    }
+    .navbar-search.expanded {
+        .search_button {
+            margin-right: 14px;
         }
     }
 }
@@ -1752,8 +1810,8 @@ div.focused_table {
             box-shadow: inherit;
             display: block;
             position: absolute;
-            right: 0px;
-            top: 3px;
+            right: 6px;
+            top: -3px;
         }
 
         .dropdown-toggle,
@@ -1828,7 +1886,7 @@ div.focused_table {
         width: 0px;
         height: 0px;
         top: -7px;
-        right: 10px;
+        right: 19px;
         display: inline-block;
         border-right: 7px solid transparent;
         border-bottom: 7px solid hsl(0, 0%, 67%);
@@ -2174,12 +2232,6 @@ div.topic_edit_spinner .loading_indicator_spinner {
     top: 1px;
 }
 
-.settings-dropdown-caret {
-    margin-left: 8px;
-    margin-right: 8px;
-    font-size: 14px;
-}
-
 #notifications-area {
     position: fixed;
     z-index: 10;
@@ -2511,6 +2563,10 @@ select.inline_select_topic_edit {
         }
     }
 
+    .nav .dropdown-menu::after {
+        right: 21px;
+    }
+
     .column-middle {
         margin-right: 7px;
     }
@@ -2518,7 +2574,7 @@ select.inline_select_topic_edit {
     .top-navbar-container,
     #searchbox_legacy .navbar-search.expanded,
     #searchbox .navbar-search.expanded {
-        width: calc(100% - 91px);
+        width: calc(100% - 84px);
     }
 
     .search_closed .fa-search {
@@ -2607,14 +2663,14 @@ select.inline_select_topic_edit {
 
     .top-navbar-border {
         margin-left: 40px;
-        width: calc(100% - 116px);
+        width: calc(100% - 108px);
     }
     // todo: Figure out why this has to be different
     // from above at this width and resolve it
     // #searchbox_legacy .navbar-search.expanded,
     #searchbox_legacy .navbar-search.expanded,
     #searchbox .navbar-search.expanded {
-        width: calc(100% - 131px);
+        width: calc(100% - 123px);
     }
 
     .search_closed .fa-search {
@@ -2665,8 +2721,6 @@ select.inline_select_topic_edit {
     #tab_bar,
     #searchbox,
     #searchbox_legacy,
-    #tab_list li,
-    #tab_list,
     .header {
         height: 30px;
         line-height: 30px;
@@ -2685,7 +2739,7 @@ select.inline_select_topic_edit {
 
     #navbar-buttons ul.nav .dropdown-toggle,
     #navbar-buttons ul.nav li.active .dropdown-toggle {
-        top: -5px;
+        top: -8px;
     }
 
     #searchbox,
@@ -2713,17 +2767,15 @@ select.inline_select_topic_edit {
         left: -3px;
     }
 
+    /* In mobile views we place it just to the right of the time element */
     .message_controls {
-        width: 56px;
         right: 40px;
-        top: 0px;
     }
 
     .include-sender .message_controls {
         background: none !important;
         padding: none !important;
         border: none !important;
-        top: -3px;
     }
 
     .message_time {

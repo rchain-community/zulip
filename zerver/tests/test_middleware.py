@@ -1,19 +1,21 @@
 import time
 from typing import List
+from unittest.mock import patch
 
 from bs4 import BeautifulSoup
-from unittest.mock import patch
+
 from zerver.lib.realm_icon import get_realm_icon_url
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.middleware import is_slow_query, write_log_line
 from zerver.models import get_realm
 
+
 class SlowQueryTest(ZulipTestCase):
     SLOW_QUERY_TIME = 10
     log_data = {'extra': '[transport=websocket]',
                 'time_started': 0,
-                'bugdown_requests_start': 0,
-                'bugdown_time_start': 0,
+                'markdown_requests_start': 0,
+                'markdown_time_start': 0,
                 'remote_cache_time_start': 0,
                 'remote_cache_requests_start': 0}
 
@@ -40,9 +42,9 @@ class SlowQueryTest(ZulipTestCase):
             mock_normal_logger.info.assert_called_once()
 
             logged_line = mock_slow_query_logger.info.call_args_list[0][0][0]
-            self.assertRegexpMatches(
+            self.assertRegex(
                 logged_line,
-                r"123\.456\.789\.012 GET     200 10\.\ds .* \(unknown via \?\)"
+                r"123\.456\.789\.012 GET     200 10\.\ds .* \(unknown via \?\)",
             )
 
 class OpenGraphTest(ZulipTestCase):
@@ -73,17 +75,7 @@ class OpenGraphTest(ZulipTestCase):
              "users can view the edit history of a message. | To remove the",
              "best to delete the message entirely. "],
             ["Disable message edit history", "feature is only available", "Related articles",
-             "Restrict message editing"]
-        )
-
-    def test_double_quotes(self) -> None:
-        # night-mode has a quoted string "night mode"
-        self.check_title_and_description(
-            '/help/night-mode',
-            "Night mode (Zulip Help Center)",
-            ['By default, Zulip has a white background. ',
-             'Zulip also provides a "night mode", which is great for working in a dark space.'],
-            []
+             "Restrict message editing"],
         )
 
     def test_settings_tab(self) -> None:
@@ -100,7 +92,7 @@ class OpenGraphTest(ZulipTestCase):
             '/help/logging-out',
             "Logging out (Zulip Help Center)",
             # Ideally we'd do something better here
-            ["We're here to help! Email us at zulip-admin@example.com with questions, feedback, or " +
+            ["We're here to help! Email us at desdemona+admin@zulip.com with questions, feedback, or " +
              "feature requests."],
             ["Click on the gear"])
 
@@ -123,7 +115,7 @@ class OpenGraphTest(ZulipTestCase):
             # Probably we should make this "Zulip Help Center"
             "No such article. (Zulip Help Center)",
             ["No such article. | We're here to help!",
-             "Email us at zulip-admin@example.com with questions, feedback, or feature requests."],
+             "Email us at desdemona+admin@zulip.com with questions, feedback, or feature requests."],
             [],
             # Test that our open graph logic doesn't throw a 500
             404)
@@ -168,13 +160,13 @@ class OpenGraphTest(ZulipTestCase):
         decoded = response.content.decode('utf-8')
         bs = BeautifulSoup(decoded, features='lxml')
         open_graph_image = bs.select_one('meta[property="og:image"]').get('content')
-        self.assertEqual(open_graph_image, '%s%s' % (realm.uri, realm_icon))
+        self.assertEqual(open_graph_image, f'{realm.uri}{realm_icon}')
 
     def test_login_page_realm_icon_absolute_url(self) -> None:
         realm = get_realm('zulip')
         realm.icon_source = 'U'
         realm.save(update_fields=['icon_source'])
-        icon_url = "https://foo.s3.amazonaws.com/%s/realm/icon.png?version=%s" % (realm.id, 1)
+        icon_url = f"https://foo.s3.amazonaws.com/{realm.id}/realm/icon.png?version={1}"
         with patch('zerver.lib.realm_icon.upload_backend.get_realm_icon_url', return_value=icon_url):
             response = self.client_get('/login/')
         self.assertEqual(response.status_code, 200)

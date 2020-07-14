@@ -7,7 +7,7 @@ const templates_path = path.resolve(__dirname, "../../static/templates");
 
 exports.make_handlebars = () => Handlebars.create();
 
-exports.stub_templates = stub => {
+exports.stub_templates = (stub) => {
     window.template_stub = stub;
 };
 
@@ -53,6 +53,6 @@ require.extensions[".hbs"] = (module, filename) => {
         out.code +
             "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64," +
             Buffer.from(out.map.toString()).toString("base64"),
-        filename
+        filename,
     );
 };

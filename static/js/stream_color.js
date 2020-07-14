@@ -16,6 +16,7 @@ function update_table_stream_color(table, stream_name, color) {
         if ($.trim($label.text()) === stream_name) {
             const messages = $label.closest(".recipient_row").children(".message_row");
             messages.children(".messagebox").css("box-shadow", "inset 2px 0px 0px 0px " + style + ", -1px 0px 0px 0px " + style);
+            messages.children(".date_row").css("box-shadow", "inset 2px 0px 0px 0px " + style + ", -1px 0px 0px 0px " + style);
             $label.css({background: style,
                         "border-left-color": style});
             $label.removeClass(exports.color_classes);
@@ -93,7 +94,7 @@ exports.sidebar_popover_colorpicker_options = {
 };
 
 exports.sidebar_popover_colorpicker_options_full = {
-    clickoutFiresChange: true,
+    clickoutFiresChange: false,
     showPalette: true,
     showInput: true,
     flat: true,
@@ -124,7 +125,7 @@ exports.initialize = function () {
 // already saved on the server, etc.
 //
 // This gets called on every message, so cache the results.
-exports.get_color_class = _.memoize(function (color) {
+exports.get_color_class = _.memoize((color) => {
     let match;
     let i;
     const channel = [0, 0, 0];

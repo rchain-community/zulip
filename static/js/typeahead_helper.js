@@ -8,7 +8,7 @@ const settings_data = require("./settings_data");
 // For example, "a,,b, " => ["a", "b"]
 exports.get_cleaned_pm_recipients = function (query_string) {
     let recipients = util.extract_pm_recipients(query_string);
-    recipients = recipients.filter(elem => elem.match(/\S/));
+    recipients = recipients.filter((elem) => elem.match(/\S/));
     return recipients;
 };
 
@@ -191,7 +191,7 @@ exports.compare_people_for_relevance = function (
     person_a,
     person_b,
     tertiary_compare,
-    current_stream) {
+    current_stream_id) {
 
     // give preference to "all", "everyone" or "stream"
     // We use is_broadcast for a quick check.  It will
@@ -209,9 +209,9 @@ exports.compare_people_for_relevance = function (
     // Now handle actual people users.
 
     // give preference to subscribed users first
-    if (current_stream !== undefined) {
-        const a_is_sub = stream_data.is_user_subscribed(current_stream, person_a.user_id);
-        const b_is_sub = stream_data.is_user_subscribed(current_stream, person_b.user_id);
+    if (current_stream_id !== undefined) {
+        const a_is_sub = stream_data.is_user_subscribed(current_stream_id, person_a.user_id);
+        const b_is_sub = stream_data.is_user_subscribed(current_stream_id, person_b.user_id);
 
         if (a_is_sub && !b_is_sub) {
             return -1;
@@ -240,31 +240,25 @@ exports.sort_people_for_relevance = function (objs, current_stream_name, current
         current_stream = stream_data.get_sub(current_stream_name);
     }
     if (!current_stream) {
-        objs.sort(function (person_a, person_b) {
-            return exports.compare_people_for_relevance(
-                person_a,
-                person_b,
-                exports.compare_by_pms
-            );
-        });
+        objs.sort((person_a, person_b) => exports.compare_people_for_relevance(
+            person_a,
+            person_b,
+            exports.compare_by_pms,
+        ));
     } else {
         const stream_id = current_stream.stream_id;
 
-        objs.sort(function (person_a, person_b) {
-            return exports.compare_people_for_relevance(
-                person_a,
-                person_b,
-                function (user_a, user_b) {
-                    return recent_senders.compare_by_recency(
-                        user_a,
-                        user_b,
-                        stream_id,
-                        current_topic
-                    );
-                },
-                current_stream.name
-            );
-        });
+        objs.sort((person_a, person_b) => exports.compare_people_for_relevance(
+            person_a,
+            person_b,
+            (user_a, user_b) => recent_senders.compare_by_recency(
+                user_a,
+                user_b,
+                stream_id,
+                current_topic,
+            ),
+            current_stream.stream_id,
+        ));
     }
 
     return objs;
@@ -302,7 +296,7 @@ exports.sort_recipients = function (
     current_stream,
     current_topic,
     groups,
-    max_num_items
+    max_num_items,
 ) {
     if (!groups) {
         groups = [];

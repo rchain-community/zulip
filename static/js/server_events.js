@@ -19,7 +19,6 @@ function get_events_success(events) {
     let messages = [];
     const update_message_events = [];
     const post_message_events = [];
-    let new_pointer;
 
     const clean_event = function clean_event(event) {
         // Only log a whitelist of the event to remove private data
@@ -64,10 +63,6 @@ function get_events_success(events) {
             break;
         }
 
-        case 'pointer':
-            new_pointer = event.pointer;
-            break;
-
         case 'update_message':
             update_message_events.push(event);
             break;
@@ -104,8 +99,8 @@ function get_events_success(events) {
             if (messages.length > 0) {
                 messages.forEach(message_store.set_message_booleans);
 
-                const sent_by_this_client = messages.some(msg =>
-                    sent_messages.messages.has(msg.local_id)
+                const sent_by_this_client = messages.some((msg) =>
+                    sent_messages.messages.has(msg.local_id),
                 );
                 // If some message in this batch of events was sent by this
                 // client, almost every time, this message will be the only one
@@ -123,13 +118,6 @@ function get_events_success(events) {
                            undefined,
                            ex2.stack);
         }
-    }
-
-    if (new_pointer !== undefined
-        && new_pointer > pointer.furthest_read) {
-        pointer.set_furthest_read(new_pointer);
-        pointer.set_server_furthest_read(new_pointer);
-        home_msg_list.select_id(new_pointer, {then_scroll: true, use_closest: true});
     }
 
     if (home_msg_list.selected_id() === -1 && !home_msg_list.empty()) {
@@ -298,7 +286,7 @@ exports.check_for_unsuspend = function () {
 setInterval(exports.check_for_unsuspend, 5000);
 
 exports.initialize = function () {
-    $(document).on('unsuspend', function () {
+    $(document).on('unsuspend', () => {
         // Immediately poll for new events on unsuspend
         blueslip.log("Restarting get_events due to unsuspend");
         get_events_failures = 0;
@@ -322,7 +310,7 @@ exports.cleanup_event_queue = function cleanup_event_queue() {
     });
 };
 
-window.addEventListener("beforeunload", function () {
+window.addEventListener("beforeunload", () => {
     exports.cleanup_event_queue();
 });
 

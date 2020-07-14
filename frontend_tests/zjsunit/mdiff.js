@@ -19,15 +19,15 @@ function apply_color(input_string, changes) {
     input_string = input_string.slice(2);
 
     const formatter = new Map([
-        ["delete", (string) => { return "\u001b[31m" + string + "\u001b[0m"; }],
-        ["insert", (string) => { return "\u001b[32m" + string + "\u001b[0m"; }],
-        ["replace", (string) => { return "\u001b[33m" + string + "\u001b[0m"; }],
+        ["delete", (string) => "\u001b[31m" + string + "\u001b[0m"],
+        ["insert", (string) => "\u001b[32m" + string + "\u001b[0m"],
+        ["replace", (string) => "\u001b[33m" + string + "\u001b[0m"],
     ]);
     changes.forEach((change) => {
         if (formatter.has(change.tag)) {
             processed_string += input_string.slice(previous_index, change.beginning_index);
             processed_string += formatter.get(change.tag)(
-                input_string.slice(change.beginning_index, change.ending_index)
+                input_string.slice(change.beginning_index, change.ending_index),
             );
             previous_index = change.ending_index;
         }
@@ -114,9 +114,7 @@ function diff_strings(string_0, string_1) {
         }
     });
 
-    const emphasize_codes = (string) => {
-        return "\u001b[34m" + string.slice(0, 1) + "\u001b[0m" + string.slice(1);
-    };
+    const emphasize_codes = (string) => "\u001b[34m" + string.slice(0, 1) + "\u001b[0m" + string.slice(1);
     output_lines = output_lines.map(emphasize_codes);
 
     return output_lines.join("\n");
@@ -136,7 +134,7 @@ if (require.main === module) {
             " string_0" +
             " string_1" +
             "\n" +
-            "Where string_0 and string_1 are the strings to be diffed"
+            "Where string_0 and string_1 are the strings to be diffed",
         );
     }
 

@@ -42,9 +42,10 @@ set_global('stream_popover', {
 
 set_global('stream_data', {});
 
-set_global('ClipboardJS', function (sel) {
+function ClipboardJS(sel) {
     assert.equal(sel, '.copy_link');
-});
+}
+set_global('ClipboardJS', ClipboardJS);
 
 const alice = {
     email: 'alice@example.com',
@@ -63,11 +64,9 @@ const me = {
 };
 
 const target = $.create('click target');
-target.offset = () => {
-    return {
-        top: 10,
-    };
-};
+target.offset = () => ({
+    top: 10,
+});
 
 const e = {
     stopPropagation: noop,
@@ -87,21 +86,17 @@ function make_image_stubber() {
 
     function stub_image() {
         const image = {};
-        image.to_$ = () => {
-            return {
-                on: (name, f) => {
-                    assert.equal(name, "load");
-                    image.load_f = f;
-                },
-            };
-        };
+        image.to_$ = () => ({
+            on: (name, f) => {
+                assert.equal(name, "load");
+                image.load_f = f;
+            },
+        });
         images.push(image);
         return image;
     }
 
-    set_global('Image', function () {
-        return stub_image();
-    });
+    set_global('Image', stub_image);
 
     return {
         get: (i) => images[i],
@@ -140,7 +135,7 @@ run_test('sender_hover', () => {
         return {};
     };
 
-    global.stub_templates(function (fn, opts) {
+    global.stub_templates((fn, opts) => {
         switch (fn) {
         case 'no_arrow_popover':
             assert.deepEqual(opts, {
@@ -234,7 +229,7 @@ run_test('actions_popover', () => {
         };
     };
 
-    global.stub_templates(function (fn, opts) {
+    global.stub_templates((fn, opts) => {
         // TODO: Test all the properties of the popover
         switch (fn) {
         case 'actions_popover_content':

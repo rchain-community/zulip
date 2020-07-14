@@ -24,9 +24,10 @@ zrequire('bot_data');
 zrequire('settings_bots');
 zrequire('people');
 
-set_global('ClipboardJS', function (sel) {
+function ClipboardJS(sel) {
     assert.equal(sel, '#copy_zuliprc');
-});
+}
+set_global('ClipboardJS', ClipboardJS);
 
 bot_data.initialize(bot_data_params);
 
@@ -35,7 +36,7 @@ run_test('generate_zuliprc_uri', () => {
     const expected = "data:application/octet-stream;charset=utf-8," + encodeURIComponent(
         "[api]\nemail=error-bot@zulip.org\n" +
         "key=QadL788EkiottHmukyhHgePUFHREiu8b\n" +
-        "site=https://chat.example.com\n"
+        "site=https://chat.example.com\n",
     );
 
     assert.equal(uri, expected);
@@ -116,9 +117,7 @@ function set_up() {
 
     $('#config_inputbox').children = () => {
         const mock_children = {
-            hide: () => {
-                return;
-            },
+            hide: () => {},
         };
         return mock_children;
     };

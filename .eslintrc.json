@@ -17,18 +17,12 @@
     "rules": {
         "array-callback-return": "error",
         "array-bracket-spacing": "error",
+        "arrow-body-style": "error",
+        "arrow-parens": "error",
         "arrow-spacing": [ "error", { "before": true, "after": true } ],
         "block-scoped-var": "error",
         "brace-style": [ "error", "1tbs", { "allowSingleLine": true } ],
-        "comma-dangle": [ "error",
-            {
-                "arrays": "always-multiline",
-                "objects": "always-multiline",
-                "imports": "always-multiline",
-                "exports": "always-multiline",
-                "functions": "never"
-            }
-        ],
+        "comma-dangle": [ "error", "always-multiline" ],
         "comma-spacing": [ "error",
             {
                 "before": false,
@@ -116,6 +110,7 @@
         "space-unary-ops": "error",
         "no-whitespace-before-property": "error",
         "one-var": [ "error", "never" ],
+        "prefer-arrow-callback": "error",
         "prefer-const": [ "error",
             {
                 "ignoreReadBeforeAssign": true
@@ -231,6 +226,7 @@
                 "marked": false,
                 "md5": false,
                 "message_edit": false,
+                "message_edit_history": false,
                 "message_events": false,
                 "message_fetch": false,
                 "message_flags": false,
@@ -302,6 +298,7 @@
                 "settings_ui": false,
                 "settings_user_groups": false,
                 "settings_users": false,
+                "spoilers": false,
                 "starred_messages": false,
                 "stream_color": false,
                 "stream_create": false,
@@ -362,7 +359,19 @@
                 "frontend_tests/casper_lib/*.js"
             ],
             "rules": {
-                "no-var": "off" // PhantomJS doesn’t support let, const
+                // Don’t require ES features that PhantomJS doesn’t support
+                "comma-dangle": [
+                    "error",
+                    {
+                        "arrays": "always-multiline",
+                        "objects": "always-multiline",
+                        "imports": "always-multiline",
+                        "exports": "always-multiline",
+                        "functions": "never"
+                    }
+                ],
+                "no-var": "off",
+                "prefer-arrow-callback": "off"
             }
         },
         {
@@ -384,14 +393,11 @@
 
                 "@typescript-eslint/array-type": "error",
                 "@typescript-eslint/await-thenable": "error",
-                "@typescript-eslint/camelcase": "off",
-                "@typescript-eslint/class-name-casing": "error",
                 "@typescript-eslint/consistent-type-assertions": "error",
                 "@typescript-eslint/explicit-function-return-type": ["error", { "allowExpressions": true }],
                 "@typescript-eslint/func-call-spacing": "error",
                 "@typescript-eslint/indent": "error",
                 "@typescript-eslint/member-delimiter-style": "error",
-                "@typescript-eslint/member-naming": ["error", { "private": "^_" } ],
                 "@typescript-eslint/member-ordering": "error",
                 "@typescript-eslint/no-explicit-any": "off",
                 "@typescript-eslint/no-extra-parens": ["error", "all"],

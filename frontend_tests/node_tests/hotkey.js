@@ -59,8 +59,8 @@ function return_true() { return true; }
 function return_false() { return false; }
 
 function stubbing(func_name_to_stub, test_function) {
-    global.with_overrides(function (override) {
-        global.with_stub(function (stub) {
+    global.with_overrides((override) => {
+        global.with_stub((stub) => {
             override(func_name_to_stub, stub.f);
             test_function(stub);
         });
@@ -165,7 +165,7 @@ run_test('basic_chars', () => {
     }
 
     function assert_mapping(c, func_name, shiftKey) {
-        stubbing(func_name, function () {
+        stubbing(func_name, () => {
             assert(process(c, shiftKey));
         });
     }
@@ -178,7 +178,7 @@ run_test('basic_chars', () => {
 
     // Unmapped keys should immediately return false, without
     // calling any functions outside of hotkey.js.
-    assert_unmapped('abfhlmotyz');
+    assert_unmapped('abfhlmoyz');
     assert_unmapped('BEFHILNOQTUWXYZ');
 
     // We have to skip some checks due to the way the code is
@@ -204,7 +204,7 @@ run_test('basic_chars', () => {
     hotkey.processing_text = return_true;
 
     function test_normal_typing() {
-        assert_unmapped('abcdefghijklmnopqrstuvwxyz');
+        assert_unmapped('abcdefghijklmnopqrsuvwxyz');
         assert_unmapped(' ');
         assert_unmapped('[]\\.,;');
         assert_unmapped('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
@@ -230,6 +230,7 @@ run_test('basic_chars', () => {
     overlays.streams_open = return_false;
     overlays.lightbox_open = return_false;
     overlays.drafts_open = return_false;
+    overlays.recent_topics = return_false;
 
     page_params.can_create_streams = true;
     overlays.streams_open = return_true;
@@ -263,6 +264,16 @@ run_test('basic_chars', () => {
     test_normal_typing();
     overlays.is_active = return_false;
     assert_mapping('d', 'drafts.launch');
+
+
+    // Test opening and closing of Recent Topics
+    overlays.is_active = return_true;
+    overlays.recent_topics_open = return_true;
+    assert_mapping('t', 'overlays.close_overlay');
+    overlays.recent_topics_open = return_false;
+    test_normal_typing();
+    overlays.is_active = return_false;
+    assert_mapping('t', 'hashchange.go_to_location');
 
     // Next, test keys that only work on a selected message.
     const message_view_only_keys = '@+>RjJkKsSuvi:GM';
@@ -359,7 +370,7 @@ run_test('motion_keys', () => {
     }
 
     function assert_mapping(key_name, func_name, shiftKey, ctrlKey) {
-        stubbing(func_name, function () {
+        stubbing(func_name, () => {
             assert(process(key_name, shiftKey, ctrlKey));
         });
     }

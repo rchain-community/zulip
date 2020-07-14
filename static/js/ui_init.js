@@ -52,7 +52,7 @@ exports.initialize_kitchen_sink_stuff = function () {
     //      the code here can probably be moved to more
     //      specific-purpose modules like message_viewport.js.
 
-    const throttled_mousewheelhandler = _.throttle(function (e, delta) {
+    const throttled_mousewheelhandler = _.throttle((e, delta) => {
         // Most of the mouse wheel's work will be handled by the
         // scroll handler, but when we're at the top or bottom of the
         // page, the pointer may still need to move.
@@ -70,7 +70,7 @@ exports.initialize_kitchen_sink_stuff = function () {
         message_viewport.set_last_movement_direction(delta);
     }, 50);
 
-    message_viewport.message_pane.on('wheel', function (e) {
+    message_viewport.message_pane.on('wheel', (e) => {
         const delta = e.originalEvent.deltaY;
         if (!overlays.is_active()) {
             // In the message view, we use a throttled mousewheel handler.
@@ -104,7 +104,7 @@ exports.initialize_kitchen_sink_stuff = function () {
     });
 
     // Ignore wheel events in the compose area which weren't already handled above.
-    $('#compose').on('wheel', function (e) {
+    $('#compose').on('wheel', (e) => {
         e.stopPropagation();
         e.preventDefault();
     });
@@ -133,7 +133,7 @@ exports.initialize_kitchen_sink_stuff = function () {
         message_hover(row);
     });
 
-    $("#main_div").on("mouseleave", ".message_table .message_row", function () {
+    $("#main_div").on("mouseleave", ".message_table .message_row", () => {
         message_unhover();
     });
 
@@ -190,15 +190,15 @@ exports.initialize_kitchen_sink_stuff = function () {
         ui_util.decorate_stream_bar(this.value, $("#stream-message .message_header_stream"), true);
     });
 
-    $(window).on('blur', function () {
+    $(window).on('blur', () => {
         $(document.body).addClass('window_blurred');
     });
 
-    $(window).on('focus', function () {
+    $(window).on('focus', () => {
         $(document.body).removeClass('window_blurred');
     });
 
-    $(document).on('message_selected.zulip', function (event) {
+    $(document).on('message_selected.zulip', (event) => {
         if (current_msg_list !== event.msg_list) {
             return;
         }
@@ -223,8 +223,8 @@ exports.initialize_kitchen_sink_stuff = function () {
                     render_end: event.msg_list.view._render_win_end,
                     selected_id_from_idx: messages[event.msg_list.selected_idx()].id,
                     msg_list_sorted: _.isEqual(
-                        messages.map(message => message.id),
-                        _.chain(current_msg_list.all_messages()).pluck('id').clone().value().sort()
+                        messages.map((message) => message.id),
+                        _.chain(current_msg_list.all_messages()).pluck('id').clone().value().sort(),
                     ),
                     found_in_dom: row_from_dom.length,
                 });
@@ -242,7 +242,7 @@ exports.initialize_kitchen_sink_stuff = function () {
         }
     });
 
-    $("#main_div").on("mouseenter", ".message_time", function (e) {
+    $("#main_div").on("mouseenter", ".message_time", (e) => {
         const time_elem = $(e.target);
         const row = time_elem.closest(".message_row");
         const message = current_msg_list.get(rows.id(row));
@@ -386,41 +386,41 @@ exports.initialize_everything = function () {
     }
 
     const alert_words_params = pop_fields(
-        'alert_words'
+        'alert_words',
     );
 
     const bot_params = pop_fields(
-        'realm_bots'
+        'realm_bots',
     );
 
     const people_params = pop_fields(
         'realm_users',
         'realm_non_active_users',
-        'cross_realm_bots'
+        'cross_realm_bots',
     );
 
     const pm_conversations_params = pop_fields(
-        'recent_private_conversations'
+        'recent_private_conversations',
     );
 
     const presence_params = pop_fields(
         'presences',
-        'initial_servertime'
+        'initial_servertime',
     );
 
     const stream_data_params = pop_fields(
         'subscriptions',
         'unsubscribed',
         'never_subscribed',
-        'realm_default_streams'
+        'realm_default_streams',
     );
 
     const user_groups_params = pop_fields(
-        'realm_user_groups'
+        'realm_user_groups',
     );
 
     const user_status_params = pop_fields(
-        'user_status'
+        'user_status',
     );
 
     alert_words.initialize(alert_words_params);
@@ -438,6 +438,7 @@ exports.initialize_everything = function () {
     subs.initialize();
     stream_list.initialize();
     condense.initialize();
+    spoilers.initialize();
     lightbox.initialize();
     click_handlers.initialize();
     copy_and_paste.initialize();
@@ -458,7 +459,7 @@ exports.initialize_everything = function () {
     emoji.initialize();
     markdown.initialize(
         page_params.realm_filters,
-        markdown_config.get_helpers()
+        markdown_config.get_helpers(),
     );
     compose.initialize();
     composebox_typeahead.initialize(); // Must happen after compose.initialize()
@@ -466,16 +467,14 @@ exports.initialize_everything = function () {
     tutorial.initialize();
     notifications.initialize();
     gear_menu.initialize();
+    presence.initialize(presence_params);
     settings_panel_menu.initialize();
     settings_sections.initialize();
     settings_toggle.initialize();
     hashchange.initialize();
-    pointer.initialize();
     unread_ui.initialize();
-    presence.initialize(presence_params);
     activity.initialize();
     emoji_picker.initialize();
-    compose_fade.initialize();
     pm_list.initialize();
     topic_list.initialize();
     topic_zoom.initialize();
@@ -489,7 +488,7 @@ exports.initialize_everything = function () {
     user_status_ui.initialize();
 };
 
-$(function () {
+$(() => {
     const finish = blueslip.start_timing('initialize_everything');
     exports.initialize_everything();
     finish();

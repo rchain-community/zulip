@@ -55,6 +55,9 @@ exports.update_property = function (stream_id, property, value, other_values) {
     case 'stream_post_policy':
         subs.update_stream_post_policy(sub, value);
         break;
+    case 'message_retention_days':
+        subs.update_message_retention_setting(sub, value);
+        break;
     default:
         blueslip.warn("Unexpected subscription property type", {property: property,
                                                                 value: value});
@@ -96,6 +99,9 @@ exports.mark_subscribed = function (sub, subscribers, color) {
         subs.update_settings_for_subscribed(sub);
     }
 
+    // update navbar if necessary
+    tab_bar.maybe_rerender_title_area_for_stream(sub);
+
     if (narrow_state.is_for_stream_id(sub.stream_id)) {
         current_msg_list.update_trailing_bookend();
     }
@@ -104,7 +110,7 @@ exports.mark_subscribed = function (sub, subscribers, color) {
     // need its unread counts re-calculated
     message_util.do_unread_count_updates(message_list.all.all_messages());
 
-    $(document).trigger($.Event('subscription_add_done.zulip', {sub: sub}));
+    stream_list.add_sidebar_row(sub);
 };
 
 exports.mark_unsubscribed = function (sub) {
@@ -117,6 +123,8 @@ exports.mark_unsubscribed = function (sub) {
         if (overlays.streams_open()) {
             subs.update_settings_for_unsubscribed(sub);
         }
+        // update navbar if necessary
+        tab_bar.maybe_rerender_title_area_for_stream(sub);
     } else {
         // Already unsubscribed
         return;
@@ -126,16 +134,16 @@ exports.mark_unsubscribed = function (sub) {
         current_msg_list.update_trailing_bookend();
     }
 
-    $(document).trigger($.Event('subscription_remove_done.zulip', {sub: sub}));
+    stream_list.remove_sidebar_row(sub.stream_id);
 };
 
 exports.remove_deactivated_user_from_all_streams = function (user_id) {
     const all_subs = stream_data.get_unsorted_subs();
 
     for (const sub of all_subs) {
-        if (stream_data.is_user_subscribed(sub.name, user_id)) {
-            stream_data.remove_subscriber(sub.name, user_id);
-            subs.rerender_subscriptions_settings(sub);
+        if (stream_data.is_user_subscribed(sub.stream_id, user_id)) {
+            stream_data.remove_subscriber(sub.stream_id, user_id);
+            subs.update_subscribers_ui(sub);
         }
     }
 };

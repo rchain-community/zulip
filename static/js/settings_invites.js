@@ -1,4 +1,5 @@
 const util = require("./util");
+const settings_config = require("./settings_config");
 const render_admin_invites_list = require("../templates/admin_invites_list.hbs");
 const render_settings_revoke_invite_modal = require("../templates/settings/revoke_invite_modal.hbs");
 
@@ -15,15 +16,9 @@ function failed_listing_invites(xhr) {
     ui_report.error(i18n.t("Error listing invites"), xhr, $("#invites-field-status"));
 }
 
-exports.invited_as_values = new Map([
-    [1, i18n.t("Member")],
-    [2, i18n.t("Organization administrator")],
-    [3, i18n.t("Guest")],
-]);
-
 function add_invited_as_text(invites) {
     for (const data of invites) {
-        data.invited_as_text = exports.invited_as_values.get(data.invited_as);
+        data.invited_as_text = settings_config.user_role_map.get(data.invited_as);
     }
 }
 
@@ -51,12 +46,16 @@ function populate_invites(invites_data) {
         modifier: function (item) {
             item.invited_absolute_time = timerender.absolute_time(item.invited * 1000);
             item.is_admin = page_params.is_admin;
+            item.disable_buttons = item.invited_as === settings_config.user_role_values.owner.code
+                && !page_params.is_owner;
+            item.referrer_email = people.get_by_user_id(item.invited_by_user_id).email;
             return render_admin_invites_list({ invite: item });
         },
         filter: {
             element: invites_table.closest(".settings-section").find(".search"),
             predicate: function (item, value) {
-                const referrer_email_matched = item.ref.toLowerCase().includes(value);
+                const referrer_email = people.get_by_user_id(item.invited_by_user_id).email;
+                const referrer_email_matched = referrer_email.toLowerCase().includes(value);
                 if (item.is_multiuse) {
                     return referrer_email_matched;
                 }
@@ -129,7 +128,7 @@ exports.on_load_success = function (invites_data, initialize_event_handlers) {
     if (!initialize_event_handlers) {
         return;
     }
-    $(".admin_invites_table").on("click", ".revoke", function (e) {
+    $(".admin_invites_table").on("click", ".revoke", (e) => {
         // This click event must not get propagated to parent container otherwise the modal
         // will not show up because of a call to `close_active_modal` in `settings.js`.
         e.preventDefault();
@@ -150,7 +149,7 @@ exports.on_load_success = function (invites_data, initialize_event_handlers) {
         $("#do_revoke_invite_button").click(do_revoke_invite);
     });
 
-    $(".admin_invites_table").on("click", ".resend", function (e) {
+    $(".admin_invites_table").on("click", ".resend", (e) => {
         // This click event must not get propagated to parent container otherwise the modal
         // will not show up because of a call to `close_active_modal` in `settings.js`.
         e.preventDefault();
@@ -166,7 +165,7 @@ exports.on_load_success = function (invites_data, initialize_event_handlers) {
         $("#resend_invite_modal").modal("show");
     });
 
-    $("#do_resend_invite_button").click(function () {
+    $("#do_resend_invite_button").click(() => {
         const modal_invite_id = $("#resend_invite_modal #do_resend_invite_button").attr("data-invite-id");
         const resend_button = meta.current_resend_invite_user_modal_row.find("button.resend");
 

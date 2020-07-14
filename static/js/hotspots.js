@@ -96,7 +96,7 @@ function place_popover(hotspot) {
             $(hotspot.location.element),
             popover_height,
             popover_width,
-            false
+            false,
         );
 
     switch (orientation) {
@@ -151,7 +151,7 @@ function place_popover(hotspot) {
     default:
         blueslip.error(
             'Invalid popover placement value for hotspot \'' +
-                hotspot.name + '\''
+                hotspot.name + '\'',
         );
         break;
     }
@@ -203,7 +203,7 @@ function insert_hotspot_into_DOM(hotspot) {
             '<div class="bounce"><span class="bounce-icon">?</span></div>' +
         '</div>';
 
-    setTimeout(function () {
+    setTimeout(() => {
         $('body').prepend(hotspot_icon_HTML);
         $('body').prepend(hotspot_overlay_HTML);
         if (place_icon(hotspot)) {
@@ -211,8 +211,8 @@ function insert_hotspot_into_DOM(hotspot) {
         }
 
         // reposition on any event that might update the UI
-        ['resize', 'scroll', 'onkeydown', 'click'].forEach(function (event_name) {
-            window.addEventListener(event_name, _.debounce(function () {
+        ['resize', 'scroll', 'onkeydown', 'click'].forEach((event_name) => {
+            window.addEventListener(event_name, _.debounce(() => {
                 if (place_icon(hotspot)) {
                     place_popover(hotspot);
                 }
@@ -237,7 +237,7 @@ exports.close_hotspot_icon = function (elem) {
 function close_read_hotspots(new_hotspots) {
     const unwanted_hotspots = _.difference(
         Array.from(HOTSPOT_LOCATIONS.keys()),
-        new_hotspots.map(hotspot => hotspot.name)
+        new_hotspots.map((hotspot) => hotspot.name),
     );
 
     for (const hotspot_name of unwanted_hotspots) {
@@ -247,7 +247,7 @@ function close_read_hotspots(new_hotspots) {
 
 exports.load_new = function (new_hotspots) {
     close_read_hotspots(new_hotspots);
-    new_hotspots.forEach(function (hotspot) {
+    new_hotspots.forEach((hotspot) => {
         hotspot.location = HOTSPOT_LOCATIONS.get(hotspot.name);
     });
     new_hotspots.forEach(insert_hotspot_into_DOM);

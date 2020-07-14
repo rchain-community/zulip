@@ -7,7 +7,7 @@ Key Codebases
 The main Zulip codebase is at <https://github.com/zulip/zulip>.  It
 contains the Zulip backend (written in Python 3.x and Django), the
 webapp (written in JavaScript and TypeScript) and our library of
-incoming webhook [integrations](https://zulipchat.com/integrations)
+incoming webhook [integrations](https://zulip.com/integrations)
 with other services and applications (see [the directory structure
 guide](../overview/directory-structure.md)).
 
@@ -44,22 +44,22 @@ Zulip is a real-time team chat application meant to provide a great
 experience for a wide range of organizations, from companies to
 volunteer projects to groups of friends, ranging in size from a small
 team to 10,000s of users.  It has [hundreds of
-features](https://zulipchat.com/features) both larger and small, and
+features](https://zulip.com/features) both larger and small, and
 supports dedicated apps for iOS, Android, Linux, Windows, and macOS,
 all modern web browsers, several cross-protocol chat clients, and
-numerous dedicated [Zulip API](https://zulipchat.com/api) clients
+numerous dedicated [Zulip API](https://zulip.com/api) clients
 (e.g. bots).
 
 A server can host multiple Zulip *realms* (organizations), each on its
-own (sub)domain.  While most deployments host only one organization, some
-such as zulipchat.com host thousands.  Each organization is a private
+own (sub)domain.  While most installations host only one organization, some
+such as zulip.com host thousands.  Each organization is a private
 chamber with its own users, streams, customizations, and so on. This
 means that one person might be a user of multiple Zulip realms. The
 administrators of an organization have a great deal of control over
 who can register an account, what permissions new users have, etc. For
 more on security considerations and options, see [the security model
 section](../production/security-model.md) and the [Zulip Help
-Center](https://zulipchat.com/help).
+Center](https://zulip.com/help).
 
 Components
 ----------
@@ -238,7 +238,9 @@ Also see [the queuing guide](../subsystems/queuing.md).
 
 PostgreSQL (also known as Postgres) is the database that stores all
 persistent data, that is, data that's expected to live beyond a user's
-current session.
+current session.  Starting with Zulip 3.0, new Zulip installations
+will install modern Postgres release rather than using the version included
+with the operating system.
 
 In production, Postgres is installed with a default configuration. The
 directory that would contain configuration files
@@ -272,8 +274,8 @@ This component is intended to install Nagios plugins intended to be run
 on a Nagios server; most of the Zulip Nagios plugins are intended to be
 run on the Zulip servers themselves, and are included with the relevant
 component of the Zulip server (e.g.
-`puppet/zulip/manifests/postgres_common.pp` installs a few under
-`/usr/lib/nagios/plugins/zulip_postgres_common`).
+`puppet/zulip/manifests/postgres_backups.pp` installs a few under
+`/usr/lib/nagios/plugins/zulip_backups`).
 
 ## Glossary
 
@@ -292,6 +294,13 @@ self-explanatory names.
     timestamp, offering contextual options, e.g., "Reply", "Mute [this
     topic]", or "Link to this conversation". To avoid visual clutter,
     the chevron only appears in the web UI upon hover.
+
+* **ellipsis**: A small vertical three dot icon(technically called
+    as ellipsis-v), present in sidebars as a menu icon.
+    It offers contextual options for Global Filters(All messages
+    and Starred messages), Stream Filters and Topics in left
+    sidebar and User in right sidebar. To avoid visual clutter
+    ellipsis only appears in the web UI upon hover.
 
 * **huddle**: What the codebase calls a "group private message".
 

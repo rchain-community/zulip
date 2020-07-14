@@ -80,9 +80,7 @@ run_test('get_list_info unreads', () => {
 
     // Going forward, we just stub get_recent_topic_names
     // for simpler test setup.
-    stream_topic_history.get_recent_topic_names = () => {
-        return _.range(15).map(i => 'topic ' + i);
-    };
+    stream_topic_history.get_recent_topic_names = () => _.range(15).map((i) => 'topic ' + i);
 
     const unread_cnt = new Map();
     unread.num_unread_for_topic = (stream_id, topic_name) => {
@@ -108,7 +106,7 @@ run_test('get_list_info unreads', () => {
     assert.equal(list_info.num_possible_topics, 15);
 
     assert.deepEqual(
-        list_info.items.map(li => li.topic_name),
+        list_info.items.map((li) => li.topic_name),
         [
             'topic 0',
             'topic 1',
@@ -128,7 +126,7 @@ run_test('get_list_info unreads', () => {
     assert.equal(list_info.num_possible_topics, 15);
 
     assert.deepEqual(
-        list_info.items.map(li => li.topic_name),
+        list_info.items.map((li) => li.topic_name),
         [
             'topic 0',
             'topic 1',
@@ -155,7 +153,7 @@ run_test('get_list_info unreads', () => {
     assert.equal(list_info.num_possible_topics, 15);
 
     assert.deepEqual(
-        list_info.items.map(li => li.topic_name),
+        list_info.items.map((li) => li.topic_name),
         [
             'topic 0',
             'topic 1',

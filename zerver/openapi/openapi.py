@@ -1,28 +1,27 @@
 # Set of helper functions to manipulate the OpenAPI files that define our REST
 # API's specification.
 import os
+import re
 from typing import Any, Dict, List, Optional, Set
+
+from openapi_schema_validator import OAS30Validator
 
 OPENAPI_SPEC_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__),
     '../openapi/zulip.yaml'))
 
-# A list of exceptions we allow when running validate_against_openapi_schema.
-# The validator will ignore these keys when they appear in the "content"
-# passed.
-EXCLUDE_PROPERTIES = {
-    '/register': {
-        'post': {
-            '200': ['max_message_id', 'realm_emoji']
-        }
-    }
-}
-
+# A list of endpoint-methods such that the endpoint
+# has documentation but not with this particular method.
+EXCLUDE_UNDOCUMENTED_ENDPOINTS = {"/realm/emoji/{emoji_name}:delete"}
+# Consists of endpoints with some documentation remaining.
+# These are skipped but return true as the validator cannot exclude objects
+EXCLUDE_DOCUMENTED_ENDPOINTS = {"/events:get", "/register:post", "/settings/notifications:patch"}
 class OpenAPISpec():
     def __init__(self, path: str) -> None:
         self.path = path
         self.last_update: Optional[float] = None
-        self.data: Optional[Dict[str, Any]] = None
+        self.data: Dict[str, Any] = {}
+        self.regex_dict: Dict[str, str] = {}
 
     def reload(self) -> None:
         # Because importing yamole (and in turn, yaml) takes
@@ -40,7 +39,46 @@ class OpenAPISpec():
             yaml_parser = YamoleParser(f)
 
         self.data = yaml_parser.data
+        self.create_regex_dict()
         self.last_update = os.path.getmtime(self.path)
+
+    def create_regex_dict(self) -> None:
+        # Alogrithm description:
+        # We have 2 types of endpoints
+        # 1.with path arguments 2. without path arguments
+        # In validate_against_openapi_schema we directly check
+        # if we have a without path endpoint, since it does not
+        # require regex. Hence they are not part of the regex dict
+        # and now we are left with only:
+        # endpoint with path arguments.
+        # Now for this case, the regex has been created carefully,
+        # numeric arguments are matched with [0-9] only and
+        # emails are matched with their regex. This is why there are zero
+        # collisions. Hence if this regex matches
+        # an incorrect endpoint then there is some backend problem.
+        # For example if we have users/{name}/presence then it will
+        # conflict with users/me/presence even in the backend.
+        # Care should be taken though that if we have special strings
+        # such as email they must be substituted with proper regex.
+
+        email_regex = r'([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})'
+        self.regex_dict = {}
+        for key in self.data['paths']:
+            if '{' not in key:
+                continue
+            regex_key = '^' + key + '$'
+            # Numeric arguments have id at their end
+            # so find such arguments and replace them with numeric
+            # regex
+            regex_key = re.sub(r'{[^}]*id}', r'[0-9]*', regex_key)
+            # Email arguments end with email
+            regex_key = re.sub(r'{[^}]*email}', email_regex, regex_key)
+            # All other types of arguments are supposed to be
+            # all-encompassing string.
+            regex_key = re.sub(r'{[^}]*}', r'[^\/]*', regex_key)
+            regex_key = regex_key.replace(r'/', r'\/')
+            regex_key = fr'{regex_key}'
+            self.regex_dict[regex_key] = key
 
     def spec(self) -> Dict[str, Any]:
         """Reload the OpenAPI file if it has been modified after the last time
@@ -51,8 +89,21 @@ class OpenAPISpec():
         # earlier version than the current one
         if self.last_update != last_modified:
             self.reload()
-        assert(self.data)
+        assert(len(self.data) > 0)
         return self.data
+
+    def regex_keys(self) -> Dict[str, str]:
+        """Reload the OpenAPI file if it has been modified after the last time
+        it was read, and then return the parsed data.
+        """
+        last_modified = os.path.getmtime(self.path)
+        # Using != rather than < to cover the corner case of users placing an
+        # earlier version than the current one
+        if self.last_update != last_modified:
+            self.reload()
+        assert(len(self.regex_dict) > 0)
+        return self.regex_dict
+
 
 class SchemaError(Exception):
     pass
@@ -60,6 +111,12 @@ class SchemaError(Exception):
 openapi_spec = OpenAPISpec(OPENAPI_SPEC_PATH)
 
 def get_schema(endpoint: str, method: str, response: str) -> Dict[str, Any]:
+    if len(response) == 3 and ('oneOf' in (openapi_spec.spec())['paths'][endpoint]
+                               [method.lower()]['responses'][response]['content']
+                               ['application/json']['schema']):
+        # Currently at places where multiple schemas are defined they only
+        # differ in example so either can be used.
+        response += '_0'
     if len(response) == 3:
         schema = (openapi_spec.spec()['paths'][endpoint][method.lower()]['responses']
                   [response]['content']['application/json']['schema'])
@@ -72,11 +129,9 @@ def get_schema(endpoint: str, method: str, response: str) -> Dict[str, Any]:
         return schema
 
 def get_openapi_fixture(endpoint: str, method: str,
-                        response: Optional[str]='200') -> Dict[str, Any]:
+                        response: str='200') -> Dict[str, Any]:
     """Fetch a fixture from the full spec object.
     """
-    if response is None:
-        response = '200'
     return (get_schema(endpoint, method, response)['example'])
 
 def get_openapi_description(endpoint: str, method: str) -> str:
@@ -112,85 +167,100 @@ def get_openapi_return_values(endpoint: str, method: str,
     response = response['properties']
     return response
 
-exclusion_list: List[str] = []
+def match_against_openapi_regex(endpoint: str) -> Optional[str]:
+    for key in openapi_spec.regex_keys():
+        matches = re.match(fr'{key}', endpoint)
+        if matches:
+            return openapi_spec.regex_keys()[key]
+    return None
 
 def validate_against_openapi_schema(content: Dict[str, Any], endpoint: str,
-                                    method: str, response: str) -> None:
+                                    method: str, response: str) -> bool:
     """Compare a "content" dict with the defined schema for a specific method
-    in an endpoint.
+    in an endpoint. Return true if validated and false if skipped.
     """
-    global exclusion_list
+
+    # This first set of checks are primarily training wheels that we
+    # hope to eliminate over time as we improve our API documentation.
+
+    # No 500 responses have been documented, so skip them
+    if response.startswith('5'):
+        return False
+    if endpoint not in openapi_spec.spec()['paths'].keys():
+        match = match_against_openapi_regex(endpoint)
+        # If it doesn't match it hasn't been documented yet.
+        if match is None:
+            return False
+        endpoint = match
+    # Excluded endpoint/methods
+    if endpoint + ':' + method in EXCLUDE_UNDOCUMENTED_ENDPOINTS:
+        return False
+    # Return true for endpoints with only response documentation remaining
+    if endpoint + ':' + method in EXCLUDE_DOCUMENTED_ENDPOINTS:
+        return True
+    # Check if the response matches its code
+    if response.startswith('2') and (content.get('result', 'success').lower() != 'success'):
+        raise SchemaError("Response is not 200 but is validating against 200 schema")
+    # Code is not declared but appears in various 400 responses. If
+    # common, it can be added to 400 response schema
+    if response.startswith('4'):
+        # This return statement should ideally be not here. But since
+        # we have not defined 400 responses for various paths this has
+        # been added as all 400 have the same schema.  When all 400
+        # response have been defined this should be removed.
+        return True
+
+    # The actual work of validating that the response matches the
+    # schema is done via the third-party OAS30Validator.
     schema = get_schema(endpoint, method, response)
-    # In a single response schema we do not have two keys with the same name.
-    # Hence exclusion list is declared globally
-    exclusion_list = (EXCLUDE_PROPERTIES.get(endpoint, {}).get(method, {}).get(response, []))
-    validate_object(content, schema)
+    validator = OAS30Validator(schema)
+    validator.validate(content)
+    return True
 
-def validate_array(content: List[Any], schema: Dict[str, Any]) -> None:
-    valid_types: List[type] = []
+def validate_schema_array(schema: Dict[str, Any]) -> None:
+    """
+    Helper function for validate_schema
+    """
     if 'oneOf' in schema['items']:
-        for valid_type in schema['items']['oneOf']:
-            valid_types.append(to_python_type(valid_type['type']))
+        for oneof_schema in schema['items']['oneOf']:
+            if oneof_schema['type'] == 'array':
+                validate_schema_array(oneof_schema)
+            elif oneof_schema['type'] == 'object':
+                validate_schema(oneof_schema)
     else:
-        valid_types.append(to_python_type(schema['items']['type']))
-    for item in content:
-        if type(item) not in valid_types:
-            raise SchemaError('Wrong data type in array')
-        # We can directly check for objects and arrays as
-        # there are no mixed arrays consisting of objects
-        # and arrays.
-        if 'properties' in schema['items']:
-            validate_object(item, schema['items'])
-            continue
-        # If the object was not an opaque object then
-        # the continue statement above should have
-        # been executed.
-        if 'object' in valid_types:
-            raise SchemaError('Opaque object in array')
-        if 'items' in schema['items']:
-            validate_array(item, schema['items'])
+        if schema['items']['type'] == 'array':
+            validate_schema_array(schema['items'])
+        elif schema['items']['type'] == 'object':
+            validate_schema(schema['items'])
 
-def validate_object(content: Dict[str, Any], schema: Dict[str, Any]) -> None:
-    for key, value in content.items():
-        if key in exclusion_list:
-            continue
-        # Check that the key is defined in the schema
-        if key not in schema['properties']:
-            raise SchemaError('Extraneous key "{}" in the response\'s '
-                              'content'.format(key))
+def validate_schema(schema: Dict[str, Any]) -> None:
+    """Check if opaque objects are present in the OpenAPI spec; this is an
+    important part of our policy for ensuring every detail of Zulip's
+    API responses is correct.
 
-        # Check that the types match
-        expected_type = to_python_type(schema['properties'][key]['type'])
-        actual_type = type(value)
-        # We have only define nullable property if it is nullable
-        if value is None and 'nullable' in schema['properties'][key]:
-            continue
-        if expected_type is not actual_type:
-            raise SchemaError('Expected type {} for key "{}", but actually '
-                              'got {}'.format(expected_type, key, actual_type))
-        if expected_type is list:
-            validate_array(value, schema['properties'][key])
-        if 'properties' in schema['properties'][key]:
-            validate_object(value, schema['properties'][key])
-            continue
-        if 'additionalProperties' in schema['properties'][key]:
-            for child_keys in value:
-                if type(value[child_keys]) is list:
-                    validate_array(value[child_keys],
-                                   schema['properties'][key]['additionalProperties'])
-                    continue
-                validate_object(value[child_keys],
-                                schema['properties'][key]['additionalProperties'])
-            continue
-        # If the object is not opaque then continue statements
-        # will be executed above and this will be skipped
-        if expected_type is dict:
-            raise SchemaError('Opaque object "{}"'.format(key))
-    # Check that at least all the required keys are present
-    if 'required' in schema:
-        for req_key in schema['required']:
-            if req_key not in content.keys():
-                raise SchemaError('Expected to find the "{}" required key')
+    This is done by checking for the presence of the
+    `additionalProperties` attribute for all objects (dictionaries).
+    """
+    if 'additionalProperties' not in schema:
+        raise SchemaError('additionalProperties needs to be defined for objects to make' +
+                          'sure they have no additional properties left to be documented.')
+    for key in schema.get('properties', dict()):
+        if 'oneOf' in schema['properties'][key]:
+            for types in schema['properties'][key]['oneOf']:
+                if types['type'] == 'object':
+                    validate_schema(types)
+                elif types['type'] == 'array':
+                    validate_schema_array(types)
+        else:
+            if schema['properties'][key]['type'] == 'object':
+                validate_schema(schema['properties'][key])
+            elif schema['properties'][key]['type'] == 'array':
+                validate_schema_array(schema['properties'][key])
+    if schema['additionalProperties']:
+        if schema['additionalProperties']['type'] == 'array':
+            validate_schema_array(schema['additionalProperties'])
+        elif schema['additionalProperties']['type'] == 'object':
+            validate_schema(schema['additionalProperties'])
 
 def to_python_type(py_type: str) -> type:
     """Transform an OpenAPI-like type to a Python one.
@@ -202,7 +272,13 @@ def to_python_type(py_type: str) -> type:
         'integer': int,
         'boolean': bool,
         'array': list,
-        'object': dict
+        'object': dict,
     }
 
     return TYPES[py_type]
+
+def likely_deprecated_parameter(parameter_description: str) -> bool:
+    if '**Changes**: Deprecated' in parameter_description:
+        return True
+
+    return "**Deprecated**" in parameter_description

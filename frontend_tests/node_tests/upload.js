@@ -75,7 +75,7 @@ run_test('get_item', () => {
         {
             name: "Error",
             message: "Missing config",
-        }
+        },
     );
     assert.throws(
         () => {
@@ -84,7 +84,7 @@ run_test('get_item', () => {
         {
             name: "Error",
             message: "Missing row in config",
-        }
+        },
     );
     assert.throws(
         () => {
@@ -93,7 +93,7 @@ run_test('get_item', () => {
         {
             name: "Error",
             message: "Invalid upload mode!",
-        }
+        },
     );
     assert.throws(
         () => {
@@ -102,7 +102,7 @@ run_test('get_item', () => {
         {
             name: "Error",
             message: 'Invalid key name for mode "compose"',
-        }
+        },
     );
     assert.throws(
         () => {
@@ -111,7 +111,7 @@ run_test('get_item', () => {
         {
             name: "Error",
             message: 'Invalid key name for mode "edit"',
-        }
+        },
     );
 });
 
@@ -436,23 +436,17 @@ run_test('uppy_events', () => {
             on: (event_name, callback) => {
                 callbacks[event_name] = callback;
             },
-            getFiles: () => {
-                return [...files];
-            },
+            getFiles: () => [...files],
             removeFile: (file_id) => {
-                files = files.filter((file) => {
-                    return file.id !== file_id;
-                });
+                files = files.filter((file) => file.id !== file_id);
             },
-            getState: () => {
-                return {
-                    info: {
-                        type: state.type,
-                        details: state.details,
-                        message: state.message,
-                    },
-                };
-            },
+            getState: () => ({
+                info: {
+                    type: state.type,
+                    details: state.details,
+                    message: state.message,
+                },
+            }),
         };
     }
     uppy_stub.Plugin = plugin_stub;

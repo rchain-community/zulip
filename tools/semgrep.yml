@@ -8,24 +8,14 @@ rules:
     languages: [python]
     severity: ERROR
 
-  - id: useless-if-body
-    patterns:
-      - pattern: |
-          if $X:
-              $S
-          else:
-              $S
-    message: "Useless if statment; both blocks have the same body"
-    languages: [python]
-    severity: ERROR
-
   - id: dont-use-stream-objects-filter
     pattern: Stream.objects.filter(...)
     message: "Please use access_stream_by_*() to fetch Stream objects"
     languages: [python]
     severity: ERROR
     paths:
-      - directory: "zerver/views/"
+      include:
+        - zerver/views/
 
   - id: dont-import-models-in-migrations
     patterns:
@@ -42,32 +32,96 @@ rules:
     languages: [python]
     severity: ERROR
     paths:
-      - directory: "**/migrations"
-      - path-not: 'zerver/migrations/0032_verify_all_medium_avatar_images.py'
-      - path-not: 'zerver/migrations/0104_fix_unreads.py'
-      - path-not: 'zerver/migrations/0206_stream_rendered_description.py'
-      - path-not: 'zerver/migrations/0209_user_profile_no_empty_password.py'
-      - path-not: 'zerver/migrations/0260_missed_message_addresses_from_redis_to_db.py'
-      - path-not: 'pgroonga/migrations/0002_html_escape_subject.py'
+      include:
+        - "**/migrations"
+      exclude:
+        - zerver/migrations/0032_verify_all_medium_avatar_images.py
+        - zerver/migrations/0104_fix_unreads.py
+        - zerver/migrations/0206_stream_rendered_description.py
+        - zerver/migrations/0209_user_profile_no_empty_password.py
+        - zerver/migrations/0260_missed_message_addresses_from_redis_to_db.py
+        - pgroonga/migrations/0002_html_escape_subject.py
 
   - id: logging-format
     languages: [python]
     patterns:
       - pattern-either:
-          - pattern: logging.$Y(... % ...)
           - pattern: logging.$Y(... .format(...))
-          - pattern: logger.$Y(... % ...)
+          - pattern: logging.$Y(f"...")
           - pattern: logger.$Y(... .format(...))
-      - pattern-where-python: "vars['$Y'] in ['debug', 'info', 'warning', 'error', 'critical']"
+          - pattern: logger.$Y(f"...")
+      - pattern-where-python: "vars['$Y'] in ['debug', 'info', 'warning', 'error', 'critical', 'exception']"
     severity: ERROR
     message: "Pass format arguments to logging (https://docs.python.org/3/howto/logging.html#optimization)"
 
   - id: sql-format
     languages: [python]
     pattern-either:
-      - pattern: ... .execute(... % ...)
       - pattern: ... .execute("...".format(...))
-      - pattern: psycopg2.sql.SQL(... % ...)
+      - pattern: ... .execute(f"...")
       - pattern: psycopg2.sql.SQL(... .format(...))
+      - pattern: psycopg2.sql.SQL(f"...")
+      - pattern: django.db.migrations.RunSQL(..., "..." .format(...), ...)
+      - pattern: django.db.migrations.RunSQL(..., f"...", ...)
+      - pattern: django.db.migrations.RunSQL(..., [..., "..." .format(...), ...], ...)
+      - pattern: django.db.migrations.RunSQL(..., [..., f"...", ...], ...)
     severity: ERROR
     message: "Do not write a SQL injection vulnerability please"
+
+  - id: translated-format
+    languages: [python]
+    pattern-either:
+      - pattern: django.utils.translation.ugettext(... .format(...))
+      - pattern: django.utils.translation.ugettext(f"...")
+    severity: ERROR
+    message: "Format strings after translation, not before"
+
+  - id: mutable-default-type
+    languages: [python]
+    pattern-either:
+      - pattern: |
+          def $F(..., $A: typing.List[...] = [...], ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Optional[typing.List[...]] = [...], ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.List[...] = zerver.lib.request.REQ(..., default=[...], ...), ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Optional[typing.List[...]] = zerver.lib.request.REQ(..., default=[...], ...), ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Dict[...] = {}, ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Optional[typing.Dict[...]] = {}, ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Dict[...] = zerver.lib.request.REQ(..., default={}, ...), ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Optional[typing.Dict[...]] = zerver.lib.request.REQ(..., default={}, ...), ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Set[...] = set(), ...) -> ...:
+              ...
+      - pattern: |
+          def $F(..., $A: typing.Optional[typing.Set[...]] = set(), ...) -> ...:
+              ...
+    severity: ERROR
+    message: "Guard mutable default with read-only type (Sequence, Mapping, AbstractSet)"
+
+  - id: percent-formatting
+    languages: [python]
+    pattern-either:
+      - pattern: '"..." % ...'
+      - pattern: django.utils.translation.ugettext(...) % ...
+    severity: ERROR
+    message: "Prefer f-strings or .format for string formatting"
+
+  - id: eval
+    languages: [python]
+    pattern: eval
+    severity: ERROR
+    message: "Do not use eval under any circumstances; consider json.loads instead"

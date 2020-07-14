@@ -154,7 +154,7 @@ function build_stream_popover(opts) {
     $(elt).popover("show");
     const popover = $('.streams_popover[data-stream-id=' + stream_id + ']');
 
-    update_spectrum(popover, function (colorpicker) {
+    update_spectrum(popover, (colorpicker) => {
         colorpicker.spectrum(stream_color.sidebar_popover_colorpicker_options);
     });
 
@@ -193,6 +193,7 @@ function build_topic_popover(opts) {
         can_mute_topic: can_mute_topic,
         can_unmute_topic: can_unmute_topic,
         is_admin: sub.is_admin,
+        color: sub.color,
     });
 
     $(elt).popover({
@@ -272,16 +273,20 @@ function build_move_topic_to_stream_popover(e, current_stream_id, topic_name) {
     // likely will make it possible to move messages to/from private
     // streams in the future.
     const available_streams = stream_data.subscribed_subs()
-        .filter(s => s.stream_id !== current_stream_id);
-    const args = { available_streams, topic_name, current_stream_id };
+        .filter((s) => s.stream_id !== current_stream_id);
+    const current_stream_name = stream_data.maybe_get_stream_name(current_stream_id);
+    const args = {
+        available_streams, topic_name, current_stream_id, current_stream_name,
+        notify_new_thread: message_edit.notify_new_thread_default,
+        notify_old_thread: message_edit.notify_old_thread_default,
+    };
 
     exports.hide_topic_popover();
 
     $("#move-a-topic-modal-holder").html(render_move_topic_to_stream(args));
 
     const stream_header_colorblock = $(".topic_stream_edit_header").find(".stream_header_colorblock");
-    const stream_name = stream_data.maybe_get_stream_name(current_stream_id);
-    ui_util.decorate_stream_bar(stream_name, stream_header_colorblock, false);
+    ui_util.decorate_stream_bar(current_stream_name, stream_header_colorblock, false);
     $("#select_stream_id").change(function () {
         const stream_name = stream_data.maybe_get_stream_name(parseInt(this.value, 10));
         ui_util.decorate_stream_bar(stream_name, stream_header_colorblock, false);
@@ -292,7 +297,7 @@ function build_move_topic_to_stream_popover(e, current_stream_id, topic_name) {
 }
 
 exports.register_click_handlers = function () {
-    $('#stream_filters').on('click', '.stream-sidebar-menu-icon', function (e) {
+    $('#stream_filters').on('click', '.stream-sidebar-menu-icon', (e) => {
         e.stopPropagation();
 
         const elt = e.target;
@@ -305,7 +310,7 @@ exports.register_click_handlers = function () {
         });
     });
 
-    $('#stream_filters').on('click', '.topic-sidebar-menu-icon', function (e) {
+    $('#stream_filters').on('click', '.topic-sidebar-menu-icon', (e) => {
         e.stopPropagation();
 
         const elt = $(e.target).closest('.topic-sidebar-menu-icon').expectOne()[0];
@@ -330,7 +335,7 @@ exports.register_click_handlers = function () {
 
 exports.register_stream_handlers = function () {
     // Stream settings
-    $('body').on('click', '.open_stream_settings', function (e) {
+    $('body').on('click', '.open_stream_settings', (e) => {
         const sub = stream_popover_sub(e);
         exports.hide_stream_popover();
 
@@ -339,7 +344,7 @@ exports.register_stream_handlers = function () {
     });
 
     // Pin/unpin
-    $('body').on('click', '.pin_to_top', function (e) {
+    $('body').on('click', '.pin_to_top', (e) => {
         const sub = stream_popover_sub(e);
         exports.hide_stream_popover();
         subs.toggle_pin_to_top_stream(sub);
@@ -347,7 +352,7 @@ exports.register_stream_handlers = function () {
     });
 
     // Mark all messages in stream as read
-    $('body').on('click', '.mark_stream_as_read', function (e) {
+    $('body').on('click', '.mark_stream_as_read', (e) => {
         const sub = stream_popover_sub(e);
         exports.hide_stream_popover();
         unread_ops.mark_stream_as_read(sub.stream_id);
@@ -355,14 +360,14 @@ exports.register_stream_handlers = function () {
     });
 
     // Mark all messages as read
-    $('body').on('click', '#mark_all_messages_as_read', function (e) {
+    $('body').on('click', '#mark_all_messages_as_read', (e) => {
         exports.hide_all_messages_popover();
-        pointer.fast_forward_pointer();
+        unread_ops.mark_all_as_read();
         e.stopPropagation();
     });
 
     // Unstar all messages
-    $('body').on('click', '#unstar_all_messages', function (e) {
+    $('body').on('click', '#unstar_all_messages', (e) => {
         exports.hide_starred_messages_popover();
         e.preventDefault();
         e.stopPropagation();
@@ -371,14 +376,14 @@ exports.register_stream_handlers = function () {
         $("#unstar-messages-modal").modal("show");
     });
 
-    $('body').on('click', '#do_unstar_messages_button', function (e) {
+    $('body').on('click', '#do_unstar_messages_button', (e) => {
         $("#unstar-messages-modal").modal("hide");
         message_flags.unstar_all_messages();
         e.stopPropagation();
     });
 
     // Toggle displaying starred message count
-    $('body').on('click', '#toggle_display_starred_msg_count', function (e) {
+    $('body').on('click', '#toggle_display_starred_msg_count', (e) => {
         exports.hide_starred_messages_popover();
         e.preventDefault();
         e.stopPropagation();
@@ -391,7 +396,7 @@ exports.register_stream_handlers = function () {
         });
     });
     // Mute/unmute
-    $('body').on('click', '.toggle_home', function (e) {
+    $('body').on('click', '.toggle_home', (e) => {
         const sub = stream_popover_sub(e);
         exports.hide_stream_popover();
         subs.toggle_home(sub);
@@ -409,9 +414,9 @@ exports.register_stream_handlers = function () {
         e.stopPropagation();
     });
 
-    // Choose custom color
-    $('body').on('click', '.custom_color', function (e) {
-        update_spectrum($(e.target).closest('.streams_popover'), function (colorpicker) {
+    // Choose a different color.
+    $('body').on('click', '.choose_stream_color', (e) => {
+        update_spectrum($(e.target).closest('.streams_popover'), (colorpicker) => {
             $('.colorpicker-container').show();
             colorpicker.spectrum("destroy");
             colorpicker.spectrum(stream_color.sidebar_popover_colorpicker_options_full);
@@ -424,7 +429,7 @@ exports.register_stream_handlers = function () {
             $(e.target).hide();
         });
 
-        $('.streams_popover').on('click', 'a.sp-cancel', function () {
+        $('.streams_popover').on('click', 'a.sp-cancel', () => {
             exports.hide_stream_popover();
         });
     });
@@ -448,7 +453,7 @@ function topic_popover_sub(e) {
 
 exports.register_topic_handlers = function () {
     // Narrow to topic
-    $('body').on('click', '.narrow_to_topic', function (e) {
+    $('body').on('click', '.narrow_to_topic', (e) => {
         exports.hide_topic_popover();
 
         const sub = topic_popover_sub(e);
@@ -468,7 +473,7 @@ exports.register_topic_handlers = function () {
     });
 
     // Mute the topic
-    $('body').on('click', '.sidebar-popover-mute-topic', function (e) {
+    $('body').on('click', '.sidebar-popover-mute-topic', (e) => {
         const stream_id = topic_popover_stream_id(e);
         if (!stream_id) {
             return;
@@ -481,7 +486,7 @@ exports.register_topic_handlers = function () {
     });
 
     // Unmute the topic
-    $('body').on('click', '.sidebar-popover-unmute-topic', function (e) {
+    $('body').on('click', '.sidebar-popover-unmute-topic', (e) => {
         const stream_id = topic_popover_stream_id(e);
         if (!stream_id) {
             return;
@@ -494,7 +499,7 @@ exports.register_topic_handlers = function () {
     });
 
     // Mark all messages as read
-    $('body').on('click', '.sidebar-popover-mark-topic-read', function (e) {
+    $('body').on('click', '.sidebar-popover-mark-topic-read', (e) => {
         const stream_id = topic_popover_stream_id(e);
         if (!stream_id) {
             return;
@@ -507,7 +512,7 @@ exports.register_topic_handlers = function () {
     });
 
     // Deleting all message in a topic
-    $('body').on('click', '.sidebar-popover-delete-topic-messages', function (e) {
+    $('body').on('click', '.sidebar-popover-delete-topic-messages', (e) => {
         const stream_id = topic_popover_stream_id(e);
         if (!stream_id) {
             return;
@@ -522,7 +527,7 @@ exports.register_topic_handlers = function () {
 
         $('#delete-topic-modal-holder').html(render_delete_topic_modal(args));
 
-        $('#do_delete_topic_button').on('click', function () {
+        $('#do_delete_topic_button').on('click', () => {
             message_edit.delete_topic(stream_id, topic);
         });
 
@@ -531,7 +536,7 @@ exports.register_topic_handlers = function () {
         e.stopPropagation();
     });
 
-    $('body').on('click', '.sidebar-popover-move-topic-messages', function (e) {
+    $('body').on('click', '.sidebar-popover-move-topic-messages', (e) => {
         const topic_row = $(e.currentTarget);
         const stream_id = parseInt(topic_row.attr('data-stream-id'), 10);
         const topic_name = topic_row.attr('data-topic-name');
@@ -540,19 +545,34 @@ exports.register_topic_handlers = function () {
         e.preventDefault();
     });
 
-    $('body').on('click', '#topic_stream_edit_form_error .send-status-close', function () {
+    $('body').on('click', '#topic_stream_edit_form_error .send-status-close', () => {
         $("#topic_stream_edit_form_error").hide();
     });
 
-    $('body').on('click', '#do_move_topic_button', function (e) {
-        const params = $('#move_topic_form').serializeArray().reduce(function (obj, item) {
+    $('body').on('click', '#do_move_topic_button', (e) => {
+        function show_error_msg(msg) {
+            $("#topic_stream_edit_form_error .error-msg").text(msg);
+            $("#topic_stream_edit_form_error").show();
+        }
+
+        const params = $('#move_topic_form').serializeArray().reduce((obj, item) => {
             obj[item.name] = item.value;
             return obj;
         }, {});
 
         const {old_topic_name, select_stream_id} = params;
-        let {current_stream_id, new_topic_name} = params;
+        let {current_stream_id, new_topic_name,
+             send_notification_to_new_thread, send_notification_to_old_thread} = params;
+        new_topic_name = new_topic_name.trim();
+        send_notification_to_new_thread = send_notification_to_new_thread === 'on';
+        send_notification_to_old_thread = send_notification_to_old_thread === 'on';
         current_stream_id = parseInt(current_stream_id, 10);
+
+        if (current_stream_id === parseInt(select_stream_id, 10) &&
+            new_topic_name.toLowerCase() === old_topic_name.toLowerCase()) {
+            show_error_msg("Please select a different stream or change topic name.");
+            return false;
+        }
 
         // The API endpoint for editing messages to change their
         // content, topic, or stream requires a message ID.
@@ -574,7 +594,7 @@ exports.register_topic_handlers = function () {
             num_after: 0,
             narrow: JSON.stringify(
                 [{operator: "stream", operand: current_stream_id},
-                 {operator: "topic", operand: old_topic_name}]
+                 {operator: "topic", operand: old_topic_name}],
             ),
         };
 
@@ -593,13 +613,14 @@ exports.register_topic_handlers = function () {
 
                 if (old_topic_name && select_stream_id) {
                     message_edit.move_topic_containing_message_to_stream(
-                        message_id, select_stream_id, new_topic_name);
+                        message_id, select_stream_id, new_topic_name,
+                        send_notification_to_new_thread,
+                        send_notification_to_old_thread);
                     $('#move_topic_modal').modal('hide');
                 }
             },
             error: function (xhr) {
-                $("#topic_stream_edit_form_error .error-msg").text(xhr.responseJSON.msg);
-                $("#topic_stream_edit_form_error").show();
+                show_error_msg(xhr.responseJSON.msg);
             },
         });
         e.preventDefault();

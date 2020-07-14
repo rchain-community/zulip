@@ -1,4 +1,4 @@
-# Update a message
+# Edit a message
 
 {generate_api_description(/messages/{message_id}:patch)}
 
@@ -12,24 +12,8 @@
 {tab|js}
 
 More examples and documentation can be found [here](https://github.com/zulip/zulip-js).
-```js
-const zulip = require('zulip-js');
 
-// Pass the path to your zuliprc file here.
-const config = {
-    zuliprc: 'zuliprc',
-};
-
-zulip(config).then((client) => {
-    // Update a message
-    const params = {
-        message_id: 131,
-        content: 'New Content',
-    }
-
-    client.messages.update(params).then(console.log);
-});
-```
+{generate_code_example(javascript)|/messages/{message_id}:patch|example}
 
 {tab|curl}
 
@@ -45,7 +29,7 @@ You only have permission to edit a message if:
 2. This is a topic-only edit for a (no topic) message, **OR**:
 3. This is a topic-only edit and you are an admin.
 
-## Arguments
+## Parameters
 
 {generate_api_arguments_table|zulip.yaml|/messages/{message_id}:patch}
 
