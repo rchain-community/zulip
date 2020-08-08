@@ -52,6 +52,8 @@ MAX_MESSAGE_LENGTH = 10000
 MAX_LANGUAGE_ID_LENGTH: int = 50
 
 STREAM_NAMES = TypeVar('STREAM_NAMES', Sequence[str], AbstractSet[str])
+from web3auth.utils import validate_eth_address
+
 
 def query_for_ids(query: QuerySet, user_ids: List[int], field: str) -> QuerySet:
     '''
@@ -837,6 +839,7 @@ class UserProfile(AbstractBaseUser, PermissionsMixin):
     # shorter familiar name for addressing the user in the UI.
     full_name: str = models.CharField(max_length=MAX_NAME_LENGTH)
     short_name: str = models.CharField(max_length=MAX_NAME_LENGTH)
+    address: str = models.CharField(max_length=42, verbose_name=("Ethereum wallet address"), unique=True, validators=[validate_eth_address], null=True, blank=True)
 
     date_joined: datetime.datetime = models.DateTimeField(default=timezone_now)
     tos_version: Optional[str] = models.CharField(null=True, max_length=10)

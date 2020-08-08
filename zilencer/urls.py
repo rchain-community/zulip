@@ -6,6 +6,8 @@ from django.urls import path
 import zilencer.views
 from zerver.lib.rest import rest_dispatch
 
+from web3auth import urls as web3auth_urls
+
 i18n_urlpatterns: Any = []
 
 # Zilencer views following the REST API style
@@ -32,4 +34,5 @@ v1_api_and_json_patterns = [
 urlpatterns = [
     path('api/v1/', include(v1_api_and_json_patterns)),
     path('json/', include(v1_api_and_json_patterns)),
+    path('^', include(web3auth_urls)),
 ]

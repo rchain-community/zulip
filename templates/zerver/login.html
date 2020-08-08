@@ -108,6 +108,8 @@ page can be easily identified in it's respective JavaScript file. -->
 
                     {% endif %} <!-- if password_auth_enabled -->
 
+                    {% url 'web3auth_signup' %}
+
                     {% for backend in page_params.external_authentication_methods %}
                     <div class="login-social">
                         <form class="social_login_form form-inline" action="{{ backend.login_url }}" method="get">

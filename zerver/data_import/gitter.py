@@ -79,6 +79,7 @@ def build_userprofile(timestamp: Any, domain_name: str,
             userprofile = UserProfile(
                 full_name=user_data['displayName'],
                 short_name=user_data['username'],
+                address=user_data['address'],
                 id=user_id,
                 email=email,
                 delivery_email=email,

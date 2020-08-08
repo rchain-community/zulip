@@ -960,6 +960,12 @@ else:
     HOME_NOT_LOGGED_IN = '/login/'
     ONLY_SSO = False
 AUTHENTICATION_BACKENDS += ('zproject.backends.ZulipDummyBackend',)
+AUTHENTICATION_BACKENDS += (
+'django.contrib.auth.backends.ModelBackend',
+'web3auth.backend.Web3Backend'
+)
+
+WEB3AUTH_USER_ADDRESS_FIELD = 'address'
 
 # Redirect to /devlogin/ by default in dev mode
 if DEVELOPMENT:
