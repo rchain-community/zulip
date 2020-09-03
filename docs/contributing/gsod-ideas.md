@@ -71,13 +71,13 @@ process.
 
 For many of our project ideas, you'll be working inside a Zulip
 development environment (because the documentation is implemented as
-markdown in the main Zulip repository, and can be previewed using
+Markdown in the main Zulip repository, and can be previewed using
 tools in the Zulip development environment).  See
 [our documentation on documentation systems](../documentation/overview.md)
 for details on our various existing documentation systems.
 
 In part due to past work by a technical writer, Zulip has a
-well-documented and easy to setup development environment for a
+well-documented and easy-to-set-up development environment for a
 project of its scope. Use
 [our first-time Zulip developer guide](../overview/contributing.html#your-first-codebase-contribution)
 to get your Zulip development environment set up. If you have any
@@ -188,7 +188,7 @@ started.).
 
 Once you have several PRs merged (or at least one significant PR
 merged, or the equivalent of this for projects that don't involve
-writing markdown code), you can start discussing with the Zulip
+writing Markdown code), you can start discussing with the Zulip
 development community the project you'd like to do, and develop a
 specific project plan.  We recommend discussing what you're thinking
 in public streams on chat.zulip.org, so it's easy to get quick
@@ -202,12 +202,12 @@ proposal.  It's also fine for you to come up with your own project
 ideas.
 
 For many of our projects, an important skill to develop is a good
-command of Git; read [our Git Guide](../git/overview.md) in full to
+command of Git; read [our Git guide](../git/overview.md) in full to
 learn how to use it well.  Of particular importance is mastering using
 Git rebase so that you can construct commits that are readable,
 are clearly correct and that explain why they are correct.
 
-**Project name**: REST API Documentation
+**Project name**: REST API documentation
 
 Fill in the gaps in Zulip's
 [REST API documentation](https://zulip.com/api).  Zulip has a
@@ -271,7 +271,7 @@ most cases, our documentation explains how to accomplish a task in the
 Zulip webapp, but doesn't cover how to do those tasks in Zulip's
 mobile and beta terminal apps.
 
-We have recently built a nice markdown-based system to make it easy to show
+We have recently built a nice Markdown-based system to make it easy to show
 information for multiple platforms in a single tabbed widget. An example
 article using this widget is
 [logging in](https://zulip.com/help/logging-in). This project will

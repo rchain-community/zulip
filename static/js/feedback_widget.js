@@ -1,4 +1,6 @@
-const render_feedback_container = require('../templates/feedback_container.hbs');
+"use strict";
+
+const render_feedback_container = require("../templates/feedback_container.hbs");
 
 /*
 
@@ -18,7 +20,6 @@ Codewise it's a singleton widget that controls the DOM inside
 
 */
 
-
 const meta = {
     hide_me_time: null,
     alert_hover_state: false,
@@ -27,7 +28,7 @@ const meta = {
 };
 
 const animate = {
-    maybe_close: function () {
+    maybe_close() {
         if (!meta.opened) {
             return;
         }
@@ -39,7 +40,7 @@ const animate = {
 
         setTimeout(animate.maybe_close, 100);
     },
-    fadeOut: function () {
+    fadeOut() {
         if (!meta.opened) {
             return;
         }
@@ -50,7 +51,7 @@ const animate = {
             meta.alert_hover_state = false;
         }
     },
-    fadeIn: function () {
+    fadeIn() {
         if (meta.opened) {
             return;
         }
@@ -71,7 +72,7 @@ function set_up_handlers() {
     meta.handlers_set = true;
 
     // if the user mouses over the notification, don't hide it.
-    meta.$container.mouseenter(() => {
+    meta.$container.on("mouseenter", () => {
         if (!meta.opened) {
             return;
         }
@@ -80,7 +81,7 @@ function set_up_handlers() {
     });
 
     // once the user's mouse leaves the notification, restart the countdown.
-    meta.$container.mouseleave(() => {
+    meta.$container.on("mouseleave", () => {
         if (!meta.opened) {
             return;
         }
@@ -91,11 +92,11 @@ function set_up_handlers() {
         meta.hide_me_time = Math.max(meta.hide_me_time, new Date().getTime() + 2000);
     });
 
-    meta.$container.on('click', '.exit-me', () => {
+    meta.$container.on("click", ".exit-me", () => {
         animate.fadeOut();
     });
 
-    meta.$container.on('click', '.feedback_undo', () => {
+    meta.$container.on("click", ".feedback_undo", () => {
         if (meta.undo) {
             meta.undo();
         }
@@ -113,11 +114,11 @@ exports.dismiss = function () {
 
 exports.show = function (opts) {
     if (!opts.populate) {
-        blueslip.error('programmer needs to supply populate callback.');
+        blueslip.error("programmer needs to supply populate callback.");
         return;
     }
 
-    meta.$container = $('#feedback_container');
+    meta.$container = $("#feedback_container");
 
     const html = render_feedback_container();
     meta.$container.html(html);
@@ -129,9 +130,9 @@ exports.show = function (opts) {
     // add a four second delay before closing up.
     meta.hide_me_time = new Date().getTime() + 4000;
 
-    meta.$container.find('.feedback_title').text(opts.title_text);
-    meta.$container.find('.feedback_undo').text(opts.undo_button_text);
-    opts.populate(meta.$container.find('.feedback_content'));
+    meta.$container.find(".feedback_title").text(opts.title_text);
+    meta.$container.find(".feedback_undo").text(opts.undo_button_text);
+    opts.populate(meta.$container.find(".feedback_content"));
 
     animate.fadeIn();
 };

@@ -1,5 +1,5 @@
-# Zulip's main markdown implementation.  See docs/subsystems/markdown.md for
-# detailed documentation on our markdown syntax.
+# Zulip's main Markdown implementation.  See docs/subsystems/markdown.md for
+# detailed documentation on our Markdown syntax.
 import datetime
 import functools
 import html
@@ -102,7 +102,7 @@ class LinkInfo(TypedDict):
 
 DbData = Dict[str, Any]
 
-# Format version of the markdown rendering; stored along with rendered
+# Format version of the Markdown rendering; stored along with rendered
 # messages so that we can efficiently determine what needs to be re-rendered
 version = 1
 
@@ -411,24 +411,31 @@ def fetch_tweet_data(tweet_id: str) -> Optional[Dict[str, Any]]:
             raise
         except twitter.TwitterError as e:
             t = e.args[0]
-            if len(t) == 1 and ('code' in t[0]) and (t[0]['code'] == 34):
-                # Code 34 means that the message doesn't exist; return
-                # None so that we will cache the error
-                return None
-            elif len(t) == 1 and ('code' in t[0]) and (t[0]['code'] == 88 or
-                                                       t[0]['code'] == 130):
-                # Code 88 means that we were rate-limited and 130
-                # means Twitter is having capacity issues; either way
-                # just raise the error so we don't cache None and will
-                # try again later.
-                raise
-            else:
-                # It's not clear what to do in cases of other errors,
-                # but for now it seems reasonable to log at error
-                # level (so that we get notified), but then cache the
-                # failure to proceed with our usual work
-                markdown_logger.exception("Unknown error fetching tweet data")
-                return None
+            if len(t) == 1 and ('code' in t[0]):
+                # https://developer.twitter.com/en/docs/basics/response-codes
+                code = t[0]['code']
+                if code in [34, 144, 421, 422]:
+                    # All these "correspond with HTTP 404," and mean
+                    # that the message doesn't exist; return None so
+                    # that we will cache the error.
+                    return None
+                elif code in [63, 179]:
+                    # 63 is that the account is suspended, 179 is that
+                    # it is now locked; cache the None.
+                    return None
+                elif code in [88, 130, 131]:
+                    # Code 88 means that we were rate-limited, 130
+                    # means Twitter is having capacity issues, and 131
+                    # is other 400-equivalent; in these cases, raise
+                    # the error so we don't cache None and will try
+                    # again later.
+                    raise
+            # It's not clear what to do in cases of other errors,
+            # but for now it seems reasonable to log at error
+            # level (so that we get notified), but then cache the
+            # failure to proceed with our usual work
+            markdown_logger.exception("Unknown error fetching tweet data", stack_info=True)
+            return None
     return res
 
 HEAD_START_RE = re.compile('^head[ >]')
@@ -747,7 +754,7 @@ class InlineInterestingLinkProcessor(markdown.treeprocessors.Treeprocessor):
             # and gifs do not work.
             # TODO: What if image is huge? Should we get headers first?
             if image_info is None:
-                image_info = dict()
+                image_info = {}
             image_info['is_image'] = True
             parsed_url_list = list(parsed_url)
             parsed_url_list[4] = "dl=1"  # Replaces query
@@ -1070,8 +1077,18 @@ class InlineInterestingLinkProcessor(markdown.treeprocessors.Treeprocessor):
 
         div.set("class", "inline-preview-twitter")
         div.insert(0, twitter_data)
-        if info['remove'] is not None:
-            info['parent'].remove(info['remove'])
+
+    def handle_youtube_url_inlining(
+        self,
+        root: Element,
+        found_url: ResultWithFamily[Tuple[str, Optional[str]]],
+        yt_image: str,
+    ) -> None:
+        info = self.get_inlining_information(root, found_url)
+        (url, text) = found_url.result
+        yt_id = self.youtube_id(url)
+        self.add_a(info['parent'], yt_image, url, None, None, "youtube-video message_inline_image",
+                   yt_id, insertion_index=info['index'], already_thumbnailed=True)
 
     def find_proper_insertion_index(self, grandparent: Element, parent: Element,
                                     parent_index_in_grandparent: int) -> int:
@@ -1112,7 +1129,7 @@ class InlineInterestingLinkProcessor(markdown.treeprocessors.Treeprocessor):
         unique_previewable_urls = {found_url.result[0] for found_url in found_urls
                                    if not found_url.family.in_blockquote}
 
-        # Set has_link and similar flags whenever a message is processed by markdown
+        # Set has_link and similar flags whenever a message is processed by Markdown
         if self.md.zulip_message:
             self.md.zulip_message.has_link = len(found_urls) > 0
             self.md.zulip_message.has_image = False  # This is updated in self.add_a
@@ -1196,10 +1213,7 @@ class InlineInterestingLinkProcessor(markdown.treeprocessors.Treeprocessor):
                 continue
             youtube = self.youtube_image(url)
             if youtube is not None:
-                yt_id = self.youtube_id(url)
-                self.add_a(root, youtube, url, None, None,
-                           "youtube-video message_inline_image",
-                           yt_id, already_thumbnailed=True)
+                self.handle_youtube_url_inlining(root, found_url, youtube)
                 # NOTE: We don't `continue` here, to allow replacing the URL with
                 # the title, if INLINE_URL_EMBED_PREVIEW feature is enabled.
                 # The entire preview would ideally be shown only if the feature
@@ -1580,7 +1594,7 @@ class MarkdownListPreprocessor(markdown.preprocessors.Preprocessor):
                 else:
                     open_fences.append(Fence(fence_str, is_code))
 
-                in_code_fence = any([fence.is_code for fence in open_fences])
+                in_code_fence = any(fence.is_code for fence in open_fences)
 
             # If we're not in a fenced block and we detect an upcoming list
             # hanging off any block (including a list of another type), add
@@ -2087,7 +2101,7 @@ def maybe_update_markdown_engines(realm_filters_key: Optional[int], email_gatewa
         if realm_filters_key not in realm_filter_data or    \
                 realm_filter_data[realm_filters_key] != realm_filters:
             # Realm filters data has changed, update `realm_filter_data` and any
-            # of the existing markdown engines using this set of realm filters.
+            # of the existing Markdown engines using this set of realm filters.
             realm_filter_data[realm_filters_key] = realm_filters
             for email_gateway_flag in [True, False]:
                 if (realm_filters_key, email_gateway_flag) in md_engines:
@@ -2110,7 +2124,7 @@ def privacy_clean_markdown(content: str) -> str:
 
 def get_possible_mentions_info(realm_id: int, mention_texts: Set[str]) -> List[FullNameInfo]:
     if not mention_texts:
-        return list()
+        return []
 
     # Remove the trailing part of the `name|id` mention syntax,
     # thus storing only full names in full_names.
@@ -2203,7 +2217,7 @@ class MentionData:
 
 def get_user_group_name_info(realm_id: int, user_group_names: Set[str]) -> Dict[str, UserGroup]:
     if not user_group_names:
-        return dict()
+        return {}
 
     rows = UserGroup.objects.filter(realm_id=realm_id,
                                     name__in=user_group_names)
@@ -2212,7 +2226,7 @@ def get_user_group_name_info(realm_id: int, user_group_names: Set[str]) -> Dict[
 
 def get_stream_name_info(realm: Realm, stream_names: Set[str]) -> Dict[str, FullNameInfo]:
     if not stream_names:
-        return dict()
+        return {}
 
     q_list = {
         Q(name=name)
@@ -2248,7 +2262,7 @@ def do_convert(content: str,
     # This logic is a bit convoluted, but the overall goal is to support a range of use cases:
     # * Nothing is passed in other than content -> just run default options (e.g. for docs)
     # * message is passed, but no realm is -> look up realm from message
-    # * message_realm is passed -> use that realm for markdown purposes
+    # * message_realm is passed -> use that realm for Markdown purposes
     if message is not None:
         if message_realm is None:
             message_realm = message.get_realm()
@@ -2291,7 +2305,7 @@ def do_convert(content: str,
     _md_engine.url_embed_preview_enabled = url_embed_preview_enabled(
         message, message_realm, no_previews)
 
-    # Pre-fetch data from the DB that is used in the markdown thread
+    # Pre-fetch data from the DB that is used in the Markdown thread
     if message_realm is not None:
 
         # Here we fetch the data structures needed to render
@@ -2309,7 +2323,7 @@ def do_convert(content: str,
         if content_has_emoji_syntax(content):
             active_realm_emoji = message_realm.get_active_emoji()
         else:
-            active_realm_emoji = dict()
+            active_realm_emoji = {}
 
         _md_engine.zulip_db_data = {
             'realm_alert_words_automaton': realm_alert_words_automaton,
@@ -2323,7 +2337,7 @@ def do_convert(content: str,
 
     try:
         # Spend at most 5 seconds rendering; this protects the backend
-        # from being overloaded by bugs (e.g. markdown logic that is
+        # from being overloaded by bugs (e.g. Markdown logic that is
         # extremely inefficient in corner cases) as well as user
         # errors (e.g. a realm filter that makes some syntax
         # infinite-loop).

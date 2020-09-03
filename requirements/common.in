@@ -14,7 +14,7 @@ dataclasses;python_version<"3.7"
 # Needed for rendering backend templates
 Jinja2
 
-# Needed for markdown processing
+# Needed for Markdown processing
 Markdown
 importlib-metadata;python_version<"3.8"  # for Markdown
 Pygments
@@ -69,7 +69,7 @@ premailer
 # Needed for JWT-based auth
 PyJWT
 
-# Needed for including other markdown files for user docs
+# Needed for including other Markdown files for user docs
 markdown-include
 
 # Needed to access rabbitmq
@@ -79,10 +79,11 @@ pika
 psycopg2 --no-binary psycopg2
 
 # Needed for memcached usage
-pylibmc
+# https://github.com/jaysonsantos/python-binary-memcached/pull/230, https://github.com/jaysonsantos/python-binary-memcached/pull/231
+https://github.com/jaysonsantos/python-binary-memcached/archive/364ce723ea73290a6ae27551cab28070424fd280.zip#egg=python-binary-memcached==0.29.0+git
 
-# Needed for compression support in memcached via pylibmc
-django-pylibmc
+# Needed for compression support in memcached via python-binary-memcached
+django-bmemcached
 
 # Needed for zerver/tests/test_timestamp.py
 python-dateutil
@@ -100,9 +101,7 @@ sourcemap
 tornado==4.*  # https://github.com/zulip/zulip/issues/8913
 
 # Fast JSON parser
-# Forked for an issue related to unpaired Unicode surrogates:
-# https://github.com/zulip/zulip/issues/6332, https://github.com/esnme/ultrajson/pull/284
-https://github.com/zulip/ultrajson/archive/70ac02becc3e11174cd5072650f885b30daab8a8.zip#egg=ujson==1.35+git
+orjson
 
 # Django extension for serving webpack modules
 django-webpack4-loader
@@ -141,7 +140,7 @@ py3dns
 
 # Install Python Social Auth
 social-auth-app-django
-social-auth-core[azuread,saml]
+https://github.com/python-social-auth/social-core/archive/3.4.0.zip/#egg=social-auth-core[azuread,saml]==3.4.0
 
 # For encrypting a login token to the desktop app
 cryptography
@@ -189,3 +188,6 @@ requests-oauthlib
 
 # For OpenAPI schema validation.
 openapi-core
+
+# For reporting errors to sentry.io
+sentry-sdk

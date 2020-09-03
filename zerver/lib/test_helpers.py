@@ -19,13 +19,14 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
 )
 from unittest import mock
 
 import boto3
 import fakeldap
 import ldap
-import ujson
+import orjson
 from boto3.resources.base import ServiceResource
 from django.conf import settings
 from django.db.migrations.state import StateApps
@@ -52,7 +53,7 @@ from zerver.models import (
     get_realm,
     get_stream,
 )
-from zerver.tornado import event_queue
+from zerver.tornado import django_api as django_tornado_api
 from zerver.tornado.handlers import AsyncDjangoHandler, allocate_handler_id
 from zerver.worker import queue_processors
 from zproject.backends import ExternalAuthDataDict, ExternalAuthResult
@@ -90,15 +91,15 @@ def simulated_queue_client(client: Callable[..., Any]) -> Iterator[None]:
 
 @contextmanager
 def tornado_redirected_to_list(lst: List[Mapping[str, Any]]) -> Iterator[None]:
-    real_event_queue_process_notification = event_queue.process_notification
-    event_queue.process_notification = lambda notice: lst.append(notice)
+    real_event_queue_process_notification = django_tornado_api.process_notification
+    django_tornado_api.process_notification = lambda notice: lst.append(notice)
     # process_notification takes a single parameter called 'notice'.
     # lst.append takes a single argument called 'object'.
     # Some code might call process_notification using keyword arguments,
     # so mypy doesn't allow assigning lst.append to process_notification
     # So explicitly change parameter name to 'notice' to work around this problem
     yield
-    event_queue.process_notification = real_event_queue_process_notification
+    django_tornado_api.process_notification = real_event_queue_process_notification
 
 class EventInfo:
     def populate(self, call_args_list: List[Any]) -> None:
@@ -315,7 +316,7 @@ class MockPythonResponse:
 INSTRUMENTING = os.environ.get('TEST_INSTRUMENT_URL_COVERAGE', '') == 'TRUE'
 INSTRUMENTED_CALLS: List[Dict[str, Any]] = []
 
-UrlFuncT = Callable[..., HttpResponse]  # TODO: make more specific
+UrlFuncT = TypeVar("UrlFuncT", bound=Callable[..., HttpResponse])  # TODO: make more specific
 
 def append_instrumentation_data(data: Dict[str, Any]) -> None:
     INSTRUMENTED_CALLS.append(data)
@@ -324,7 +325,7 @@ def instrument_url(f: UrlFuncT) -> UrlFuncT:
     if not INSTRUMENTING:  # nocoverage -- option is always enabled; should we remove?
         return f
     else:
-        def wrapper(self: 'ZulipTestCase', url: str, info: Dict[str, Any]={},
+        def wrapper(self: 'ZulipTestCase', url: str, info: object = {},
                     **kwargs: Any) -> HttpResponse:
             start = time.time()
             result = f(self, url, info, **kwargs)
@@ -334,6 +335,16 @@ def instrument_url(f: UrlFuncT) -> UrlFuncT:
                 url, extra_info = url.split('?', 1)
             else:
                 extra_info = ''
+
+            if isinstance(info, POSTRequestMock):
+                info = "<POSTRequestMock>"
+            elif isinstance(info, bytes):
+                info = "<bytes>"
+            elif isinstance(info, dict):
+                info = {
+                    k: "<file object>" if hasattr(v, "read") and callable(getattr(v, "read")) else v
+                    for k, v in info.items()
+                }
 
             append_instrumentation_data(dict(
                 url=url,
@@ -345,7 +356,7 @@ def instrument_url(f: UrlFuncT) -> UrlFuncT:
                 test_name=test_name,
                 kwargs=kwargs))
             return result
-        return wrapper
+        return cast(UrlFuncT, wrapper)  # https://github.com/python/mypy/issues/1927
 
 def write_instrumentation_reports(full_suite: bool, include_webhooks: bool) -> None:
     if INSTRUMENTING:
@@ -405,7 +416,7 @@ def write_instrumentation_reports(full_suite: bool, include_webhooks: bool) -> N
         assert len(pattern_cnt) > 100
         untested_patterns = {p.replace("\\", "") for p in pattern_cnt if pattern_cnt[p] == 0}
 
-        exempt_patterns = set([
+        exempt_patterns = {
             # We exempt some patterns that are called via Tornado.
             'api/v1/events',
             'api/v1/events/internal',
@@ -418,26 +429,16 @@ def write_instrumentation_reports(full_suite: bool, include_webhooks: bool) -> N
             'docs/(?P<path>.+)',
             'casper/(?P<path>.+)',
             'static/(?P<path>.*)',
-        ] + [webhook.url for webhook in WEBHOOK_INTEGRATIONS if not include_webhooks])
+            *(webhook.url for webhook in WEBHOOK_INTEGRATIONS if not include_webhooks),
+        }
 
         untested_patterns -= exempt_patterns
 
         var_dir = 'var'  # TODO make sure path is robust here
         fn = os.path.join(var_dir, 'url_coverage.txt')
-        with open(fn, 'w') as f:
+        with open(fn, 'wb') as f:
             for call in calls:
-                try:
-                    line = ujson.dumps(call)
-                    f.write(line + '\n')
-                except OverflowError:  # nocoverage -- test suite error handling
-                    print('''
-                        A JSON overflow error was encountered while
-                        producing the URL coverage report.  Sometimes
-                        this indicates that a test is passing objects
-                        into methods like client_post(), which is
-                        unnecessary and leads to false positives.
-                        ''')
-                    print(call)
+                f.write(orjson.dumps(call, option=orjson.OPT_APPEND_NEWLINE))
 
         if full_suite:
             print(f'INFO: URL coverage report is in {fn}')
@@ -591,3 +592,10 @@ def create_dummy_file(filename: str) -> str:
     with open(filepath, 'w') as f:
         f.write('zulip!')
     return filepath
+
+def zulip_reaction_info() -> Dict[str, str]:
+    return dict(
+        emoji_name='zulip',
+        emoji_code='zulip',
+        reaction_type='zulip_extra_emoji',
+    )

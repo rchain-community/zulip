@@ -15,7 +15,7 @@ from zerver.lib.retention import (
     restore_retention_policy_deletions_for_stream,
 )
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.lib.test_helpers import queries_captured
+from zerver.lib.test_helpers import queries_captured, zulip_reaction_info
 from zerver.lib.upload import create_attachment
 from zerver.models import (
     ArchivedAttachment,
@@ -36,9 +36,9 @@ from zerver.models import (
     get_system_bot,
     get_user_profile_by_email,
 )
+
 # Class with helper functions useful for testing archiving of reactions:
-from zerver.tests.test_reactions import EmojiReactionBase
-from zerver.tornado.event_queue import send_event
+from zerver.tornado.django_api import send_event
 
 ZULIP_REALM_DAYS = 30
 MIT_REALM_DAYS = 100
@@ -320,7 +320,7 @@ class TestArchiveMessagesGeneral(ArchiveMessagesTestingBase):
             timezone_now() - timedelta(ZULIP_REALM_DAYS+1),
         )
 
-        expired_msg_ids = expired_mit_msg_ids + expired_zulip_msg_ids + [expired_crossrealm_msg_id]
+        expired_msg_ids = [*expired_mit_msg_ids, *expired_zulip_msg_ids, expired_crossrealm_msg_id]
         expired_usermsg_ids = self._get_usermessage_ids(expired_msg_ids)
 
         archive_messages(chunk_size=2)  # Specify low chunk_size to test batching.
@@ -459,14 +459,25 @@ class TestArchivingSubMessages(ArchiveMessagesTestingBase):
             set(submessage_ids),
         )
 
-class TestArchivingReactions(ArchiveMessagesTestingBase, EmojiReactionBase):
+class TestArchivingReactions(ArchiveMessagesTestingBase):
     def test_archiving_reactions(self) -> None:
         expired_msg_ids = self._make_expired_zulip_messages(2)
 
-        self.post_zulip_reaction(expired_msg_ids[0], 'hamlet')
-        self.post_zulip_reaction(expired_msg_ids[0], 'cordelia')
+        hamlet = self.example_user('hamlet')
+        cordelia = self.example_user('cordelia')
 
-        self.post_zulip_reaction(expired_msg_ids[1], 'hamlet')
+        for sender in [hamlet, cordelia]:
+            self.api_post(
+                sender,
+                f'/api/v1/messages/{expired_msg_ids[0]}/reactions',
+                zulip_reaction_info(),
+            )
+
+        self.api_post(
+            hamlet,
+            f'/api/v1/messages/{expired_msg_ids[1]}/reactions',
+            zulip_reaction_info(),
+        )
 
         reaction_ids = list(
             Reaction.objects.filter(message_id__in=expired_msg_ids).values_list('id', flat=True),
@@ -747,12 +758,16 @@ class MoveMessageToArchiveWithSubMessages(MoveMessageToArchiveBase):
             set(submessage_ids),
         )
 
-class MoveMessageToArchiveWithReactions(MoveMessageToArchiveBase, EmojiReactionBase):
+class MoveMessageToArchiveWithReactions(MoveMessageToArchiveBase):
     def test_archiving_message_with_reactions(self) -> None:
         msg_id = self.send_stream_message(self.sender, "Verona")
 
-        self.post_zulip_reaction(msg_id, 'hamlet')
-        self.post_zulip_reaction(msg_id, 'cordelia')
+        for name in ['hamlet', 'cordelia']:
+            self.api_post(
+                self.example_user(name),
+                f'/api/v1/messages/{msg_id}/reactions',
+                zulip_reaction_info(),
+            )
 
         reaction_ids = list(
             Reaction.objects.filter(message_id=msg_id).values_list('id', flat=True),
@@ -803,7 +818,7 @@ class TestCleaningArchive(ArchiveMessagesTestingBase):
 class TestGetRealmAndStreamsForArchiving(ZulipTestCase):
     def fix_ordering_of_result(self, result: List[Tuple[Realm, List[Stream]]]) -> None:
         """
-        This is a helper for giving the struture returned by get_realms_and_streams_for_archiving
+        This is a helper for giving the structure returned by get_realms_and_streams_for_archiving
         a consistent ordering.
         """
         # Sort the list of tuples by realm id:

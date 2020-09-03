@@ -1,3 +1,5 @@
+"use strict";
+
 exports.update_padding = function (opts) {
     const content = $(opts.content_sel);
     const padding = $(opts.padding_sel);
@@ -18,6 +20,5 @@ exports.update_padding = function (opts) {
     padding.height(new_padding_height);
     padding.width(1);
 };
-
 
 window.padded_widget = exports;

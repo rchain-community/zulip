@@ -6,7 +6,7 @@ from django.utils.timezone import now as timezone_now
 from zerver.models import UserStatus
 
 
-def get_user_info_dict(realm_id: int) -> Dict[int, Dict[str, Any]]:
+def get_user_info_dict(realm_id: int) -> Dict[str, Dict[str, Any]]:
     rows = UserStatus.objects.filter(
         user_profile__realm_id=realm_id,
         user_profile__is_active=True,
@@ -19,19 +19,19 @@ def get_user_info_dict(realm_id: int) -> Dict[int, Dict[str, Any]]:
         'status_text',
     )
 
-    user_dict: Dict[int, Dict[str, Any]] = dict()
+    user_dict: Dict[str, Dict[str, Any]] = {}
     for row in rows:
         away = row['status'] == UserStatus.AWAY
         status_text = row['status_text']
         user_id = row['user_profile_id']
 
-        dct = dict()
+        dct = {}
         if away:
             dct['away'] = away
         if status_text:
             dct['status_text'] = status_text
 
-        user_dict[user_id] = dct
+        user_dict[str(user_id)] = dct
 
     return user_dict
 

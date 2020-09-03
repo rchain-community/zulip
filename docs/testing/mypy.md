@@ -87,7 +87,7 @@ an `Any` or `# type: ignore[code]` so you're not blocked waiting for help,
 add a `# TODO: ` comment so it doesn't get forgotten in code review,
 and ask for help in chat.zulip.org.
 
-## mypy stubs for third-party modules.
+## Mypy stubs for third-party modules
 
 For the Python standard library and some popular third-party modules,
 the [typeshed project](https://github.com/python/typeshed) has
@@ -151,7 +151,7 @@ So `{1: 'a', 2: 'b', 3: 'c'}` will be printed as `{int: str, ...}`.
 ## Using @overload to accurately describe variations
 
 Sometimes, a function's type is most precisely expressed as a few
-possibilites, and which possibility can be determined by looking at
+possibilities, and which possibility can be determined by looking at
 the arguments.  You can express that idea in a way mypy understands
 using `@overload`.  For example, `check_list` returns a `Validator`
 function that verifies that an object is a list, raising an exception

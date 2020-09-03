@@ -4,8 +4,8 @@ import random
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
-import pylibmc
-import ujson
+import bmemcached
+import orjson
 from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
@@ -37,6 +37,7 @@ from zerver.lib.user_groups import create_user_group
 from zerver.lib.users import add_service
 from zerver.lib.utils import generate_api_key
 from zerver.models import (
+    AlertWord,
     Client,
     CustomProfileField,
     DefaultStream,
@@ -78,13 +79,9 @@ def clear_database() -> None:
     # With `zproject.test_settings`, we aren't using real memcached
     # and; we only need to flush memcached if we're populating a
     # database that would be used with it (i.e. zproject.dev_settings).
-    if default_cache['BACKEND'] == 'django_pylibmc.memcached.PyLibMCCache':
-        pylibmc.Client(
-            [default_cache['LOCATION']],
-            binary=True,
-            username=default_cache["USERNAME"],
-            password=default_cache["PASSWORD"],
-            behaviors=default_cache["OPTIONS"],
+    if default_cache['BACKEND'] == 'django_bmemcached.memcached.BMemcached':
+        bmemcached.Client(
+            (default_cache['LOCATION'],), **default_cache['OPTIONS'],
         ).flush_all()
 
     model: Any = None  # Hack because mypy doesn't know these are model classes
@@ -123,42 +120,71 @@ def subscribe_users_to_streams(realm: Realm, stream_dict: Dict[str, Dict[str, An
     Subscription.objects.bulk_create(subscriptions_to_add)
     RealmAuditLog.objects.bulk_create(all_subscription_logs)
 
+def create_alert_words(realm_id: int) -> None:
+    user_ids = UserProfile.objects.filter(
+        realm_id=realm_id,
+        is_bot=False,
+        is_active=True,
+    ).values_list('id', flat=True)
+
+    alert_words = [
+        'algorithms',
+        'complexity',
+        'founded',
+        'galaxy',
+        'grammar',
+        'illustrious',
+        'natural',
+        'objective',
+        'people',
+        'robotics',
+        'study',
+    ]
+
+    recs: List[AlertWord] = []
+    for user_id in user_ids:
+        random.shuffle(alert_words)
+        for i in range(4):
+            recs.append(
+                AlertWord(
+                    realm_id=realm_id,
+                    user_profile_id=user_id,
+                    word = alert_words[i],
+                )
+            )
+
+    AlertWord.objects.bulk_create(recs)
+
 class Command(BaseCommand):
     help = "Populate a test database"
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument('-n', '--num-messages',
-                            dest='num_messages',
                             type=int,
                             default=500,
                             help='The number of messages to create.')
 
         parser.add_argument('-b', '--batch-size',
-                            dest='batch_size',
                             type=int,
                             default=1000,
                             help='How many messages to process in a single batch')
 
         parser.add_argument('--extra-users',
-                            dest='extra_users',
                             type=int,
                             default=0,
                             help='The number of extra users to create')
 
         parser.add_argument('--extra-bots',
-                            dest='extra_bots',
                             type=int,
                             default=0,
                             help='The number of extra bots to create')
 
         parser.add_argument('--extra-streams',
-                            dest='extra_streams',
                             type=int,
                             default=0,
                             help='The number of extra streams to create')
 
         parser.add_argument('--max-topics',
-                            dest='max_topics',
                             type=int,
                             default=None,
                             help='The number of maximum topics to create')
@@ -176,25 +202,21 @@ class Command(BaseCommand):
                             help='The number of personal pairs to create.')
 
         parser.add_argument('--threads',
-                            dest='threads',
                             type=int,
                             default=1,
                             help='The number of threads to use.')
 
         parser.add_argument('--percent-huddles',
-                            dest='percent_huddles',
                             type=float,
                             default=15,
                             help='The percent of messages to be huddles.')
 
         parser.add_argument('--percent-personals',
-                            dest='percent_personals',
                             type=float,
                             default=15,
                             help='The percent of messages to be personals.')
 
         parser.add_argument('--stickyness',
-                            dest='stickyness',
                             type=float,
                             default=20,
                             help='The percent of messages to repeat recent folks.')
@@ -522,6 +544,8 @@ class Command(BaseCommand):
         personals_pairs = [random.sample(user_profiles_ids, 2)
                            for i in range(options["num_personals"])]
 
+        create_alert_words(zulip_realm.id)
+
         # Generate a new set of test data.
         create_test_data()
 
@@ -529,8 +553,8 @@ class Command(BaseCommand):
         # in the config.generate_data.json data set.  This makes it
         # possible for populate_db to run happily without Internet
         # access.
-        with open("zerver/tests/fixtures/docs_url_preview_data.json") as f:
-            urls_with_preview_data = ujson.load(f)
+        with open("zerver/tests/fixtures/docs_url_preview_data.json", "rb") as f:
+            urls_with_preview_data = orjson.loads(f.read())
             for url in urls_with_preview_data:
                 cache_set(url, urls_with_preview_data[url], PREVIEW_CACHE_NAME)
 
@@ -638,9 +662,23 @@ class Command(BaseCommand):
                 ]
                 create_users(zulip_realm, internal_zulip_users_nosubs, bot_type=UserProfile.DEFAULT_BOT)
 
-            # Mark all messages as read
-            UserMessage.objects.all().update(flags=UserMessage.flags.read)
+            mark_all_messages_as_read()
             self.stdout.write("Successfully populated test database.\n")
+
+def mark_all_messages_as_read() -> None:
+    '''
+    We want to keep these two flags intact after we
+    create messages:
+
+        has_alert_word
+        is_private
+
+    But we will mark all messages as read to save a step for users.
+    '''
+    # Mark all messages as read
+    UserMessage.objects.all().update(
+        flags=F('flags').bitor(UserMessage.flags.read),
+    )
 
 recipient_hash: Dict[int, Recipient] = {}
 def get_recipient_by_id(rid: int) -> Recipient:
@@ -661,8 +699,8 @@ def generate_and_send_messages(data: Tuple[int, Sequence[Sequence[int]], Mapping
     random.seed(random_seed)
 
     with open(os.path.join(get_or_create_dev_uuid_var_path('test-backend'),
-                           "test_messages.json")) as infile:
-        dialog = ujson.load(infile)
+                           "test_messages.json"), "rb") as infile:
+        dialog = orjson.loads(infile.read())
     random.shuffle(dialog)
     texts = itertools.cycle(dialog)
 
@@ -677,7 +715,7 @@ def generate_and_send_messages(data: Tuple[int, Sequence[Sequence[int]], Mapping
                              Subscription.objects.filter(recipient_id=h)]
 
     # Generate different topics for each stream
-    possible_topics = dict()
+    possible_topics = {}
     for stream_id in recipient_streams:
         possible_topics[stream_id] = generate_topics(options["max_topics"])
 

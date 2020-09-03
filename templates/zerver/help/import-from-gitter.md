@@ -92,13 +92,28 @@ to mark the appropriate users as administrators.
 - The [Gitter data export tool](https://github.com/minrk/archive-gitter)
   doesn't support exporting private gitter channels.
 
-- This tool doesn't yet support merging importing Gitter channels into
-  a single Zulip organization.
+- Gitter's export tool doesn't export email addresses; just GitHub
+  usernames.  The import tool will thus use [GitHub's generated
+  noreply email addresses][github-noreply] to compute the
+  GitHub-generated noreply email address associated with that GitHub
+  account, e.g.
+  `{github_user_id}+{github_username}@users.noreply.github.com` or
+  `{github_username}@users.noreply.github.com`.
 
-- This tool doesn't translate Gitter's markdown format into Zulip
-  format markdown (there are a few corner cases where the syntax is
+  Since one cannot receive email at those noreply email addresses,
+  imported users will need to use GitHub authentication to log in to
+  Zulip and will be unable to receive email notifications until they
+  [change their Zulip email address](/help/change-your-email-address).
+
+- You can merge multiple Gitter channels into a single Zulip
+  organization using [this
+  tool](https://github.com/minrk/archive-gitter/pull/5).
+
+- This tool doesn't translate Gitter's Markdown format into Zulip
+  format Markdown (there are a few corner cases where the syntax is
   different).  Additionally, Gitter's
   [issue mentions](https://gitter.zendesk.com/hc/en-us/articles/200176692-Issue-and-Pull-Request-mentions)
   aren't translated into anything yet.
 
 [upgrade-zulip-from-git]: https://zulip.readthedocs.io/en/latest/production/upgrade-or-modify.html#upgrading-from-a-git-repository
+[github-noreply]: https://docs.github.com/en/github/setting-up-and-managing-your-github-user-account/setting-your-commit-email-address

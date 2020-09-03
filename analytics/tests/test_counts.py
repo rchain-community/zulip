@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type
 from unittest import mock
 
-import ujson
+import orjson
 from django.apps import apps
 from django.db import models
 from django.db.models import Sum
@@ -89,7 +89,6 @@ class AnalyticsTestCase(ZulipTestCase):
             'email': f'user{self.name_counter}@domain.tld',
             'date_joined': self.TIME_LAST_HOUR,
             'full_name': 'full_name',
-            'short_name': 'short_name',
             'is_active': True,
             'is_bot': False,
             'realm': self.default_realm}
@@ -101,10 +100,15 @@ class AnalyticsTestCase(ZulipTestCase):
             if kwargs['is_bot']:
                 pass_kwargs['bot_type'] = UserProfile.DEFAULT_BOT
                 pass_kwargs['bot_owner'] = None
-            return create_user(kwargs['email'], 'password', kwargs['realm'],
-                               active=kwargs['is_active'],
-                               full_name=kwargs['full_name'], short_name=kwargs['short_name'],
-                               role=UserProfile.ROLE_REALM_ADMINISTRATOR, **pass_kwargs)
+            return create_user(
+                kwargs['email'],
+                'password',
+                kwargs['realm'],
+                active=kwargs['is_active'],
+                full_name=kwargs['full_name'],
+                role=UserProfile.ROLE_REALM_ADMINISTRATOR,
+                **pass_kwargs
+            )
 
     def create_stream_with_recipient(self, **kwargs: Any) -> Tuple[Stream, Recipient]:
         self.name_counter += 1
@@ -1099,7 +1103,7 @@ class TestLoggingCountStats(AnalyticsTestCase):
 
     def test_active_users_log_by_is_bot(self) -> None:
         property = 'active_users_log:is_bot:day'
-        user = do_create_user('email', 'password', self.default_realm, 'full_name', 'short_name')
+        user = do_create_user('email', 'password', self.default_realm, 'full_name')
         self.assertEqual(1, RealmCount.objects.filter(property=property, subgroup=False)
                          .aggregate(Sum('value'))['value__sum'])
         do_deactivate_user(user)
@@ -1363,10 +1367,10 @@ class TestActiveUsersAudit(AnalyticsTestCase):
                               [[user1, 'false'], [user2, 'false']])
 
     def test_end_to_end_with_actions_dot_py(self) -> None:
-        user1 = do_create_user('email1', 'password', self.default_realm, 'full_name', 'short_name')
-        user2 = do_create_user('email2', 'password', self.default_realm, 'full_name', 'short_name')
-        user3 = do_create_user('email3', 'password', self.default_realm, 'full_name', 'short_name')
-        user4 = do_create_user('email4', 'password', self.default_realm, 'full_name', 'short_name')
+        user1 = do_create_user('email1', 'password', self.default_realm, 'full_name')
+        user2 = do_create_user('email2', 'password', self.default_realm, 'full_name')
+        user3 = do_create_user('email3', 'password', self.default_realm, 'full_name')
+        user4 = do_create_user('email4', 'password', self.default_realm, 'full_name')
         do_deactivate_user(user2)
         do_activate_user(user3)
         do_reactivate_user(user4)
@@ -1389,7 +1393,7 @@ class TestRealmActiveHumans(AnalyticsTestCase):
             end_time = self.TIME_ZERO
         UserCount.objects.create(
             user=user, realm=user.realm, property='active_users_audit:is_bot:day',
-            subgroup=ujson.dumps(user.is_bot), end_time=end_time, value=1)
+            subgroup=orjson.dumps(user.is_bot).decode(), end_time=end_time, value=1)
 
     def mark_15day_active(self, user: UserProfile, end_time: Optional[datetime]=None) -> None:
         if end_time is None:
@@ -1458,9 +1462,9 @@ class TestRealmActiveHumans(AnalyticsTestCase):
                                [2, second_realm, self.TIME_ZERO - self.DAY]])
 
     def test_end_to_end(self) -> None:
-        user1 = do_create_user('email1', 'password', self.default_realm, 'full_name', 'short_name')
-        user2 = do_create_user('email2', 'password', self.default_realm, 'full_name', 'short_name')
-        do_create_user('email3', 'password', self.default_realm, 'full_name', 'short_name')
+        user1 = do_create_user('email1', 'password', self.default_realm, 'full_name')
+        user2 = do_create_user('email2', 'password', self.default_realm, 'full_name')
+        do_create_user('email3', 'password', self.default_realm, 'full_name')
         time_zero = floor_to_day(timezone_now()) + self.DAY
         update_user_activity_interval(user1, time_zero)
         update_user_activity_interval(user2, time_zero)

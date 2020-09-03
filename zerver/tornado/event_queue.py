@@ -27,9 +27,8 @@ from typing import (
     cast,
 )
 
-import requests
+import orjson
 import tornado.ioloop
-import ujson
 from django.conf import settings
 from django.utils.translation import ugettext as _
 from typing_extensions import TypedDict
@@ -41,7 +40,7 @@ from zerver.lib.queue import queue_json_publish, retry_event
 from zerver.lib.request import JsonableError
 from zerver.lib.utils import statsd
 from zerver.middleware import async_request_timer_restart
-from zerver.models import Client, Realm, UserProfile
+from zerver.models import UserProfile
 from zerver.tornado.autoreload import add_reload_hook
 from zerver.tornado.descriptors import clear_descriptor_by_handler_id, set_descriptor_by_handler_id
 from zerver.tornado.exceptions import BadEventQueueIdError
@@ -51,14 +50,6 @@ from zerver.tornado.handlers import (
     get_handler_by_id,
     handler_stats_string,
 )
-from zerver.tornado.sharding import get_tornado_port, get_tornado_uri, notify_tornado_queue_name
-
-requests_client = requests.Session()
-for host in ['127.0.0.1', 'localhost']:
-    if settings.TORNADO_SERVER and host in settings.TORNADO_SERVER:
-        # This seems like the only working solution to ignore proxy in
-        # requests library.
-        requests_client.trust_env = False
 
 # The idle timeout used to be a week, but we found that in that
 # situation, queues from dead browser sessions would grow quite large
@@ -188,7 +179,7 @@ class ClientDescriptor:
                 finish_handler(self.current_handler_id, self.event_queue.id,
                                self.event_queue.contents(), self.apply_markdown)
             except Exception:
-                logging.exception(err_msg)
+                logging.exception(err_msg, stack_info=True)
             finally:
                 self.disconnect_handler()
                 return True
@@ -341,7 +332,7 @@ class EventQueue:
         virtual_id_map: Dict[str, Dict[str, Any]] = {}
         for event_type in self.virtual_events:
             virtual_id_map[self.virtual_events[event_type]["id"]] = self.virtual_events[event_type]
-        virtual_ids = sorted(list(virtual_id_map.keys()))
+        virtual_ids = sorted(virtual_id_map.keys())
 
         # Merge the virtual events into their final place in the queue
         index = 0
@@ -474,9 +465,10 @@ def persistent_queue_filename(port: int, last: bool=False) -> str:
 def dump_event_queues(port: int) -> None:
     start = time.time()
 
-    with open(persistent_queue_filename(port), "w") as stored_queues:
-        ujson.dump([(qid, client.to_dict()) for (qid, client) in clients.items()],
-                   stored_queues)
+    with open(persistent_queue_filename(port), "wb") as stored_queues:
+        stored_queues.write(
+            orjson.dumps([(qid, client.to_dict()) for (qid, client) in clients.items()])
+        )
 
     logging.info('Tornado %d dumped %d event queues in %.3fs',
                  port, len(clients), time.time() - start)
@@ -486,19 +478,19 @@ def load_event_queues(port: int) -> None:
     start = time.time()
 
     try:
-        with open(persistent_queue_filename(port)) as stored_queues:
-            data = ujson.load(stored_queues)
+        with open(persistent_queue_filename(port), "rb") as stored_queues:
+            data = orjson.loads(stored_queues.read())
     except FileNotFoundError:
         pass
-    except ValueError:
-        logging.exception("Tornado %d could not deserialize event queues", port)
+    except orjson.JSONDecodeError:
+        logging.exception("Tornado %d could not deserialize event queues", port, stack_info=True)
     else:
         try:
             clients = {
                 qid: ClientDescriptor.from_dict(client) for (qid, client) in data
             }
         except Exception:
-            logging.exception("Tornado %d could not deserialize event queues", port)
+            logging.exception("Tornado %d could not deserialize event queues", port, stack_info=True)
 
     for client in clients.values():
         # Put code for migrations due to event queue data format changes here
@@ -607,67 +599,6 @@ def fetch_events(query: Mapping[str, Any]) -> Dict[str, Any]:
     client.connect_handler(handler_id, client_type_name)
     return dict(type="async")
 
-# The following functions are called from Django
-
-def request_event_queue(user_profile: UserProfile, user_client: Client, apply_markdown: bool,
-                        client_gravatar: bool, slim_presence: bool, queue_lifespan_secs: int,
-                        event_types: Optional[Iterable[str]]=None,
-                        all_public_streams: bool=False,
-                        narrow: Iterable[Sequence[str]]=[],
-                        bulk_message_deletion: bool=False) -> Optional[str]:
-
-    if settings.TORNADO_SERVER:
-        tornado_uri = get_tornado_uri(user_profile.realm)
-        req = {'dont_block': 'true',
-               'apply_markdown': ujson.dumps(apply_markdown),
-               'client_gravatar': ujson.dumps(client_gravatar),
-               'slim_presence': ujson.dumps(slim_presence),
-               'all_public_streams': ujson.dumps(all_public_streams),
-               'client': 'internal',
-               'user_profile_id': user_profile.id,
-               'user_client': user_client.name,
-               'narrow': ujson.dumps(narrow),
-               'secret': settings.SHARED_SECRET,
-               'lifespan_secs': queue_lifespan_secs,
-               'bulk_message_deletion': ujson.dumps(bulk_message_deletion)}
-
-        if event_types is not None:
-            req['event_types'] = ujson.dumps(event_types)
-
-        try:
-            resp = requests_client.post(tornado_uri + '/api/v1/events/internal',
-                                        data=req)
-        except requests.adapters.ConnectionError:
-            logging.error('Tornado server does not seem to be running, check %s '
-                          'and %s for more information.',
-                          settings.ERROR_FILE_LOG_PATH, "tornado.log")
-            raise requests.adapters.ConnectionError(
-                f"Django cannot connect to Tornado server ({tornado_uri}); try restarting")
-
-        resp.raise_for_status()
-
-        return resp.json()['queue_id']
-
-    return None
-
-def get_user_events(user_profile: UserProfile, queue_id: str, last_event_id: int) -> List[Dict[str, Any]]:
-    if settings.TORNADO_SERVER:
-        tornado_uri = get_tornado_uri(user_profile.realm)
-        post_data: Dict[str, Any] = {
-            'queue_id': queue_id,
-            'last_event_id': last_event_id,
-            'dont_block': 'true',
-            'user_profile_id': user_profile.id,
-            'secret': settings.SHARED_SECRET,
-            'client': 'internal',
-        }
-        resp = requests_client.post(tornado_uri + '/api/v1/events/internal',
-                                    data=post_data)
-        resp.raise_for_status()
-
-        return resp.json()['events']
-    return []
-
 # Send email notifications to idle users
 # after they are idle for 1 hour
 NOTIFY_AFTER_IDLE_HOURS = 1
@@ -756,7 +687,7 @@ def maybe_enqueue_notifications(user_profile_id: int, message_id: int, private_m
     """This function has a complete unit test suite in
     `test_enqueue_notifications` that should be expanded as we add
     more features here."""
-    notified: Dict[str, bool] = dict()
+    notified: Dict[str, bool] = {}
 
     if (idle or always_push_notify) and (private_message or mentioned or
                                          wildcard_mention_notify or stream_push_notify):
@@ -1007,15 +938,18 @@ def process_deletion_event(event: Mapping[str, Any], users: Iterable[int]) -> No
                 del compatibility_event['message_ids']
                 client.add_event(compatibility_event)
 
-def process_message_update_event(event_template: Mapping[str, Any],
+def process_message_update_event(orig_event: Mapping[str, Any],
                                  users: Iterable[Mapping[str, Any]]) -> None:
-    prior_mention_user_ids = set(event_template.get('prior_mention_user_ids', []))
-    mention_user_ids = set(event_template.get('mention_user_ids', []))
-    presence_idle_user_ids = set(event_template.get('presence_idle_user_ids', []))
-    stream_push_user_ids = set(event_template.get('stream_push_user_ids', []))
-    stream_email_user_ids = set(event_template.get('stream_email_user_ids', []))
-    wildcard_mention_user_ids = set(event_template.get('wildcard_mention_user_ids', []))
-    push_notify_user_ids = set(event_template.get('push_notify_user_ids', []))
+    # Extract the parameters passed via the event object that don't
+    # belong in the actual events.
+    event_template = dict(orig_event)
+    prior_mention_user_ids = set(event_template.pop('prior_mention_user_ids', []))
+    mention_user_ids = set(event_template.pop('mention_user_ids', []))
+    presence_idle_user_ids = set(event_template.pop('presence_idle_user_ids', []))
+    stream_push_user_ids = set(event_template.pop('stream_push_user_ids', []))
+    stream_email_user_ids = set(event_template.pop('stream_email_user_ids', []))
+    wildcard_mention_user_ids = set(event_template.pop('wildcard_mention_user_ids', []))
+    push_notify_user_ids = set(event_template.pop('push_notify_user_ids', []))
 
     stream_name = event_template.get('stream_name')
     message_id = event_template['message_id']
@@ -1159,27 +1093,3 @@ def get_wrapped_process_notification(queue_name: str) -> Callable[[Dict[str, Any
             retry_event(queue_name, notice, failure_processor)
 
     return wrapped_process_notification
-
-# Runs in the Django process to send a notification to Tornado.
-#
-# We use JSON rather than bare form parameters, so that we can represent
-# different types and for compatibility with non-HTTP transports.
-
-def send_notification_http(realm: Realm, data: Mapping[str, Any]) -> None:
-    if settings.TORNADO_SERVER and not settings.RUNNING_INSIDE_TORNADO:
-        tornado_uri = get_tornado_uri(realm)
-        requests_client.post(tornado_uri + '/notify_tornado', data=dict(
-            data   = ujson.dumps(data),
-            secret = settings.SHARED_SECRET))
-    else:
-        process_notification(data)
-
-def send_event(realm: Realm, event: Mapping[str, Any],
-               users: Union[Iterable[int], Iterable[Mapping[str, Any]]]) -> None:
-    """`users` is a list of user IDs, or in the case of `message` type
-    events, a list of dicts describing the users and metadata about
-    the user/message pair."""
-    port = get_tornado_port(realm)
-    queue_json_publish(notify_tornado_queue_name(port),
-                       dict(event=event, users=users),
-                       lambda *args, **kwargs: send_notification_http(realm, *args, **kwargs))

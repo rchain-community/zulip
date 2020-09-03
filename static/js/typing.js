@@ -1,4 +1,8 @@
+"use strict";
+
 const typing_status = require("../shared/js/typing_status");
+
+const people = require("./people");
 
 // This module handles the outbound side of typing indicators.
 // We detect changes in the compose box and notify the server
@@ -8,13 +12,13 @@ const typing_status = require("../shared/js/typing_status");
 
 function send_typing_notification_ajax(user_ids_array, operation) {
     channel.post({
-        url: '/json/typing',
+        url: "/json/typing",
         data: {
             to: JSON.stringify(user_ids_array),
             op: operation,
         },
-        success: function () {},
-        error: function (xhr) {
+        success() {},
+        error(xhr) {
             blueslip.warn("Failed to send typing event: " + xhr.responseText);
         },
     });
@@ -53,22 +57,21 @@ function notify_server_stop(user_ids_array) {
 exports.get_recipient = get_user_ids_array;
 exports.initialize = function () {
     const worker = {
-        get_current_time: get_current_time,
-        notify_server_start: notify_server_start,
-        notify_server_stop: notify_server_stop,
+        get_current_time,
+        notify_server_start,
+        notify_server_stop,
     };
 
-    $(document).on('input', '#compose-textarea', () => {
+    $(document).on("input", "#compose-textarea", () => {
         // If our previous state was no typing notification, send a
         // start-typing notice immediately.
-        const new_recipient =
-          is_valid_conversation() ? exports.get_recipient() : null;
+        const new_recipient = is_valid_conversation() ? exports.get_recipient() : null;
         typing_status.update(worker, new_recipient);
     });
 
     // We send a stop-typing notification immediately when compose is
     // closed/cancelled
-    $(document).on('compose_canceled.zulip compose_finished.zulip', () => {
+    $(document).on("compose_canceled.zulip compose_finished.zulip", () => {
         typing_status.update(worker, null);
     });
 };

@@ -51,7 +51,7 @@ PULL_REQUEST_OPENED_OR_MODIFIED_TEMPLATE_WITH_REVIEWERS_WITH_TITLE = """
 def fixture_to_headers(fixture_name: str) -> Dict[str, str]:
     if fixture_name == "diagnostics_ping":
         return {"HTTP_X_EVENT_KEY": "diagnostics:ping"}
-    return dict()
+    return {}
 
 def get_user_name(payload: Dict[str, Any]) -> str:
     user_name = "[{name}]({url})".format(name=payload["actor"]["name"],
@@ -347,7 +347,7 @@ EVENT_HANDLER_MAP = {
 }  # type Dict[str, Optional[Callable[..., List[Dict[str, str]]]]]
 
 def get_event_handler(eventkey: str) -> Callable[..., List[Dict[str, str]]]:
-    # The main reason for this function existance is because of mypy
+    # The main reason for this function existence is because of mypy
     handler: Any = EVENT_HANDLER_MAP.get(eventkey)
     if handler is None:
         raise UnexpectedWebhookEventType("BitBucket Server", eventkey)

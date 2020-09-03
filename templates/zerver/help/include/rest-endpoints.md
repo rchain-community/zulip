@@ -9,7 +9,7 @@
 * [Add an emoji reaction](/api/add-reaction)
 * [Remove an emoji reaction](/api/remove-reaction)
 * [Render a message](/api/render-message)
-* [Get a message's raw markdown](/api/get-raw-message)
+* [Get a message's raw Markdown](/api/get-raw-message)
 * [Check messages match narrow](/api/check-narrow-matches)
 * [Get a message's edit history](/api/get-message-history)
 * [Update personal message flags](/api/update-message-flags)
@@ -47,6 +47,7 @@
 * [Create a user group](/api/create-user-group)
 * [Update a user group](/api/update-user-group)
 * [Delete a user group](/api/remove-user-group)
+* [Update user group members](/api/update-user-group-members)
 
 #### Server & organizations
 
@@ -56,6 +57,9 @@
 * [Remove a linkifier](/api/remove-linkifier)
 * [Get all custom emoji](/api/get-custom-emoji)
 * [Upload custom emoji](/api/upload-custom-emoji)
+* [Get all custom profile fields](/api/get-custom-profile-fields)
+* [Reorder custom profile fields](/api/reorder-custom-profile-fields)
+* [Create a custom profile field](/api/create-custom-profile-field)
 
 #### Real-time events
 

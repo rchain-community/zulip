@@ -5,7 +5,7 @@ import os
 from email.message import EmailMessage
 from typing import Optional
 
-import ujson
+import orjson
 from django.conf import settings
 from django.core.management.base import CommandParser
 
@@ -37,14 +37,12 @@ Example:
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument('-f', '--fixture',
-                            dest='fixture',
                             type=str,
                             help='The path to the email message you\'d like to send '
                                  'to the email mirror.\n'
                                  'Accepted formats: json or raw email file. '
                                  'See zerver/tests/fixtures/email/ for examples')
         parser.add_argument('-s', '--stream',
-                            dest='stream',
                             type=str,
                             help='The name of the stream to which you\'d like to send '
                             'the message. Default: Denmark')
@@ -80,8 +78,8 @@ Example:
         return os.path.exists(fixture_path)
 
     def _parse_email_json_fixture(self, fixture_path: str) -> EmailMessage:
-        with open(fixture_path) as fp:
-            json_content = ujson.load(fp)[0]
+        with open(fixture_path, "rb") as fp:
+            json_content = orjson.loads(fp.read())[0]
 
         message = EmailMessage()
         message['From'] = json_content['from']

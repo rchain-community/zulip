@@ -16,7 +16,7 @@ import tempfile
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import boto3
-import ujson
+import orjson
 from boto3.resources.base import ServiceResource
 from django.apps import apps
 from django.conf import settings
@@ -30,6 +30,7 @@ from scripts.lib.zulip_tools import overwrite_symlink
 from zerver.lib.avatar_hash import user_avatar_path_from_ids
 from zerver.lib.pysa import mark_sanitized
 from zerver.models import (
+    AlertWord,
     Attachment,
     BotConfigData,
     BotStorageData,
@@ -123,6 +124,7 @@ ALL_ZULIP_TABLES = {
     'zerver_defaultstream',
     'zerver_defaultstreamgroup',
     'zerver_defaultstreamgroup_streams',
+    'zerver_draft',
     'zerver_emailchangestatus',
     'zerver_huddle',
     'zerver_message',
@@ -227,7 +229,7 @@ NON_EXPORTED_TABLES = {
     # Fillstate will require some cleverness to do the right partial export.
     'analytics_fillstate',
 
-    # These are for unfinished features; we'll want to add them ot the
+    # These are for unfinished features; we'll want to add them to the
     # export before they reach full production status.
     'zerver_defaultstreamgroup',
     'zerver_defaultstreamgroup_streams',
@@ -235,6 +237,9 @@ NON_EXPORTED_TABLES = {
 
     # This is low priority, since users can easily just reset themselves to away.
     'zerver_userstatus',
+
+    # Drafts don't need to be exported as they are supposed to be more ephemeral.
+    'zerver_draft',
 
     # For any tables listed below here, it's a bug that they are not present in the export.
 }
@@ -283,12 +288,17 @@ DATE_FIELDS: Dict[TableName, List[Field]] = {
     'zerver_useractivityinterval': ['start', 'end'],
     'zerver_userpresence': ['timestamp'],
     'zerver_userprofile': ['date_joined', 'last_login', 'last_reminder'],
+    'zerver_userprofile_mirrordummy': ['date_joined', 'last_login', 'last_reminder'],
     'zerver_realmauditlog': ['event_time'],
     'zerver_userhotspot': ['timestamp'],
     'analytics_installationcount': ['end_time'],
     'analytics_realmcount': ['end_time'],
     'analytics_usercount': ['end_time'],
     'analytics_streamcount': ['end_time'],
+}
+
+BITHANDLER_FIELDS: Dict[TableName, List[Field]] = {
+    'zerver_realm': ['authentication_methods'],
 }
 
 def sanity_check_output(data: TableData) -> None:
@@ -332,8 +342,13 @@ def sanity_check_output(data: TableData) -> None:
             logging.warning('??? NO DATA EXPORTED FOR TABLE %s!!!', table)
 
 def write_data_to_file(output_file: Path, data: Any) -> None:
-    with open(output_file, "w") as f:
-        f.write(ujson.dumps(data, indent=4))
+    with open(output_file, "wb") as f:
+        # Because we don't pass a default handler, OPT_PASSTHROUGH_DATETIME
+        # actually causes orjson to raise a TypeError on datetime objects. This
+        # is what we want, because it helps us check that we correctly
+        # post-processed them to serialize to UNIX timestamps rather than ISO
+        # 8601 strings for historical reasons.
+        f.write(orjson.dumps(data, option=orjson.OPT_INDENT_2 | orjson.OPT_PASSTHROUGH_DATETIME))
 
 def make_raw(query: Any, exclude: Optional[List[Field]]=None) -> List[Record]:
     '''
@@ -370,6 +385,11 @@ def floatify_datetime_fields(data: TableData, table: TableName) -> None:
                 dt = orig_dt
             utc_naive  = dt.replace(tzinfo=None) - dt.utcoffset()
             item[field] = (utc_naive - datetime.datetime(1970, 1, 1)).total_seconds()
+
+def listify_bithandler_fields(data: TableData, table: TableName) -> None:
+    for item in data[table]:
+        for field in BITHANDLER_FIELDS[table]:
+            item[field] = list(item[field])
 
 class Config:
     '''A Config object configures a single table for exporting (and, maybe
@@ -464,14 +484,13 @@ def export_from_config(response: TableData, config: Config, seed_object: Optiona
     if context is None:
         context = {}
 
-    if table:
-        exported_tables = [table]
-    else:
-        if config.custom_tables is None:
-            raise AssertionError('''
-                You must specify config.custom_tables if you
-                are not specifying config.table''')
+    if config.custom_tables:
         exported_tables = config.custom_tables
+    else:
+        assert table is not None, '''
+            You must specify config.custom_tables if you
+            are not specifying config.table'''
+        exported_tables = [table]
 
     for t in exported_tables:
         logging.info('Exporting via export_from_config:  %s', t)
@@ -543,12 +562,16 @@ def export_from_config(response: TableData, config: Config, seed_object: Optiona
         query = model.objects.filter(**filter_parms)
         rows = list(query)
 
-    # Post-process rows (which won't apply to custom fetches/concats)
     if rows is not None:
         assert table is not None  # Hint for mypy
         response[table] = make_raw(rows, exclude=config.exclude)
-        if table in DATE_FIELDS:
-            floatify_datetime_fields(response, table)
+
+    # Post-process rows
+    for t in exported_tables:
+        if t in DATE_FIELDS:
+            floatify_datetime_fields(response, t)
+        if table in BITHANDLER_FIELDS:
+            listify_bithandler_fields(response, table)
 
     # Now walk our children.  It's extremely important to respect
     # the order of children here.
@@ -619,6 +642,13 @@ def get_realm_config() -> Config:
         table='zerver_userprofile',
         virtual_parent=realm_config,
         custom_fetch=fetch_user_profile,
+    )
+
+    Config(
+        table='zerver_alertword',
+        model=AlertWord,
+        normal_parent=user_profile_config,
+        parent_key='user_profile__in',
     )
 
     user_groups_config = Config(
@@ -863,7 +893,7 @@ def fetch_attachment_data(response: TableData, realm_id: int, message_ids: Set[i
     '''
     for row in response['zerver_attachment']:
         filterer_message_ids = set(row['messages']).intersection(message_ids)
-        row['messages'] = sorted(list(filterer_message_ids))
+        row['messages'] = sorted(filterer_message_ids)
 
     '''
     Attachments can be connected to multiple messages, although
@@ -945,8 +975,8 @@ def export_usermessages_batch(input_path: Path, output_path: Path,
     batch of Message objects and adds the corresponding UserMessage
     objects. (This is called by the export_usermessage_batch
     management command)."""
-    with open(input_path) as input_file:
-        output = ujson.load(input_file)
+    with open(input_path, "rb") as input_file:
+        output = orjson.loads(input_file.read())
     message_ids = [item['id'] for item in output['zerver_message']]
     user_profile_ids = set(output['zerver_userprofile_ids'])
     del output['zerver_userprofile_ids']
@@ -1290,8 +1320,8 @@ def export_files_from_s3(realm: Realm, bucket_name: str, output_dir: Path,
         if (count % 100 == 0):
             logging.info("Finished %s", count)
 
-    with open(os.path.join(output_dir, "records.json"), "w") as records_file:
-        ujson.dump(records, records_file, indent=4)
+    with open(os.path.join(output_dir, "records.json"), "wb") as records_file:
+        records_file.write(orjson.dumps(records, option=orjson.OPT_INDENT_2))
 
 def export_uploads_from_local(realm: Realm, local_dir: Path, output_dir: Path) -> None:
 
@@ -1323,8 +1353,8 @@ def export_uploads_from_local(realm: Realm, local_dir: Path, output_dir: Path) -
 
         if (count % 100 == 0):
             logging.info("Finished %s", count)
-    with open(os.path.join(output_dir, "records.json"), "w") as records_file:
-        ujson.dump(records, records_file, indent=4)
+    with open(os.path.join(output_dir, "records.json"), "wb") as records_file:
+        records_file.write(orjson.dumps(records, option=orjson.OPT_INDENT_2))
 
 def export_avatars_from_local(realm: Realm, local_dir: Path, output_dir: Path) -> None:
 
@@ -1369,8 +1399,8 @@ def export_avatars_from_local(realm: Realm, local_dir: Path, output_dir: Path) -
             if (count % 100 == 0):
                 logging.info("Finished %s", count)
 
-    with open(os.path.join(output_dir, "records.json"), "w") as records_file:
-        ujson.dump(records, records_file, indent=4)
+    with open(os.path.join(output_dir, "records.json"), "wb") as records_file:
+        records_file.write(orjson.dumps(records, option=orjson.OPT_INDENT_2))
 
 def export_realm_icons(realm: Realm, local_dir: Path, output_dir: Path) -> None:
     records = []
@@ -1387,8 +1417,8 @@ def export_realm_icons(realm: Realm, local_dir: Path, output_dir: Path) -> None:
                       s3_path=icon_relative_path)
         records.append(record)
 
-    with open(os.path.join(output_dir, "records.json"), "w") as records_file:
-        ujson.dump(records, records_file, indent=4)
+    with open(os.path.join(output_dir, "records.json"), "wb") as records_file:
+        records_file.write(orjson.dumps(records, option=orjson.OPT_INDENT_2))
 
 def export_emoji_from_local(realm: Realm, local_dir: Path, output_dir: Path) -> None:
 
@@ -1427,8 +1457,8 @@ def export_emoji_from_local(realm: Realm, local_dir: Path, output_dir: Path) -> 
         count += 1
         if (count % 100 == 0):
             logging.info("Finished %s", count)
-    with open(os.path.join(output_dir, "records.json"), "w") as records_file:
-        ujson.dump(records, records_file, indent=4)
+    with open(os.path.join(output_dir, "records.json"), "wb") as records_file:
+        records_file.write(orjson.dumps(records, option=orjson.OPT_INDENT_2))
 
 def do_write_stats_file_for_realm_export(output_dir: Path) -> None:
     stats_file = os.path.join(output_dir, 'stats.txt')
@@ -1436,14 +1466,14 @@ def do_write_stats_file_for_realm_export(output_dir: Path) -> None:
     attachment_file = os.path.join(output_dir, 'attachment.json')
     analytics_file = os.path.join(output_dir, 'analytics.json')
     message_files = glob.glob(os.path.join(output_dir, 'messages-*.json'))
-    fns = sorted([analytics_file] + [attachment_file] + message_files + [realm_file])
+    fns = sorted([analytics_file, attachment_file, *message_files, realm_file])
 
     logging.info('Writing stats file: %s\n', stats_file)
     with open(stats_file, 'w') as f:
         for fn in fns:
             f.write(os.path.basename(fn) + '\n')
-            with open(fn) as filename:
-                data = ujson.load(filename)
+            with open(fn, "rb") as filename:
+                data = orjson.loads(filename.read())
             for k in sorted(data):
                 f.write(f'{len(data[k]):5} {k}\n')
             f.write('\n')
@@ -1453,8 +1483,8 @@ def do_write_stats_file_for_realm_export(output_dir: Path) -> None:
 
         for fn in [avatar_file, uploads_file]:
             f.write(fn+'\n')
-            with open(fn) as filename:
-                data = ujson.load(filename)
+            with open(fn, "rb") as filename:
+                data = orjson.loads(filename.read())
             f.write(f'{len(data):5} records\n')
             f.write('\n')
 
@@ -1662,7 +1692,7 @@ def export_messages_single_user(user_profile: UserProfile, output_dir: Path,
     while True:
         actual_query = user_message_query.select_related(
             "message", "message__sending_client").filter(id__gt=min_id)[0:chunk_size]
-        user_message_chunk = [um for um in actual_query]
+        user_message_chunk = list(actual_query)
         user_message_ids = {um.id for um in user_message_chunk}
 
         if len(user_message_chunk) == 0:
@@ -1700,6 +1730,13 @@ def export_analytics_tables(realm: Realm, output_dir: Path) -> None:
         config=config,
         seed_object=realm,
     )
+
+    # The seeding logic results in a duplicate zerver_realm object
+    # being included in the analytics data.  We don't want it, as that
+    # data is already in `realm.json`, so we just delete it here
+    # before writing to disk.
+    del response['zerver_realm']
+
     write_data_to_file(output_file=export_file, data=response)
 
 def get_analytics_config() -> Config:
@@ -1707,7 +1744,7 @@ def get_analytics_config() -> Config:
     # analytics.json file in a full-realm export.
 
     analytics_config = Config(
-        table='zerver_analytics',
+        table='zerver_realm',
         is_seeded=True,
     )
 
@@ -1745,6 +1782,7 @@ def export_realm_wrapper(realm: Realm, output_dir: str,
                          threads: int, upload: bool,
                          public_only: bool,
                          delete_after_upload: bool,
+                         percent_callback: Optional[Callable[[Any], None]]=None,
                          consent_message_id: Optional[int]=None) -> Optional[str]:
     tarball_path = do_export_realm(realm=realm, output_dir=output_dir,
                                    threads=threads, public_only=public_only,
@@ -1759,7 +1797,8 @@ def export_realm_wrapper(realm: Realm, output_dir: str,
     # without additional configuration.  We'll likely want to change
     # that in the future.
     print("Uploading export tarball...")
-    public_url = zerver.lib.upload.upload_backend.upload_export_tarball(realm, tarball_path)
+    public_url = zerver.lib.upload.upload_backend.upload_export_tarball(
+        realm, tarball_path, percent_callback=percent_callback)
     print()
     print(f"Uploaded to {public_url}")
 
@@ -1781,7 +1820,7 @@ def get_realm_exports_serialized(user: UserProfile) -> List[Dict[str, Any]]:
         if export.extra_data is not None:
             pending = False
 
-            export_data = ujson.loads(export.extra_data)
+            export_data = orjson.loads(export.extra_data)
             deleted_timestamp = export_data.get('deleted_timestamp')
             failed_timestamp = export_data.get('failed_timestamp')
             export_path = export_data.get('export_path')

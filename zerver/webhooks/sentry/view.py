@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from django.http import HttpRequest, HttpResponse
@@ -35,7 +36,7 @@ EXCEPTION_EVENT_TEMPLATE = """
 
 EXCEPTION_EVENT_TEMPLATE_WITH_TRACEBACK = EXCEPTION_EVENT_TEMPLATE + """
 Traceback:
-```{platform}
+```{syntax_highlight_as}
 {pre_context}---> {context_line}{post_context}\
 ```
 """
@@ -63,11 +64,14 @@ ISSUE_IGNORED_MESSAGE_TEMPLATE = """
 Issue **{title}** was ignored by **{actor}**.
 """
 
-platforms_map = {
+# Maps "platform" name provided by Sentry to the Pygments lexer name
+syntax_highlight_as_map = {
     "go": "go",
+    "java": "java",
+    "javascript": "javascript",
     "node": "javascript",
     "python": "python3",
-}  # We can expand this as and when users use this integration with different platforms.
+}
 
 
 def convert_lines_to_traceback_string(lines: Optional[List[str]]) -> str:
@@ -90,9 +94,9 @@ def handle_event_payload(event: Dict[str, Any]) -> Tuple[str, str]:
         raise UnexpectedWebhookEventType("Sentry", "Raven SDK")
 
     platform_name = event["platform"]
-    platform = platforms_map.get(platform_name)
-    if platform is None:  # nocoverage
-        raise UnexpectedWebhookEventType("Sentry", f"platform {platform_name}")
+    syntax_highlight_as = syntax_highlight_as_map.get(platform_name, "")
+    if syntax_highlight_as == "":  # nocoverage
+        logging.info(f"Unknown Sentry platform: {platform_name}")
 
     context = {
         "title": subject,
@@ -105,22 +109,22 @@ def handle_event_payload(event: Dict[str, Any]) -> Tuple[str, str]:
         # The event was triggered by a sentry.capture_exception() call
         # (in the Python Sentry SDK) or something similar.
 
-        filename = event["metadata"]["filename"]
+        filename = event["metadata"].get("filename", None)
 
         stacktrace = None
-        for value in event["exception"]["values"]:
+        for value in reversed(event["exception"]["values"]):
             if "stacktrace" in value:
                 stacktrace = value["stacktrace"]
                 break
 
-        if stacktrace:
+        if stacktrace and filename:
             exception_frame = None
-            for frame in stacktrace["frames"]:
-                if frame["filename"] == filename:
+            for frame in reversed(stacktrace["frames"]):
+                if frame.get("filename", None) == filename:
                     exception_frame = frame
                     break
 
-            if exception_frame:
+            if exception_frame and exception_frame["context_line"]:
                 pre_context = convert_lines_to_traceback_string(exception_frame["pre_context"])
 
                 context_line = exception_frame["context_line"] + "\n"
@@ -130,7 +134,7 @@ def handle_event_payload(event: Dict[str, Any]) -> Tuple[str, str]:
                 post_context = convert_lines_to_traceback_string(exception_frame["post_context"])
 
                 context.update({
-                    "platform": platform,
+                    "syntax_highlight_as": syntax_highlight_as,
                     "filename": filename,
                     "pre_context": pre_context,
                     "context_line": context_line,

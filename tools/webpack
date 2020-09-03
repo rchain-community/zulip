@@ -13,7 +13,7 @@ def build_for_prod_or_casper(quiet: bool) -> NoReturn:
     """Builds for production, writing the output to disk"""
 
     webpack_args = ['node', 'node_modules/.bin/webpack-cli',
-                    '--config', 'tools/webpack.config.ts', '-p',
+                    '-p',
                     '--env', 'production']
     if quiet:
         webpack_args += ['--display', 'errors-only']
@@ -27,8 +27,6 @@ def build_for_dev_server(host: str, port: str, minify: bool, disable_host_check:
     # files as devs make edits and serve new assets on the fly.
     webpack_args = ['node', 'node_modules/.bin/webpack-dev-server']
     webpack_args += [
-        '--config',
-        'tools/webpack.config.ts',
         # webpack-cli has a bug where it ignores --watch-poll with
         # multi-config, and we don't need the katex-cli part anyway.
         '--config-name', 'frontend',
@@ -53,7 +51,7 @@ def build_for_dev_server(host: str, port: str, minify: bool, disable_host_check:
         for line in mounts:
             fields = line.split()
             if fields[1] == cwd:
-                inotify_broken = fields[2] in ["nfs", "vboxsf"]
+                inotify_broken = fields[2] in ["nfs", "vboxsf", "prl_fs"]
     if inotify_broken:
         webpack_args.append('--watch-poll=1000')
 
@@ -73,7 +71,7 @@ def build_for_dev_server(host: str, port: str, minify: bool, disable_host_check:
 
         watch_manager = pyinotify.WatchManager()
         event_notifier = pyinotify.Notifier(watch_manager, WebpackConfigFileChangeHandler())
-        for file in ['webpack.config.ts', 'webpack-helpers.ts', 'webpack.assets.json']:
+        for file in ['webpack.config.ts', 'webpack.assets.json']:
             filepath = os.path.join(os.path.dirname(__file__), file)
             watch_manager.add_watch(filepath, pyinotify.IN_MODIFY)
         event_notifier.loop()
@@ -114,25 +112,25 @@ def build_for_most_tests() -> None:
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test',
-                    action='store_true', dest='test', default=False,
+                    action='store_true', default=False,
                     help='generate a stub webpack-stats.json file (for backend testing)')
 parser.add_argument('--quiet',
-                    action='store_true', dest='quiet', default=False,
+                    action='store_true', default=False,
                     help='Minimizes webpack output while running')
 parser.add_argument('--watch',
-                    action='store_true', dest='watch', default=False,
+                    action='store_true', default=False,
                     help='watch for changes to source files (for development)')
 parser.add_argument('--host',
-                    action='store', dest='host',
+                    action='store',
                     default='127.0.0.1', help='set the host for the webpack server to run on')
 parser.add_argument('--port',
-                    action='store', dest='port',
+                    action='store',
                     default='9994', help='set the port for the webpack server to run on')
 parser.add_argument('--minify',
-                    action='store_true', dest='minify', default=False,
+                    action='store_true', default=False,
                     help='Minify and optimize the assets (for development)')
 parser.add_argument('--disable-host-check',
-                    action='store_true', dest='disable_host_check', default=None,
+                    action='store_true', default=None,
                     help='Disable host check for webpack-dev-server')
 
 args = parser.parse_args()

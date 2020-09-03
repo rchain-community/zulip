@@ -5,7 +5,7 @@ from typing import List, Sequence
 from unittest.mock import patch
 
 import ldap
-import ujson
+import orjson
 from django.conf import settings
 from django.core import mail
 from django.test import override_settings
@@ -15,6 +15,7 @@ from zerver.lib.actions import do_change_notification_settings, do_change_user_r
 from zerver.lib.email_notifications import (
     enqueue_welcome_emails,
     fix_emojis,
+    fix_spoilers_in_html,
     handle_missedmessage_emails,
     relative_to_full_url,
 )
@@ -109,7 +110,7 @@ class TestFollowupEmails(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         enqueue_welcome_emails(hamlet)
         scheduled_emails = ScheduledEmail.objects.filter(users=hamlet)
-        email_data = ujson.loads(scheduled_emails[0].data)
+        email_data = orjson.loads(scheduled_emails[0].data)
         self.assertEqual(email_data["context"]["email"], self.example_email("hamlet"))
         self.assertEqual(email_data["context"]["is_realm_admin"], False)
         self.assertEqual(email_data["context"]["getting_started_link"], "https://zulip.com")
@@ -120,7 +121,7 @@ class TestFollowupEmails(ZulipTestCase):
         iago = self.example_user("iago")
         enqueue_welcome_emails(iago)
         scheduled_emails = ScheduledEmail.objects.filter(users=iago)
-        email_data = ujson.loads(scheduled_emails[0].data)
+        email_data = orjson.loads(scheduled_emails[0].data)
         self.assertEqual(email_data["context"]["email"], self.example_email("iago"))
         self.assertEqual(email_data["context"]["is_realm_admin"], True)
         self.assertEqual(email_data["context"]["getting_started_link"],
@@ -137,7 +138,7 @@ class TestFollowupEmails(ZulipTestCase):
                                                                  "(uid=%(email)s)"))
     def test_day1_email_ldap_case_a_login_credentials(self) -> None:
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
 
         with self.settings(AUTH_LDAP_USER_ATTR_MAP=ldap_user_attr_map):
             self.login_with_return("newuser_email_as_uid@zulip.com",
@@ -146,7 +147,7 @@ class TestFollowupEmails(ZulipTestCase):
             scheduled_emails = ScheduledEmail.objects.filter(users=user)
 
             self.assertEqual(len(scheduled_emails), 2)
-            email_data = ujson.loads(scheduled_emails[0].data)
+            email_data = orjson.loads(scheduled_emails[0].data)
             self.assertEqual(email_data["context"]["ldap"], True)
             self.assertEqual(email_data["context"]["ldap_username"], "newuser_email_as_uid@zulip.com")
 
@@ -154,7 +155,7 @@ class TestFollowupEmails(ZulipTestCase):
                                                 'zproject.backends.ZulipDummyBackend'))
     def test_day1_email_ldap_case_b_login_credentials(self) -> None:
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
 
         with self.settings(
                 LDAP_APPEND_DOMAIN='zulip.com',
@@ -166,7 +167,7 @@ class TestFollowupEmails(ZulipTestCase):
             scheduled_emails = ScheduledEmail.objects.filter(users=user)
 
             self.assertEqual(len(scheduled_emails), 2)
-            email_data = ujson.loads(scheduled_emails[0].data)
+            email_data = orjson.loads(scheduled_emails[0].data)
             self.assertEqual(email_data["context"]["ldap"], True)
             self.assertEqual(email_data["context"]["ldap_username"], "newuser")
 
@@ -174,7 +175,7 @@ class TestFollowupEmails(ZulipTestCase):
                                                 'zproject.backends.ZulipDummyBackend'))
     def test_day1_email_ldap_case_c_login_credentials(self) -> None:
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
 
         with self.settings(
                 LDAP_EMAIL_ATTR='mail',
@@ -185,7 +186,7 @@ class TestFollowupEmails(ZulipTestCase):
             scheduled_emails = ScheduledEmail.objects.filter(users=user)
 
             self.assertEqual(len(scheduled_emails), 2)
-            email_data = ujson.loads(scheduled_emails[0].data)
+            email_data = orjson.loads(scheduled_emails[0].data)
             self.assertEqual(email_data["context"]["ldap"], True)
             self.assertEqual(email_data["context"]["ldap_username"], "newuser_with_email")
 
@@ -198,8 +199,8 @@ class TestFollowupEmails(ZulipTestCase):
         scheduled_emails = ScheduledEmail.objects.filter(users=hamlet).order_by(
             "scheduled_timestamp")
         self.assertEqual(2, len(scheduled_emails))
-        self.assertEqual(ujson.loads(scheduled_emails[1].data)["template_prefix"], 'zerver/emails/followup_day2')
-        self.assertEqual(ujson.loads(scheduled_emails[0].data)["template_prefix"], 'zerver/emails/followup_day1')
+        self.assertEqual(orjson.loads(scheduled_emails[1].data)["template_prefix"], 'zerver/emails/followup_day2')
+        self.assertEqual(orjson.loads(scheduled_emails[0].data)["template_prefix"], 'zerver/emails/followup_day1')
 
         ScheduledEmail.objects.all().delete()
 
@@ -207,7 +208,7 @@ class TestFollowupEmails(ZulipTestCase):
         scheduled_emails = ScheduledEmail.objects.filter(users=cordelia)
         # Cordelia has account in more than 1 realm so day2 email should not be sent
         self.assertEqual(len(scheduled_emails), 1)
-        email_data = ujson.loads(scheduled_emails[0].data)
+        email_data = orjson.loads(scheduled_emails[0].data)
         self.assertEqual(email_data["template_prefix"], 'zerver/emails/followup_day1')
 
 class TestMissedMessages(ZulipTestCase):
@@ -701,7 +702,7 @@ class TestMissedMessages(ZulipTestCase):
             'Come and join us in #**Verona**.')
         stream_id = get_stream('Verona', get_realm('zulip')).id
         href = f"http://zulip.testserver/#narrow/stream/{stream_id}-Verona"
-        verify_body_include = [f'<a class="stream" data-stream-id="5" href="{href}">#Verona</a']
+        verify_body_include = [f'<a class="stream" data-stream-id="{stream_id}" href="{href}">#Verona</a']
         email_subject = 'PMs with Othello, the Moor of Venice'
         self._test_cases(msg_id, verify_body_include, email_subject, send_as_user=False, verify_html_body=True)
 
@@ -874,7 +875,7 @@ class TestMissedMessages(ZulipTestCase):
         # Run `relative_to_full_url()` function over test fixtures present in
         # 'markdown_test_cases.json' and check that it converts all the relative
         # URLs to absolute URLs.
-        fixtures = ujson.loads(self.fixture_data("markdown_test_cases.json"))
+        fixtures = orjson.loads(self.fixture_data("markdown_test_cases.json"))
         test_fixtures = {}
         for test in fixtures['regular_tests']:
             test_fixtures[test['name']] = test
@@ -940,6 +941,39 @@ class TestMissedMessages(ZulipTestCase):
                           'target="_blank" title="https://www.google.com/images/srpr/logo4w.png">' + \
                           'https://www.google.com/images/srpr/logo4w.png</a></p>'
         self.assertEqual(actual_output, expected_output)
+
+    def test_spoilers_in_html_emails(self) -> None:
+        test_data = "<div class=\"spoiler-block\"><div class=\"spoiler-header\">\n\n<p><a>header</a> text</p>\n</div><div class=\"spoiler-content\" aria-hidden=\"true\">\n\n<p>content</p>\n</div></div>\n\n<p>outside spoiler</p>"
+        actual_output = fix_spoilers_in_html(test_data, 'en')
+        expected_output = "<div><div class=\"spoiler-block\">\n\n<p><a>header</a> text<span> </span><span class=\"spoiler-title\" title=\"Open Zulip to see the spoiler content\">(Open Zulip to see the spoiler content)</span></p>\n</div>\n\n<p>outside spoiler</p></div>"
+        self.assertEqual(actual_output, expected_output)
+
+        # test against our markdown_test_cases so these features do not get out of sync.
+        fixtures = orjson.loads(self.fixture_data("markdown_test_cases.json"))
+        test_fixtures = {}
+        for test in fixtures['regular_tests']:
+            if 'spoiler' in test['name']:
+                test_fixtures[test['name']] = test
+        for test_name in test_fixtures:
+            test_data = test_fixtures[test_name]["expected_output"]
+            output_data = fix_spoilers_in_html(test_data, 'en')
+            assert('spoiler-header' not in output_data)
+            assert('spoiler-content' not in output_data)
+            assert('spoiler-block' in output_data)
+            assert('spoiler-title' in output_data)
+
+    def test_spoilers_in_text_emails(self) -> None:
+        content = "@**King Hamlet**\n\n```spoiler header text\nsecret-text\n```"
+        msg_id = self.send_stream_message(self.example_user('othello'), "Denmark", content)
+        verify_body_include = [
+            "header text",
+            "Open Zulip to see the spoiler content"
+        ]
+        verify_body_does_not_include = ["secret-text"]
+        email_subject = '#Denmark > test'
+        send_as_user = False
+        self._test_cases(msg_id, verify_body_include, email_subject, send_as_user, trigger='mentioned',
+                         verify_body_does_not_include=verify_body_does_not_include)
 
     def test_fix_emoji(self) -> None:
         # An emoji.

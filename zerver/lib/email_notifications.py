@@ -17,6 +17,7 @@ from lxml.cssselect import CSSSelector
 
 from confirmation.models import one_click_unsubscribe_link
 from zerver.decorator import statsd_increment
+from zerver.lib.markdown.fenced_code import FENCE_RE
 from zerver.lib.message import bulk_access_messages
 from zerver.lib.queue import queue_json_publish
 from zerver.lib.send_email import FromAddress, send_future_email
@@ -69,7 +70,7 @@ def relative_to_full_url(base_url: str, content: str) -> str:
         container.drop_tree()
 
     # The previous block handles most inline images, but for messages
-    # where the entire markdown input was just the URL of an image
+    # where the entire Markdown input was just the URL of an image
     # (i.e. the entire body is a message_inline_image object), the
     # entire message body will be that image element; here, we need a
     # more drastic edit to the content.
@@ -117,6 +118,54 @@ def fix_emojis(content: str, base_url: str, emojiset: str) -> str:
     content = lxml.html.tostring(fragment).decode('utf-8')
     return content
 
+def fix_spoilers_in_html(content: str, language: str) -> str:
+    with override_language(language):
+        spoiler_title: str = _("Open Zulip to see the spoiler content")
+    fragment = lxml.html.fromstring(content)
+    spoilers = fragment.find_class("spoiler-block")
+    for spoiler in spoilers:
+        header = spoiler.find_class("spoiler-header")[0]
+        spoiler_content = spoiler.find_class("spoiler-content")[0]
+        header_content = header.find("p")
+        if header_content is None:
+            # Create a new element to append the spoiler to)
+            header_content = lxml.html.fromstring("<p></p>")
+            header.append(header_content)
+        else:
+            # Add a space. Its simpler to append a new span element than
+            # inserting text after the last node ends since neither .text
+            # and .tail do the right thing for us.
+            header_content.append(lxml.html.fromstring("<span> </span>"))
+        span_elem = lxml.html.fromstring(
+            f'<span class="spoiler-title" title="{spoiler_title}">({spoiler_title})</span')
+        header_content.append(span_elem)
+        header.drop_tag()
+        spoiler_content.drop_tree()
+    content = lxml.html.tostring(fragment).decode("utf-8")
+    return content
+
+def fix_spoilers_in_text(content: str, language: str) -> str:
+    with override_language(language):
+        spoiler_title: str = _("Open Zulip to see the spoiler content")
+    lines = content.split('\n')
+    output = []
+    open_fence = None
+    for line in lines:
+        m = FENCE_RE.match(line)
+        if m:
+            fence = m.group('fence')
+            lang = m.group('lang')
+            if lang == 'spoiler':
+                open_fence = fence
+                output.append(line)
+                output.append(f"({spoiler_title})")
+            elif fence == open_fence:
+                open_fence = None
+                output.append(line)
+        elif not open_fence:
+            output.append(line)
+    return '\n'.join(output)
+
 def build_message_list(user_profile: UserProfile, messages: List[Message]) -> List[Dict[str, Any]]:
     """
     Builds the message list object for the missed message email template.
@@ -159,11 +208,13 @@ def build_message_list(user_profile: UserProfile, messages: List[Message]) -> Li
         plain = re.sub(
             r"/user_uploads/(\S*)",
             user_profile.realm.uri + r"/user_uploads/\1", plain)
+        plain = fix_spoilers_in_text(plain, user_profile.default_language)
 
         assert message.rendered_content is not None
         html = message.rendered_content
         html = relative_to_full_url(user_profile.realm.uri, html)
         html = fix_emojis(html, user_profile.realm.uri, user_profile.emojiset)
+        html = fix_spoilers_in_html(html, user_profile.default_language)
         if sender:
             plain, html = append_sender_to_message(plain, html, sender)
         return {'plain': plain, 'html': html}
@@ -323,7 +374,7 @@ def do_send_missedmessage_events_reply_in_zulip(user_profile: UserProfile,
         'realm_name_in_notifications': user_profile.realm_name_in_notifications,
     })
 
-    triggers = list(message['trigger'] for message in missed_messages)
+    triggers = [message['trigger'] for message in missed_messages]
     unique_triggers = set(triggers)
     context.update({
         'mention': 'mentioned' in unique_triggers or 'wildcard_mentioned' in unique_triggers,
@@ -405,7 +456,7 @@ def do_send_missedmessage_events_reply_in_zulip(user_profile: UserProfile,
         })
     else:
         context.update({
-            'messages': build_message_list(user_profile, list(m['message'] for m in missed_messages)),
+            'messages': build_message_list(user_profile, [m['message'] for m in missed_messages]),
             'sender_str': ", ".join(sender.full_name for sender in senders),
             'realm_str': user_profile.realm.name,
             'show_message_content': True,

@@ -11,7 +11,7 @@ This doc assumes you know how to set up a local development server
 and open the Zulip app in the browser.  It also assumes a basic
 knowledge of how to use Zulip.
 
-## Basic Stuff ##
+## Basic stuff ##
 
 When testing Zulip manually, here are things to focus on:
 
@@ -197,7 +197,7 @@ exercise is about 30 minutes, assuming no bugs.
 
 ### Composing messages ###
 
-We have pretty good automated tests for our markdown processor, so
+We have pretty good automated tests for our Markdown processor, so
 manual testing is targeted more to other interactions.  For composing
 a message, pay attention to details like what is automatically
 populated and where the focus is placed.
@@ -224,7 +224,7 @@ populated and where the focus is placed.
       existing topic.
 
 - Formatting stuff
-    - Use the "A" icon to get markdown help.
+    - Use the "A" icon to get Markdown help.
     - Use the eyeball icon to show a preview and send from preview mode.
     - Toggle in and out of preview before sending a message.
     - Use @-mention to mention Hamlet (and send him a message).
@@ -249,11 +249,11 @@ populated and where the focus is placed.
       should now be sending to a stream.)
 
 - Click to send
-    - Turn off enter-to-send.
-        - Send a two-paragraph message using tab and enter.
-        - Send a two-paragraph message using control-enter or command-enter.
-    - Turn on enter-to-send.
-        - Hit enter to send.
+    - Turn off Enter-to-send.
+        - Send a two-paragraph message using Tab and Enter.
+        - Send a two-paragraph message using Ctrl-Enter or Cmd-Enter.
+    - Turn on Enter-to-send.
+        - Hit Enter to send.
 
 ### Popover menus ###
 
@@ -453,7 +453,7 @@ Test per-stream options:
   messages view
 - Verify stream subscriber counts in the main stream view
 
-### User Settings ###
+### User settings ###
 
 You can modify per-user settings by choosing "Settings" in the gear menu.
 Do these tasks as Cordelia.
@@ -492,7 +492,7 @@ Do these tasks as Cordelia.
     - Turn on/off "Enable desktop notifications for new streams" and test.
       (We may eliminate this option soon.)
 
-### Keyboard Shortcuts ###
+### Keyboard shortcuts ###
 
 We mostly test keyboard shortcuts as part of other tasks.
 

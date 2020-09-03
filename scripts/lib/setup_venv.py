@@ -17,7 +17,6 @@ VENV_DEPENDENCIES = [
     "zlib1g-dev",             # Needed to handle compressed PNGs with Pillow
     "libjpeg-dev",          # Needed to handle JPEGs with Pillow
     "libldap2-dev",
-    "libmemcached-dev",
     "python3-dev",          # Needed to install typed-ast dependency of mypy
     "python3-pip",
     "virtualenv",
@@ -26,6 +25,7 @@ VENV_DEPENDENCIES = [
     "libpq-dev",            # Needed by psycopg2
     "libssl-dev",           # Needed to build pycurl and other libraries
     "libmagic1",            # Used for install python-magic
+    "libyaml-dev",          # For fast YAML parsing in PyYAML
     # Needed by python-xmlsec:
     "libxmlsec1-dev",
     "pkg-config",
@@ -35,6 +35,8 @@ VENV_DEPENDENCIES = [
     # on upgrade of a production server, and it's not worth adding
     # another call to `apt install` for.
     "jq",                   # Used by scripts/lib/install-node to check yarn version
+
+    "libsasl2-dev",         # For building python-ldap from source
 ]
 
 COMMON_YUM_VENV_DEPENDENCIES = [
@@ -43,7 +45,7 @@ COMMON_YUM_VENV_DEPENDENCIES = [
     "zlib-devel",
     "libjpeg-turbo-devel",
     "openldap-devel",
-    "libmemcached-devel",
+    "libyaml-devel",
     # Needed by python-xmlsec:
     "gcc"
     "python3-devel",
@@ -57,12 +59,14 @@ COMMON_YUM_VENV_DEPENDENCIES = [
     "jq",
 ]
 
-REDHAT_VENV_DEPENDENCIES = COMMON_YUM_VENV_DEPENDENCIES + [
+REDHAT_VENV_DEPENDENCIES = [
+    *COMMON_YUM_VENV_DEPENDENCIES,
     "python36-devel",
     "python-virtualenv",
 ]
 
-FEDORA_VENV_DEPENDENCIES = COMMON_YUM_VENV_DEPENDENCIES + [
+FEDORA_VENV_DEPENDENCIES = [
+    *COMMON_YUM_VENV_DEPENDENCIES,
     "python3-pip",
     "virtualenv",  # see https://unix.stackexchange.com/questions/27877/install-virtualenv-on-fedora-16
 ]

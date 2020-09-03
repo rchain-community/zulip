@@ -16,7 +16,10 @@ SUPPORTED_CARD_ACTIONS = [
 ]
 
 IGNORED_CARD_ACTIONS = [
-    'createCheckItem',
+    "copyCard",
+    "createCheckItem",
+    "updateCheckItem",
+    "updateList",
 ]
 
 CREATE = 'createCard'
@@ -100,10 +103,18 @@ def get_proper_action(payload: Mapping[str, Any], action_type: str) -> Optional[
             return ARCHIVE
         if old_data.get('closed') and card_data.get('closed') is False:
             return REOPEN
-        # we don't support events for when a card is moved up or down
-        # within a single list
-        if old_data.get('pos'):
-            return None
+        # We don't support events for when a card is moved up or down
+        # within a single list (pos), or when the cover changes (cover).
+        # We also don't know if "dueComplete" is just a new name for "due".
+        ignored_fields = [
+            "cover",
+            "dueComplete",
+            "idAttachmentCover",
+            "pos",
+        ]
+        for field in ignored_fields:
+            if old_data.get(field):
+                return None
         raise UnexpectedWebhookEventType("Trello", action_type)
 
     return action_type
@@ -189,14 +200,14 @@ def get_changed_due_date_body(payload: Mapping[str, Any], action_type: str) -> s
 
 def get_managed_desc_body(payload: Mapping[str, Any], action_type: str) -> str:
     data = {
-        'desc': prettify_date(get_action_data(payload)['card']['desc']),
+        'desc': get_action_data(payload)['card']['desc'],
     }
     return fill_appropriate_message_content(payload, action_type, data)
 
 def get_changed_desc_body(payload: Mapping[str, Any], action_type: str) -> str:
     data = {
-        'desc': prettify_date(get_action_data(payload)['card']['desc']),
-        'old_desc': prettify_date(get_action_data(payload)['old']['desc']),
+        'desc': get_action_data(payload)['card']['desc'],
+        'old_desc': get_action_data(payload)['old']['desc'],
     }
     return fill_appropriate_message_content(payload, action_type, data)
 

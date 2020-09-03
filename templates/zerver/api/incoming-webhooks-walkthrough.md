@@ -323,19 +323,16 @@ class HelloWorldHookTests(WebhookTestCase):
         expected_message = "Hello! I am happy to be here! :smile: \nThe Wikipedia featured article for today is **[Marilyn Monroe](https://en.wikipedia.org/wiki/Marilyn_Monroe)**";
 
         # use fixture named helloworld_hello
-        self.send_and_test_stream_message('hello', expected_topic, expected_message,
-                                          content_type="application/x-www-form-urlencoded")
-
-    def get_body(self, fixture_name: str) -> str:
-        return self.webhook_fixture_data("helloworld", fixture_name, file_type="json")
+        self.check_webhook('hello', expected_topic, expected_message,
+                           content_type="application/x-www-form-urlencoded")
 
 ```
 
 In the above example, `STREAM_NAME`, `URL_TEMPLATE`, and `FIXTURE_DIR_NAME` refer
 to class attributes from the base class, `WebhookTestCase`. These are needed by
-the helper function `send_and_test_stream_message` to determine how to execute
+the helper function `check_webhook` to determine how to execute
 your test. `STREAM_NAME` should be set to your default stream. If it doesn't exist,
-`send_and_test_stream_message` will create it while executing your test.
+`check_webhook` will create it while executing your test.
 
 If your test expects a stream name from a test fixture, the value in the fixture
 and the value you set for `STREAM_NAME` must match. The test helpers use `STREAM_NAME`
@@ -345,10 +342,6 @@ value from the fixture. If these don't match, the test will fail.
 `URL_TEMPLATE` defines how the test runner will call your incoming webhook, in the same way
  you would provide a webhook URL to the 3rd party service. `api_key={api_key}` says
 that an API key is expected.
-
-In `get_body`, the first argument in the call to `self.webhook_fixture_data` specifies the
-prefix of your fixture file names, and `file_type` their type. Common types are
-`json` and `txt`.
 
 When writing tests for your webhook, you'll want to include one test function
 (and corresponding fixture) per each distinct message condition that your
@@ -364,8 +357,8 @@ class called something like `test_goodbye_message`:
         expected_message = "Hello! I am happy to be here! :smile:\nThe Wikipedia featured article for today is **[Goodbye](https://en.wikipedia.org/wiki/Goodbye)**";
 
         # use fixture named helloworld_goodbye
-        self.send_and_test_stream_message('goodbye', expected_topic, expected_message,
-                                          content_type="application/x-www-form-urlencoded")
+        self.check_webhook('goodbye', expected_topic, expected_message,
+                           content_type="application/x-www-form-urlencoded")
 ```
 
 As well as a new fixture `goodbye.json` in
@@ -509,8 +502,8 @@ Here is an example from the WordPress integration:
 
 ```
 def test_unknown_action_no_data(self) -> None:
-    # Mimic send_and_test_stream_message() to manually execute a negative test.
-    # Otherwise its call to send_json_payload() would assert on the non-success
+    # Mimic check_webhook() to manually execute a negative test.
+    # Otherwise its call to send_webhook_payload() would assert on the non-success
     # we are testing. The value of result is the error message the webhook should
     # return if no params are sent. The fixture for this test is an empty file.
 
@@ -526,7 +519,7 @@ def test_unknown_action_no_data(self) -> None:
     self.assert_json_error(result, "Unknown WordPress webhook action: WordPress Action")
 ```
 
-In a normal test, `send_and_test_stream_message` would handle all the setup
+In a normal test, `check_webhook` would handle all the setup
 and then check that the incoming webhook's response matches the expected result. If
 the webhook returns an error, the test fails. Instead, explicitly do the
 setup it would have done, and check the result yourself.
@@ -540,8 +533,8 @@ webhook. As long as `self.url` is correct, you don't need to construct the webho
 URL yourself. (In most cases, it is.)
 
 `assert_json_error` then checks if the result matches the expected error.
-If you had used `send_and_test_stream_message`, it would have called
-`send_json_payload`, which checks the result with `assert_json_success`.
+If you had used `check_webhook`, it would have called
+`send_webhook_payload`, which checks the result with `assert_json_success`.
 
 ### Custom query parameters
 
@@ -589,16 +582,15 @@ class QuerytestHookTests(WebhookTestCase):
         expected_topic = "Query Test"
         expected_message = "This is a test of custom query parameters."
 
-        self.send_and_test_stream_message('test_one', expected_topic, expected_message,
+        self.check_webhook('test_one', expected_topic, expected_message,
                                           content_type="application/x-www-form-urlencoded")
-
-    def get_body(self, fixture_name: str) -> str:
-        return self.webhook_fixture_data("querytest", fixture_name, file_type="json")
 ```
 
-You can also override `get_body` if your test data needs to be constructed in
-an unusual way. For more, see the definition for the base class, `WebhookTestCase`
-in `zerver/lib/test_classes.py.`
+You can also override `get_body` or `get_payload` if your test data
+needs to be constructed in an unusual way.
+
+For more, see the definition for the base class, `WebhookTestCase`
+in `zerver/lib/test_classes.py`, or just grep for examples.
 
 
 ### Custom HTTP event-type headers

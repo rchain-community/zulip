@@ -134,23 +134,15 @@ v1_api_and_json_patterns = [
     path('realm/deactivate', rest_dispatch,
          {'POST': 'zerver.views.realm.deactivate_realm'}),
 
-    path('realm/presence', rest_dispatch,
-         {'GET': 'zerver.views.presence.get_statuses_for_realm'}),
-
     # users -> zerver.views.users
-    #
-    # Since some of these endpoints do something different if used on
-    # yourself with `/me` as the email, we need to make sure that we
-    # don't accidentally trigger these.  The cleanest way to do that
-    # is to add a regular expression assertion that it isn't `/me/`
-    # (or ends with `/me`, in the case of hitting the root URL).
     path('users', rest_dispatch,
          {'GET': 'zerver.views.users.get_members_backend',
           'POST': 'zerver.views.users.create_user_backend'}),
+    path('users/me', rest_dispatch,
+         {'GET': 'zerver.views.users.get_profile_backend',
+          'DELETE': 'zerver.views.users.deactivate_user_own_backend'}),
     path('users/<int:user_id>/reactivate', rest_dispatch,
          {'POST': 'zerver.views.users.reactivate_user_backend'}),
-    re_path(r'^users/(?!me/)(?P<email>[^/]*)/presence$', rest_dispatch,
-            {'GET': 'zerver.views.presence.get_presence_backend'}),
     path('users/<int:user_id>', rest_dispatch,
          {'GET': 'zerver.views.users.get_members_backend',
           'PATCH': 'zerver.views.users.update_user_backend',
@@ -193,10 +185,23 @@ v1_api_and_json_patterns = [
     path('zcommand', rest_dispatch,
          {'POST': 'zerver.views.message_send.zcommand_backend'}),
 
+    # Endpoints for syncing drafts.
+    path('drafts', rest_dispatch,
+         {'GET': ('zerver.views.drafts.fetch_drafts',
+                  {'intentionally_undocumented'}),
+          'POST': ('zerver.views.drafts.create_drafts',
+                   {'intentionally_undocumented'})}),
+    path('drafts/<int:draft_id>', rest_dispatch,
+         {'PATCH': ('zerver.views.drafts.edit_draft',
+                    {'intentionally_undocumented'}),
+          'DELETE': ('zerver.views.drafts.delete_draft',
+                     {'intentionally_undocumented'})}),
+
     # messages -> zerver.views.message*
     # GET returns messages, possibly filtered, POST sends a message
     path('messages', rest_dispatch,
-         {'GET': 'zerver.views.message_fetch.get_messages_backend',
+         {'GET': ('zerver.views.message_fetch.get_messages_backend',
+                  {'allow_anonymous_user_web'}),
           'POST': ('zerver.views.message_send.send_message_backend',
                    {'allow_incoming_webhooks'})}),
     path('messages/<int:message_id>', rest_dispatch,
@@ -256,14 +261,6 @@ v1_api_and_json_patterns = [
           'GET': 'zerver.views.storage.get_storage',
           'DELETE': 'zerver.views.storage.remove_storage'}),
 
-    # users/me -> zerver.views
-    path('users/me', rest_dispatch,
-         {'GET': 'zerver.views.users.get_profile_backend',
-          'DELETE': 'zerver.views.users.deactivate_user_own_backend'}),
-    path('users/me/presence', rest_dispatch,
-         {'POST': 'zerver.views.presence.update_active_status_backend'}),
-    path('users/me/status', rest_dispatch,
-         {'POST': 'zerver.views.presence.update_user_status_backend'}),
     # Endpoint used by mobile devices to register their push
     # notification credentials
     path('users/me/apns_device_token', rest_dispatch,
@@ -272,6 +269,19 @@ v1_api_and_json_patterns = [
     path('users/me/android_gcm_reg_id', rest_dispatch,
          {'POST': 'zerver.views.push_notifications.add_android_reg_id',
           'DELETE': 'zerver.views.push_notifications.remove_android_reg_id'}),
+
+    # users/*/presnece => zerver.views.presence.
+    path('users/me/presence', rest_dispatch,
+         {'POST': 'zerver.views.presence.update_active_status_backend'}),
+    # It's important that this sit after users/me/presence so that
+    # Django's URL resolution order doesn't break the
+    # /users/me/presence endpoint.
+    path(r'users/<str:email>/presence', rest_dispatch,
+         {'GET': 'zerver.views.presence.get_presence_backend'}),
+    path('realm/presence', rest_dispatch,
+         {'GET': 'zerver.views.presence.get_statuses_for_realm'}),
+    path('users/me/status', rest_dispatch,
+         {'POST': 'zerver.views.presence.update_user_status_backend'}),
 
     # user_groups -> zerver.views.user_groups
     path('user_groups', rest_dispatch,

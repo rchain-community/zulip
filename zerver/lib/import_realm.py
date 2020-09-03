@@ -5,7 +5,7 @@ import shutil
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import boto3
-import ujson
+import orjson
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.db import connection
@@ -33,6 +33,7 @@ from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.lib.upload import BadImageError, guess_type, random_name, sanitize_name
 from zerver.lib.utils import generate_api_key, process_list_in_batches
 from zerver.models import (
+    AlertWord,
     Attachment,
     BotConfigData,
     BotStorageData,
@@ -61,7 +62,6 @@ from zerver.models import (
     UserMessage,
     UserPresence,
     UserProfile,
-    email_to_username,
     get_huddle_hash,
     get_system_bot,
     get_user_profile_by_id,
@@ -83,6 +83,7 @@ realm_tables = [("zerver_defaultstream", DefaultStream, "defaultstream"),
 # Code reviewers: give these tables extra scrutiny, as we need to
 # make sure to reload related tables AFTER we re-map the ids.
 ID_MAP: Dict[str, Dict[int, int]] = {
+    'alertword': {},
     'client': {},
     'user_profile': {},
     'huddle': {},
@@ -239,14 +240,14 @@ def fix_customprofilefield(data: TableData) -> None:
 
     for item in data['zerver_customprofilefieldvalue']:
         if item['field_id'] in field_type_USER_id_list:
-            old_user_id_list = ujson.loads(item['value'])
+            old_user_id_list = orjson.loads(item['value'])
 
             new_id_list = re_map_foreign_keys_many_to_many_internal(
                 table='zerver_customprofilefieldvalue',
                 field_name='value',
                 related_table='user_profile',
                 old_id_list=old_user_id_list)
-            item['value'] = ujson.dumps(new_id_list)
+            item['value'] = orjson.dumps(new_id_list).decode()
 
 def fix_message_rendered_content(realm: Realm,
                                  sender_map: Dict[int, Record],
@@ -258,7 +259,7 @@ def fix_message_rendered_content(realm: Realm,
     for message in messages:
         if message['rendered_content'] is not None:
             # For Zulip->Zulip imports, we use the original rendered
-            # markdown; this avoids issues where e.g. a mention can no
+            # Markdown; this avoids issues where e.g. a mention can no
             # longer render properly because a user has changed their
             # name.
             #
@@ -328,11 +329,11 @@ def fix_message_rendered_content(realm: Realm,
             message['rendered_content_version'] = markdown_version
         except Exception:
             # This generally happens with two possible causes:
-            # * rendering markdown throwing an uncaught exception
-            # * rendering markdown failing with the exception being
-            #   caught in markdown (which then returns None, causing the the
+            # * rendering Markdown throwing an uncaught exception
+            # * rendering Markdown failing with the exception being
+            #   caught in Markdown (which then returns None, causing the the
             #   rendered_content assert above to fire).
-            logging.warning("Error in markdown rendering for message ID %s; continuing", message['id'])
+            logging.warning("Error in Markdown rendering for message ID %s; continuing", message['id'])
 
 def current_table_ids(data: TableData, table: TableName) -> List[int]:
     """
@@ -506,8 +507,8 @@ def fix_bitfield_keys(data: TableData, table: TableName, field_name: Field) -> N
 def fix_realm_authentication_bitfield(data: TableData, table: TableName, field_name: Field) -> None:
     """Used to fixup the authentication_methods bitfield to be a string"""
     for item in data[table]:
-        values_as_bitstring = ''.join(['1' if field[1] else '0' for field in
-                                       item[field_name]])
+        values_as_bitstring = ''.join('1' if field[1] else '0' for field in
+                                      item[field_name])
         values_as_int = int(values_as_bitstring, 2)
         item[field_name] = values_as_int
 
@@ -613,8 +614,8 @@ def import_uploads(realm: Realm, import_dir: Path, processes: int, processing_av
         logging.info("Importing uploaded files")
 
     records_filename = os.path.join(import_dir, "records.json")
-    with open(records_filename) as records_file:
-        records: List[Dict[str, Any]] = ujson.load(records_file)
+    with open(records_filename, "rb") as records_file:
+        records: List[Dict[str, Any]] = orjson.loads(records_file.read())
     timestamp = datetime_to_timestamp(timezone_now())
 
     re_map_foreign_keys_internal(records, 'records', 'realm_id', related_table="realm",
@@ -794,8 +795,8 @@ def do_import_realm(import_dir: Path, subdomain: str, processes: int=1) -> Realm
         create_internal_realm()
 
     logging.info("Importing realm data from %s", realm_data_filename)
-    with open(realm_data_filename) as f:
-        data = ujson.load(f)
+    with open(realm_data_filename, "rb") as f:
+        data = orjson.loads(f.read())
     remove_denormalized_recipient_column_from_data(data)
 
     sort_by_date = data.get('sort_by_date', False)
@@ -878,6 +879,10 @@ def do_import_realm(import_dir: Path, subdomain: str, processes: int=1) -> Realm
         # Since Zulip doesn't use these permissions, drop them
         del user_profile_dict['user_permissions']
         del user_profile_dict['groups']
+        # The short_name field is obsolete in Zulip, but it's
+        # convenient for third party exports to populate it.
+        if 'short_name' in user_profile_dict:
+            del user_profile_dict['short_name']
 
     user_profiles = [UserProfile(**item) for item in data['zerver_userprofile']]
     for user_profile in user_profiles:
@@ -941,6 +946,12 @@ def do_import_realm(import_dir: Path, subdomain: str, processes: int=1) -> Realm
             recipient = Recipient.objects.get(type=Recipient.HUDDLE, type_id=huddle.id)
             huddle.recipient = recipient
             huddle.save(update_fields=["recipient"])
+
+    if 'zerver_alertword' in data:
+        re_map_foreign_keys(data, 'zerver_alertword', 'user_profile', related_table='user_profile')
+        re_map_foreign_keys(data, 'zerver_alertword', 'realm', related_table='realm')
+        update_model_ids(AlertWord, data, 'alertword')
+        bulk_import_model(data, AlertWord)
 
     if 'zerver_userhotspot' in data:
         fix_datetime_fields(data, 'zerver_userhotspot')
@@ -1062,8 +1073,8 @@ def do_import_realm(import_dir: Path, subdomain: str, processes: int=1) -> Realm
         raise Exception("Missing attachment.json file!")
 
     logging.info("Importing attachment data from %s", fn)
-    with open(fn) as f:
-        data = ujson.load(f)
+    with open(fn, "rb") as f:
+        data = orjson.loads(f.read())
 
     import_attachments(data)
 
@@ -1089,9 +1100,8 @@ def create_users(realm: Realm, name_list: Iterable[Tuple[str, str]],
                  bot_type: Optional[int]=None) -> None:
     user_set = set()
     for full_name, email in name_list:
-        short_name = email_to_username(email)
         if not UserProfile.objects.filter(email=email):
-            user_set.add((email, full_name, short_name, True))
+            user_set.add((email, full_name, True))
     bulk_create_users(realm, user_set, bot_type)
 
 def update_message_foreign_keys(import_dir: Path,
@@ -1129,7 +1139,7 @@ def get_incoming_message_ids(import_dir: Path,
     '''
 
     if sort_by_date:
-        tups: List[Tuple[int, int]] = list()
+        tups: List[Tuple[int, int]] = []
     else:
         message_ids: List[int] = []
 
@@ -1139,8 +1149,8 @@ def get_incoming_message_ids(import_dir: Path,
         if not os.path.exists(message_filename):
             break
 
-        with open(message_filename) as f:
-            data = ujson.load(f)
+        with open(message_filename, "rb") as f:
+            data = orjson.loads(f.read())
 
         # Aggressively free up memory.
         del data['zerver_usermessage']
@@ -1182,8 +1192,8 @@ def import_message_data(realm: Realm,
         if not os.path.exists(message_filename):
             break
 
-        with open(message_filename) as f:
-            data = ujson.load(f)
+        with open(message_filename, "rb") as f:
+            data = orjson.loads(f.read())
 
         logging.info("Importing message dump %s", message_filename)
         re_map_foreign_keys(data, 'zerver_message', 'sender', related_table="user_profile")
@@ -1208,7 +1218,7 @@ def import_message_data(realm: Realm,
             sender_map=sender_map,
             messages=data['zerver_message'],
         )
-        logging.info("Successfully rendered markdown for message batch")
+        logging.info("Successfully rendered Markdown for message batch")
 
         # A LOT HAPPENS HERE.
         # This is where we actually import the message data.
@@ -1301,8 +1311,8 @@ def import_analytics_data(realm: Realm, import_dir: Path) -> None:
         return
 
     logging.info("Importing analytics data from %s", analytics_filename)
-    with open(analytics_filename) as f:
-        data = ujson.load(f)
+    with open(analytics_filename, "rb") as f:
+        data = orjson.loads(f.read())
 
     # Process the data through the fixer functions.
     fix_datetime_fields(data, 'analytics_realmcount')

@@ -8,7 +8,7 @@ from zerver.lib.events import do_events_register
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Client, Message, UserGroup, UserPresence, get_realm
 
-GENERATOR_FUNCTIONS: Dict[str, Callable[[], Dict[str, object]]] = dict()
+GENERATOR_FUNCTIONS: Dict[str, Callable[[], Dict[str, object]]] = {}
 REGISTERED_GENERATOR_FUNCTIONS: Set[str] = set()
 CALLED_GENERATOR_FUNCTIONS: Set[str] = set()
 
@@ -190,11 +190,11 @@ def create_user_group_data() -> Dict[str, object]:
         "members": [helpers.example_user("hamlet").id, helpers.example_user("othello").id],
     }
 
-@openapi_param_value_generator(["/user_groups/{group_id}:patch", "/user_groups/{group_id}:delete"])
+@openapi_param_value_generator(["/user_groups/{user_group_id}:patch", "/user_groups/{user_group_id}:delete"])
 def get_temp_user_group_id() -> Dict[str, object]:
     user_group, _ = UserGroup.objects.get_or_create(name="temp", realm=get_realm("zulip"))
     return {
-        "group_id": user_group.id,
+        "user_group_id": user_group.id,
     }
 
 @openapi_param_value_generator(["/realm/filters/{filter_id}:delete"])

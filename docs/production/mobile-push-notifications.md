@@ -42,7 +42,7 @@ follows:
    you'll each need to log out and log back in again in order to start
    getting push notifications.
 
-Congratulations!  You've successfully setup the service.
+Congratulations!  You've successfully set up the service.
 
 If you'd like to verify that everything is working, you can do the
 following.  Please follow the instructions carefully:
@@ -50,10 +50,10 @@ following.  Please follow the instructions carefully:
 * [Configure mobile push notifications to always be sent][mobile-notifications-always]
   (normally they're only sent if you're idle, which isn't ideal for
   this sort of testing).
-* On an Android device, download and login to the
+* On an Android device, download and log in to the
 [Zulip Android app](https://play.google.com/store/apps/details?id=com.zulipmobile).
 If you were already logged in before configuring the server, you'll
-need to logout first, since the app only registers for push
+need to log out first, since the app only registers for push
 notifications on login.
 * Hit the home button, so Zulip is running in the background, and then
 have **another user** send you a **private message** (By default,
@@ -157,10 +157,10 @@ Zulip open source project understand how many people are using Zulip,
 and help us allocate resources towards supporting self-hosted
 installations.
 
-Our use of these statistics is governed by the same ToS and
-Privacy Policy that covers the Mobile Push Notifications Service
-itself. If your organization does not want to submit these
-statistics, you can disable this feature at any time by setting
+Our use of these statistics is governed by the same Terms of Service
+and Privacy Policy that covers the Mobile Push Notifications Service
+itself. If your organization does not want to submit these statistics,
+you can disable this feature at any time by setting
 `SUBMIT_USAGE_STATISTICS=False` in `/etc/zulip/settings.py`.
 
 ## Sending push notifications directly from your server
@@ -171,7 +171,7 @@ the cost of needing to compile and distribute modified versions of the
 Zulip mobile apps.
 
 We don't recommend this path -- patching and shipping a production
-mobile app can take dozens of hours to setup even for an experienced
+mobile app can take dozens of hours to set up even for an experienced
 developer, and even more time to maintain.  And it doesn't provide
 material privacy benefits -- your organization's push notification
 data would still go through Apple/Google's servers, just not Kandra

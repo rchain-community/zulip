@@ -1,3 +1,5 @@
+"use strict";
+
 /*
 For various historical reasons there isn't one
 single chunk of code that really makes our gear
@@ -64,7 +66,7 @@ The "info:" items use our info overlay system
 in static/js/info_overlay.js.  They are dispatched
 using a click handler in static/js/click_handlers.js.
 The click handler uses "[data-overlay-trigger]" as
-the selector and then calls info_overlay.show.
+the selector and then calls hash_change.go_to_location.
 
 */
 
@@ -75,7 +77,7 @@ the selector and then calls info_overlay.show.
 const scroll_positions = new Map();
 
 exports.update_org_settings_menu_item = function () {
-    const item = $('.admin-menu-item').expectOne();
+    const item = $(".admin-menu-item").expectOne();
     if (page_params.is_admin) {
         item.find("span").text(i18n.t("Manage organization"));
     } else {
@@ -86,19 +88,19 @@ exports.update_org_settings_menu_item = function () {
 exports.initialize = function () {
     exports.update_org_settings_menu_item();
 
-    $('#gear-menu a[data-toggle="tab"]').on('show', (e) => {
+    $('#gear-menu a[data-toggle="tab"]').on("show", (e) => {
         // Save the position of our old tab away, before we switch
-        const old_tab = $(e.relatedTarget).attr('href');
+        const old_tab = $(e.relatedTarget).attr("href");
         scroll_positions.set(old_tab, message_viewport.scrollTop());
     });
-    $('#gear-menu a[data-toggle="tab"]').on('shown', (e) => {
-        const target_tab = $(e.target).attr('href');
+    $('#gear-menu a[data-toggle="tab"]').on("shown", (e) => {
+        const target_tab = $(e.target).attr("href");
         // Hide all our error messages when switching tabs
-        $('.alert').removeClass("show");
+        $(".alert").removeClass("show");
 
         // Set the URL bar title to show the sub-page you're currently on.
         let browser_url = target_tab;
-        if (browser_url === "#home") {
+        if (browser_url === "#message_feed_container") {
             browser_url = "";
         }
         hashchange.changehash(browser_url);
@@ -106,7 +108,7 @@ exports.initialize = function () {
         // After we show the new tab, restore its old scroll position
         // (we apparently have to do this after setting the hash,
         // because otherwise that action may scroll us somewhere.)
-        if (target_tab === '#home') {
+        if (target_tab === "#message_feed_container") {
             if (scroll_positions.has(target_tab)) {
                 message_viewport.scrollTop(scroll_positions.get(target_tab));
             } else {
@@ -120,9 +122,9 @@ exports.initialize = function () {
 };
 
 exports.open = function () {
-    $("#settings-dropdown").click();
+    $("#settings-dropdown").trigger("click");
     // there are invisible li tabs, which should not be clicked.
-    $("#gear-menu").find("li:not(.invisible) a").eq(0).focus();
+    $("#gear-menu").find("li:not(.invisible) a").eq(0).trigger("focus");
 };
 
 exports.is_open = function () {

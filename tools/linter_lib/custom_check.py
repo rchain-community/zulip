@@ -75,8 +75,9 @@ comma_whitespace_rule: List["Rule"] = [
      'good_lines': ['foo(1, 2, 3)', 'foo = bar  # some inline comment'],
      'bad_lines': ['foo(1,  2, 3)', 'foo(1,    2, 3)']},
 ]
-markdown_whitespace_rules = list([rule for rule in whitespace_rules if rule['pattern'] != r'\s+$']) + [
-    # Two spaces trailing a line with other content is okay--it's a markdown line break.
+markdown_whitespace_rules: List["Rule"] = [
+    *(rule for rule in whitespace_rules if rule['pattern'] != r'\s+$'),
+    # Two spaces trailing a line with other content is okay--it's a Markdown line break.
     # This rule finds one space trailing a non-space, three or more trailing spaces, and
     # spaces on an empty line.
     {'pattern': r'((?<!\s)\s$)|(\s\s\s+$)|(^\s+$)',
@@ -114,7 +115,10 @@ js_rules = RuleList(
          'exclude': {'static/js/templates.js'},
          'description': 'Do not pass a variable into i18n.t; it will not be exported to Transifex for translation.'},
         {'pattern': r'i18n\.t\(.+\).*\+',
-         'description': 'Do not concatenate i18n strings'},
+         'description': 'Do not concatenate i18n strings',
+         'exclude_line': {
+             ('static/js/narrow.js', 'i18n.t("Some common words were excluded from your search.") +'),
+         }},
         {'pattern': r'\+.*i18n\.t\(.+\)',
          'description': 'Do not concatenate i18n strings'},
         {'pattern': '[.]html[(]',
@@ -174,7 +178,6 @@ js_rules = RuleList(
          'good_lines': ['#my-style {color: blue;}'],
          'bad_lines': ['<p style="color: blue;">Foo</p>', 'style = "color: blue;"']},
         *whitespace_rules,
-        *comma_whitespace_rule,
     ],
 )
 
@@ -193,8 +196,7 @@ python_rules = RuleList(
              'zerver/tests/',
              'zerver/views/'}},
         {'pattern': 'msgid|MSGID',
-         'exclude': {'tools/check-capitalization',
-                     'tools/i18n/tagmessages'},
+         'exclude': {'tools/check-capitalization'},
          'description': 'Avoid using "msgid" as a variable name; use "message_id" instead.'},
         {'pattern': '^(?!#)@login_required',
          'description': '@login_required is unsupported; use @zulip_login_required',
@@ -244,7 +246,7 @@ python_rules = RuleList(
          'exclude': {'scripts/lib/setup_venv.py'},
          'exclude_line': {
              ('scripts/lib/zulip_tools.py', 'sudo_args = kwargs.pop(\'sudo_args\', [])'),
-             ('scripts/lib/zulip_tools.py', 'args = [\'sudo\'] + sudo_args + [\'--\'] + args'),
+             ('scripts/lib/zulip_tools.py', 'args = [\'sudo\', *sudo_args, \'--\', *args]'),
          },
          'description': 'Most scripts are intended to run on systems without sudo.',
          'good_lines': ['subprocess.check_call(["ls"])'],
@@ -388,6 +390,9 @@ python_rules = RuleList(
              'zerver/tests/test_users.py',
          },
          },
+        {'pattern': '\\.(called(_once|_with|_once_with)?|not_called|has_calls|not_called)[(]',
+         'description': 'A mock function is missing a leading "assert_"',
+         },
         *whitespace_rules,
         *comma_whitespace_rule,
     ],
@@ -416,45 +421,7 @@ bash_rules = RuleList(
 css_rules = RuleList(
     langs=['css', 'scss'],
     rules=[
-        {'pattern': r'^[^:]*:\S[^:]*;$',
-         'description': "Missing whitespace after : in CSS",
-         'good_lines': ["background-color: white;", "text-size: 16px;"],
-         'bad_lines': ["background-color:white;", "text-size:16px;"]},
-        {'pattern': '[a-z]{',
-         'description': "Missing whitespace before '{' in CSS.",
-         'good_lines': ["input {", "body {"],
-         'bad_lines': ["input{", "body{"]},
-        {'pattern': r'^(?:(?!/\*).)*https?://',
-         'description': "Zulip CSS should have no dependencies on external resources",
-         'good_lines': ['background: url(/static/images/landing-page/pycon.jpg);'],
-         'bad_lines': ['background: url(https://example.com/image.png);']},
-        {'pattern': '^[ ][ ][a-zA-Z0-9]',
-         'description': "Incorrect 2-space indentation in CSS",
-         'strip': '\n',
-         'good_lines': ["    color: white;", "color: white;"],
-         'bad_lines': ["  color: white;"]},
-        {'pattern': r'{\w',
-         'description': "Missing whitespace after '{' in CSS (should be newline).",
-         'good_lines': ["{\n"],
-         'bad_lines': ["{color: LightGoldenRodYellow;"]},
-        {'pattern': ' thin[ ;]',
-         'description': "thin CSS attribute is under-specified, please use 1px.",
-         'good_lines': ["border-width: 1px;"],
-         'bad_lines': ["border-width: thin;", "border-width: thin solid black;"]},
-        {'pattern': ' medium[ ;]',
-         'description': "medium CSS attribute is under-specified, please use pixels.",
-         'good_lines': ["border-width: 3px;"],
-         'bad_lines': ["border-width: medium;", "border: medium solid black;"]},
-        {'pattern': ' thick[ ;]',
-         'description': "thick CSS attribute is under-specified, please use pixels.",
-         'good_lines': ["border-width: 5px;"],
-         'bad_lines': ["border-width: thick;", "border: thick solid black;"]},
-        {'pattern': r'rgba?\(',
-         'description': 'Use of rgb(a) format is banned, Please use hsl(a) instead',
-         'good_lines': ['hsl(0, 0%, 0%)', 'hsla(0, 0%, 100%, 0.1)'],
-         'bad_lines': ['rgb(0, 0, 0)', 'rgba(255, 255, 255, 0.1)']},
         *whitespace_rules,
-        *comma_whitespace_rule,
     ],
 )
 
@@ -475,7 +442,9 @@ prose_style_rules: List["Rule"] = [
      'description': "Use Botserver instead of botserver or bot server."},
     *comma_whitespace_rule,
 ]
-html_rules: List["Rule"] = whitespace_rules + prose_style_rules + [
+html_rules: List["Rule"] = [
+    *whitespace_rules,
+    *prose_style_rules,
     {'pattern': 'subject|SUBJECT',
      'exclude': {'templates/zerver/email.html'},
      'exclude_pattern': 'email subject',
@@ -493,6 +462,10 @@ html_rules: List["Rule"] = whitespace_rules + prose_style_rules + [
      'description': "Likely missing quoting in HTML attribute",
      'good_lines': ['<a href="{{variable}}">'],
      'bad_lines': ['<a href={{variable}}>']},
+    {'pattern': " '}}",
+     'description': "Likely misplaced quoting in translation tags",
+     'good_lines': ["{{t 'translateable string' }}"],
+     'bad_lines': ["{{t 'translateable string '}}"]},
     {'pattern': "placeholder='[^{]",
      'description': "`placeholder` value should be translatable.",
      'good_lines': ['<input class="stream-list-filter" type="text" placeholder="{{ _(\'Search streams\') }}" />'],
@@ -607,7 +580,8 @@ html_rules: List["Rule"] = whitespace_rules + prose_style_rules + [
 
 handlebars_rules = RuleList(
     langs=['hbs'],
-    rules=html_rules + [
+    rules=[
+        *html_rules,
         {'pattern': "[<]script",
          'description': "Do not use inline <script> tags here; put JavaScript in static/js instead."},
         {'pattern': '{{ t ("|\')',
@@ -629,7 +603,8 @@ handlebars_rules = RuleList(
 
 jinja2_rules = RuleList(
     langs=['html'],
-    rules=html_rules + [
+    rules=[
+        *html_rules,
         {'pattern': r"{% endtrans %}[\.\?!]",
          'description': "Period should be part of the translatable string."},
         {'pattern': r"{{ _(.+) }}[\.\?!]",
@@ -682,9 +657,11 @@ markdown_docs_length_exclude = {
 
 markdown_rules = RuleList(
     langs=['md'],
-    rules=markdown_whitespace_rules + prose_style_rules + [
+    rules=[
+        *markdown_whitespace_rules,
+        *prose_style_rules,
         {'pattern': r'\[(?P<url>[^\]]+)\]\((?P=url)\)',
-         'description': 'Linkified markdown URLs should use cleaner <http://example.com> syntax.'},
+         'description': 'Linkified Markdown URLs should use cleaner <http://example.com> syntax.'},
         {'pattern': 'https://zulip.readthedocs.io/en/latest/[a-zA-Z0-9]',
          'exclude': {'docs/overview/contributing.md', 'docs/overview/readme.md', 'docs/README.md'},
          'include_only': {'docs/'},
@@ -714,6 +691,7 @@ help_markdown_rules = RuleList(
          },
         {'pattern': r'\b[rR]ealm[s]?\b',
          'include_only': {'templates/zerver/help/'},
+         'exclude': {'templates/zerver/help/change-organization-url.md'},
          'good_lines': ['Organization', 'deactivate_realm', 'realm_filter'],
          'bad_lines': ['Users are in a realm', 'Realm is the best model'],
          'description': "Realms are referred to as Organizations in user-facing docs."},

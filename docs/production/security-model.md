@@ -1,4 +1,4 @@
-# Security Model
+# Security model
 
 This section attempts to document the Zulip security model.  It likely
 does not cover every issue; if there are details you're curious about,
@@ -25,7 +25,7 @@ announcement).
   entire message history, and thus someone with control over the
   server has access to that data as well.
 
-## Encryption and Authentication
+## Encryption and authentication
 
 * Traffic between clients (web, desktop and mobile) and the Zulip is
   encrypted using HTTPS.  By default, all Zulip services talk to each
@@ -35,7 +35,7 @@ announcement).
 * Zulip requires CSRF tokens in all interactions with the web API to
   prevent CSRF attacks.
 
-* The preferred way to login to Zulip is using an SSO solution like
+* The preferred way to log in to Zulip is using an SSO solution like
   Google Auth, LDAP, or similar, but Zulip also supports password
   authentication.  See
   [the authentication methods documentation](../production/authentication-methods.md)
@@ -90,7 +90,7 @@ strength allowed is controlled by two settings in
 [zxcvbn-paper]: https://www.usenix.org/system/files/conference/usenixsecurity16/sec16_paper_wheeler.pdf
 [Bon12]: http://ieeexplore.ieee.org/document/6234435/
 
-## Messages and History
+## Messages and history
 
 * Zulip message content is rendered using a specialized Markdown
   parser which escapes content to protect against cross-site scripting
@@ -132,7 +132,7 @@ strength allowed is controlled by two settings in
     [Configuring message editing and deletion](https://zulip.com/help/configure-message-editing-and-deletion)
     for more details.
 
-## Users and Bots
+## Users and bots
 
 * There are several types of users in a Zulip organization: Organization
   Owners, Organization Administrators, Members (normal users), Guests,
@@ -184,7 +184,7 @@ strength allowed is controlled by two settings in
   * Incoming webhook bots can only send messages into Zulip.
   * Outgoing webhook bots and Generic bots can essentially do anything a
     non-administrator user can, with a few exceptions (e.g. a bot cannot
-    login to the web application, register for mobile push
+    log in to the web application, register for mobile push
     notifications, or create other bots).
   * API super user bots can send messages that appear to have been sent by
     another user. They also have the ability to see the names of all

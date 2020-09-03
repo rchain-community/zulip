@@ -1,3 +1,7 @@
+"use strict";
+
+const _ = require("lodash");
+
 const requires = [];
 const new_globals = new Set();
 let old_globals = {};
@@ -13,15 +17,26 @@ exports.set_global = function (name, val) {
     return val;
 };
 
-exports.zrequire = function (name, fn) {
+function require_path(name, fn) {
     if (fn === undefined) {
-        fn = '../../static/js/' + name;
+        fn = "../../static/js/" + name;
     } else if (/^generated\/|^js\/|^shared\/|^third\//.test(fn)) {
         // FIXME: Stealing part of the NPM namespace is confusing.
-        fn = '../../static/' + fn;
+        fn = "../../static/" + fn;
     }
-    delete require.cache[require.resolve(fn)];
+
+    return fn;
+}
+
+exports.zrequire = function (name, fn) {
+    fn = require_path(name, fn);
     requires.push(fn);
+    return require(fn);
+};
+
+exports.reset_module = function (name, fn) {
+    fn = require_path(name, fn);
+    delete require.cache[require.resolve(fn)];
     return require(fn);
 };
 
@@ -36,8 +51,8 @@ exports.clear_zulip_refs = function () {
         run it standalone.
     */
     _.each(require.cache, (_, fn) => {
-        if (fn.indexOf('static/') >= 0) {
-            if (fn.indexOf('static/templates') < 0) {
+        if (fn.indexOf("static/") >= 0) {
+            if (fn.indexOf("static/templates") < 0) {
                 delete require.cache[fn];
             }
         }
@@ -57,45 +72,64 @@ exports.restore = function () {
 };
 
 exports.stub_out_jquery = function () {
-    set_global('$', () => ({
-        on: function () {},
-        trigger: function () {},
-        hide: function () {},
-        removeClass: function () {},
+    set_global("$", () => ({
+        on() {},
+        trigger() {},
+        hide() {},
+        removeClass() {},
     }));
     $.fn = {};
     $.now = function () {};
+};
+
+exports.with_field = function (obj, field, val, f) {
+    const old_val = obj[field];
+    obj[field] = val;
+    f();
+    obj[field] = old_val;
 };
 
 exports.with_overrides = function (test_function) {
     // This function calls test_function() and passes in
     // a way to override the namespace temporarily.
 
-    const clobber_callbacks = [];
+    const restore_callbacks = [];
+    const unused_funcs = new Map();
 
     const override = function (name, f) {
-        const parts = name.split('.');
+        if (typeof f !== "function") {
+            throw new Error("You can only override with a function.");
+        }
+
+        unused_funcs.set(name, true);
+
+        const parts = name.split(".");
         const module = parts[0];
         const func_name = parts[1];
 
         if (!Object.prototype.hasOwnProperty.call(global, module)) {
-            set_global(module, {});
+            throw new Error("you must first use set_global/zrequire for " + module);
         }
 
-        global[module][func_name] = f;
+        const old_f = global[module][func_name];
+        global[module][func_name] = function (...args) {
+            unused_funcs.delete(name);
+            return f.apply(this, args);
+        };
 
-        clobber_callbacks.push(() => {
-            // If you get a failure from this, you probably just
-            // need to have your test do its own overrides and
-            // not cherry-pick off of the prior test's setup.
-            global[module][func_name] =
-                'ATTEMPTED TO REUSE OVERRIDDEN VALUE FROM PRIOR TEST';
+        restore_callbacks.push(() => {
+            global[module][func_name] = old_f;
         });
     };
 
     test_function(override);
 
-    for (const f of clobber_callbacks) {
-        f();
+    restore_callbacks.reverse();
+    for (const restore_callback of restore_callbacks) {
+        restore_callback();
+    }
+
+    for (const unused_name of unused_funcs.keys()) {
+        throw new Error(unused_name + " never got invoked!");
     }
 };

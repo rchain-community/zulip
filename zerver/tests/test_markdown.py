@@ -5,7 +5,7 @@ from textwrap import dedent
 from typing import Any, Dict, List, Optional, Set, Tuple
 from unittest import mock
 
-import ujson
+import orjson
 from django.conf import settings
 from django.test import override_settings
 
@@ -208,7 +208,6 @@ class MarkdownMiscTest(ZulipTestCase):
                 password='whatever',
                 realm=realm,
                 full_name=full_name,
-                short_name='whatever',
             )
 
         fred1 = make_user('fred1@example.com', 'Fred Flintstone')
@@ -372,8 +371,8 @@ class MarkdownTest(ZulipTestCase):
 
     def load_markdown_tests(self) -> Tuple[Dict[str, Any], List[List[str]]]:
         test_fixtures = {}
-        with open(os.path.join(os.path.dirname(__file__), 'fixtures/markdown_test_cases.json')) as f:
-            data = ujson.load(f)
+        with open(os.path.join(os.path.dirname(__file__), 'fixtures/markdown_test_cases.json'), "rb") as f:
+            data = orjson.loads(f.read())
         for test in data['regular_tests']:
             test_fixtures[test['name']] = test
 
@@ -422,7 +421,6 @@ class MarkdownTest(ZulipTestCase):
                 href = 'http://' + url
             return payload % (f"<a href=\"{href}\">{url}</a>",)
 
-        print("Running Markdown Linkify tests")
         with mock.patch('zerver.lib.url_preview.preview.link_embed_data_from_cache', return_value=None):
             for inline_url, reference, url in linkify_tests:
                 try:
@@ -722,6 +720,24 @@ class MarkdownTest(ZulipTestCase):
 
         self.assertEqual(converted, '<p>Test: <a href="https://developer.github.com/assets/images/hero-circuit-bg.png">https://developer.github.com/assets/images/hero-circuit-bg.png</a></p>\n<div class="message_inline_image"><a href="https://developer.github.com/assets/images/hero-circuit-bg.png"><img data-src-fullsize="/thumbnail?url=https%3A%2F%2Fdeveloper.github.com%2Fassets%2Fimages%2Fhero-circuit-bg.png&amp;size=full" src="/thumbnail?url=https%3A%2F%2Fdeveloper.github.com%2Fassets%2Fimages%2Fhero-circuit-bg.png&amp;size=thumbnail"></a></div>')
 
+    def test_inline_youtube_preview(self) -> None:
+        # Test youtube urls in spoilers
+        msg = """\n```spoiler Check out this Pycon Video\nhttps://www.youtube.com/watch?v=0c46YHS3RY8\n```"""
+        converted = markdown_convert_wrapper(msg)
+
+        self.assertEqual(converted, '<div class="spoiler-block"><div class="spoiler-header">\n\n<p>Check out this Pycon Video</p>\n</div><div class="spoiler-content" aria-hidden="true">\n\n<p><a href="https://www.youtube.com/watch?v=0c46YHS3RY8">https://www.youtube.com/watch?v=0c46YHS3RY8</a></p>\n<div class="youtube-video message_inline_image"><a data-id="0c46YHS3RY8" href="https://www.youtube.com/watch?v=0c46YHS3RY8"><img src="https://i.ytimg.com/vi/0c46YHS3RY8/default.jpg"></a></div></div></div>')
+
+        # Test youtube urls in normal messages.
+        msg = '[Youtube link](https://www.youtube.com/watch?v=0c46YHS3RY8)'
+        converted = markdown_convert_wrapper(msg)
+
+        self.assertEqual(converted, '<p><a href="https://www.youtube.com/watch?v=0c46YHS3RY8">Youtube link</a></p>\n<div class="youtube-video message_inline_image"><a data-id="0c46YHS3RY8" href="https://www.youtube.com/watch?v=0c46YHS3RY8"><img src="https://i.ytimg.com/vi/0c46YHS3RY8/default.jpg"></a></div>')
+
+        msg = 'https://www.youtube.com/watch?v=0c46YHS3RY8\n\nSample text\n\nhttps://www.youtube.com/watch?v=lXFO2ULktEI'
+        converted = markdown_convert_wrapper(msg)
+
+        self.assertEqual(converted, '<p><a href="https://www.youtube.com/watch?v=0c46YHS3RY8">https://www.youtube.com/watch?v=0c46YHS3RY8</a></p>\n<div class="youtube-video message_inline_image"><a data-id="0c46YHS3RY8" href="https://www.youtube.com/watch?v=0c46YHS3RY8"><img src="https://i.ytimg.com/vi/0c46YHS3RY8/default.jpg"></a></div><p>Sample text</p>\n<p><a href="https://www.youtube.com/watch?v=lXFO2ULktEI">https://www.youtube.com/watch?v=lXFO2ULktEI</a></p>\n<div class="youtube-video message_inline_image"><a data-id="lXFO2ULktEI" href="https://www.youtube.com/watch?v=lXFO2ULktEI"><img src="https://i.ytimg.com/vi/lXFO2ULktEI/default.jpg"></a></div>')
+
     def test_twitter_id_extraction(self) -> None:
         self.assertEqual(get_tweet_id('http://twitter.com/#!/VizzQuotes/status/409030735191097344'), '409030735191097344')
         self.assertEqual(get_tweet_id('http://twitter.com/VizzQuotes/status/409030735191097344'), '409030735191097344')
@@ -790,21 +806,21 @@ class MarkdownTest(ZulipTestCase):
         converted = markdown_convert_wrapper(msg)
         self.assertEqual(converted, '<p>{}</p>'.format(make_link('http://www.twitter.com/wdaher/status/999999999999999999')))
 
-        msg = 'Tweet: http://www.twitter.com/wdaher/status/287977969287315456'
+        msg = 'http://www.twitter.com/wdaher/status/287977969287315456'
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Tweet: {}</p>\n{}'.format(
+        self.assertEqual(converted, '<p>{}</p>\n{}'.format(
             make_link('http://www.twitter.com/wdaher/status/287977969287315456'),
             make_inline_twitter_preview('http://www.twitter.com/wdaher/status/287977969287315456', normal_tweet_html)))
 
-        msg = 'Tweet: https://www.twitter.com/wdaher/status/287977969287315456'
+        msg = 'https://www.twitter.com/wdaher/status/287977969287315456'
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Tweet: {}</p>\n{}'.format(
+        self.assertEqual(converted, '<p>{}</p>\n{}'.format(
             make_link('https://www.twitter.com/wdaher/status/287977969287315456'),
             make_inline_twitter_preview('https://www.twitter.com/wdaher/status/287977969287315456', normal_tweet_html)))
 
-        msg = 'Tweet: http://twitter.com/wdaher/status/287977969287315456'
+        msg = 'http://twitter.com/wdaher/status/287977969287315456'
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Tweet: {}</p>\n{}'.format(
+        self.assertEqual(converted, '<p>{}</p>\n{}'.format(
             make_link('http://twitter.com/wdaher/status/287977969287315456'),
             make_inline_twitter_preview('http://twitter.com/wdaher/status/287977969287315456', normal_tweet_html)))
 
@@ -839,27 +855,28 @@ class MarkdownTest(ZulipTestCase):
 
         # Test smart in-place inlining behavior:
         msg = ('Paragraph 1: http://twitter.com/wdaher/status/287977969287315456\n\n'
-               'Paragraph 2. Below paragraph will be removed.\n\n'
-               'http://twitter.com/wdaher/status/287977969287315457')
+               'Paragraph 2\n\n'
+               'Paragraph 3: http://twitter.com/wdaher/status/287977969287315457')
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Paragraph 1: {}</p>\n{}<p>Paragraph 2. Below paragraph will be removed.</p>\n{}'.format(
+        self.assertEqual(converted, '<p>Paragraph 1: {}</p>\n{}<p>Paragraph 2</p>\n<p>Paragraph 3: {}</p>\n{}'.format(
             make_link('http://twitter.com/wdaher/status/287977969287315456'),
             make_inline_twitter_preview('http://twitter.com/wdaher/status/287977969287315456', normal_tweet_html),
+            make_link('http://twitter.com/wdaher/status/287977969287315457'),
             make_inline_twitter_preview('http://twitter.com/wdaher/status/287977969287315457', normal_tweet_html)))
 
         # Tweet has a mention in a URL, only the URL is linked
-        msg = 'Tweet: http://twitter.com/wdaher/status/287977969287315458'
+        msg = 'http://twitter.com/wdaher/status/287977969287315458'
 
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Tweet: {}</p>\n{}'.format(
+        self.assertEqual(converted, '<p>{}</p>\n{}'.format(
             make_link('http://twitter.com/wdaher/status/287977969287315458'),
             make_inline_twitter_preview('http://twitter.com/wdaher/status/287977969287315458', mention_in_link_tweet_html)))
 
         # Tweet with an image
-        msg = 'Tweet: http://twitter.com/wdaher/status/287977969287315459'
+        msg = 'http://twitter.com/wdaher/status/287977969287315459'
 
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Tweet: {}</p>\n{}'.format(
+        self.assertEqual(converted, '<p>{}</p>\n{}'.format(
             make_link('http://twitter.com/wdaher/status/287977969287315459'),
             make_inline_twitter_preview('http://twitter.com/wdaher/status/287977969287315459',
                                         media_tweet_html,
@@ -869,9 +886,9 @@ class MarkdownTest(ZulipTestCase):
                                          '</a>'
                                          '</div>'))))
 
-        msg = 'Tweet: http://twitter.com/wdaher/status/287977969287315460'
+        msg = 'http://twitter.com/wdaher/status/287977969287315460'
         converted = markdown_convert_wrapper(msg)
-        self.assertEqual(converted, '<p>Tweet: {}</p>\n{}'.format(
+        self.assertEqual(converted, '<p>{}</p>\n{}'.format(
             make_link('http://twitter.com/wdaher/status/287977969287315460'),
             make_inline_twitter_preview('http://twitter.com/wdaher/status/287977969287315460', emoji_in_tweet_html)))
 
@@ -905,7 +922,7 @@ class MarkdownTest(ZulipTestCase):
 
         realm = get_realm('zulip')
 
-        # Needs to mock an actual message because that's how markdown obtains the realm
+        # Needs to mock an actual message because that's how Markdown obtains the realm
         msg = Message(sender=self.example_user('hamlet'))
         converted = markdown_convert(":green_tick:", message_realm=realm, message=msg)
         realm_emoji = RealmEmoji.objects.filter(realm=realm,
@@ -1029,7 +1046,7 @@ class MarkdownTest(ZulipTestCase):
         assert_conversion('Hello #123World', False)
         assert_conversion('Hello#123 World', False)
         assert_conversion('Hello#123World', False)
-        # Ideally, these should be converted, but markdown doesn't
+        # Ideally, these should be converted, but Markdown doesn't
         # handle word boundary detection in languages that don't use
         # whitespace for that correctly yet.
         assert_conversion('チケットは#123です', False)
@@ -1212,7 +1229,7 @@ class MarkdownTest(ZulipTestCase):
 
         content = """Hello, everyone. Prod deployment has been completed
         And this is a new line
-        to test out how markdown convert this into something line ending splitted array
+        to test out how Markdown convert this into something line ending split array
         and this is a new line
         last"""
         render(msg, content)
@@ -1576,7 +1593,6 @@ class MarkdownTest(ZulipTestCase):
                 password='whatever',
                 realm=realm,
                 full_name=full_name,
-                short_name='whatever',
             )
 
         sender_user_profile = self.example_user('othello')
@@ -1622,11 +1638,12 @@ class MarkdownTest(ZulipTestCase):
             '<RealmFilter(zulip): #(?P<id>[0-9]{2,8})'
             ' https://trac.example.com/ticket/%(id)s>')
         # Create a user that potentially interferes with the pattern.
-        test_user = create_user(email='atomic@example.com',
-                                password='whatever',
-                                realm=realm,
-                                full_name='Atomic #123',
-                                short_name='whatever')
+        test_user = create_user(
+            email='atomic@example.com',
+            password='whatever',
+            realm=realm,
+            full_name='Atomic #123',
+        )
         content = "@**Atomic #123**"
         self.assertEqual(render_markdown(msg, content),
                          '<p><span class="user-mention" '
@@ -1952,7 +1969,7 @@ class MarkdownTest(ZulipTestCase):
         )
 
     def test_mit_rendering(self) -> None:
-        """Test the markdown configs for the MIT Zephyr mirroring system;
+        """Test the Markdown configs for the MIT Zephyr mirroring system;
         verifies almost all inline patterns are disabled, but
         inline_interesting_links is still enabled"""
         msg = "**test**"
@@ -2139,7 +2156,7 @@ class MarkdownErrorTests(ZulipTestCase):
                 self.send_stream_message(self.example_user("othello"), "Denmark", message)
 
     def test_ultra_long_rendering(self) -> None:
-        """A rendered message with an ultra-long lenght (> 10 * MAX_MESSAGE_LENGTH)
+        """A rendered message with an ultra-long length (> 10 * MAX_MESSAGE_LENGTH)
         throws an exception"""
         msg = 'mock rendered message\n' * MAX_MESSAGE_LENGTH
 

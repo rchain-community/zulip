@@ -1,4 +1,4 @@
-import ujson
+import orjson
 
 from zerver.lib.actions import do_create_user, do_mark_hotspot_as_read
 from zerver.lib.hotspots import ALL_HOTSPOTS, get_next_hotspots
@@ -12,7 +12,11 @@ class TestGetNextHotspots(ZulipTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = do_create_user(
-            'user@zulip.com', 'password', get_realm('zulip'), 'user', 'user')
+            'user@zulip.com',
+            'password',
+            get_realm('zulip'),
+            'user',
+        )
 
     def test_first_hotspot(self) -> None:
         hotspots = get_next_hotspots(self.user)
@@ -48,13 +52,13 @@ class TestHotspots(ZulipTestCase):
         user = self.example_user('hamlet')
         self.login_user(user)
         result = self.client_post('/json/users/me/hotspots',
-                                  {'hotspot': ujson.dumps('intro_reply')})
+                                  {'hotspot': orjson.dumps('intro_reply').decode()})
         self.assert_json_success(result)
         self.assertEqual(list(UserHotspot.objects.filter(user=user)
                               .values_list('hotspot', flat=True)), ['intro_reply'])
 
         result = self.client_post('/json/users/me/hotspots',
-                                  {'hotspot': ujson.dumps('invalid')})
+                                  {'hotspot': orjson.dumps('invalid').decode()})
         self.assert_json_error(result, "Unknown hotspot: invalid")
         self.assertEqual(list(UserHotspot.objects.filter(user=user)
                               .values_list('hotspot', flat=True)), ['intro_reply'])

@@ -1,6 +1,6 @@
 from typing import Dict, List
 
-import ujson
+import orjson
 from django.db import migrations
 from django.db.backends.postgresql.schema import DatabaseSchemaEditor
 from django.db.migrations.state import StateApps
@@ -11,7 +11,7 @@ def move_to_seperate_table(apps: StateApps, schema_editor: DatabaseSchemaEditor)
     AlertWord = apps.get_model('zerver', 'AlertWord')
 
     for user_profile in UserProfile.objects.all():
-        list_of_words = ujson.loads(user_profile.alert_words)
+        list_of_words = orjson.loads(user_profile.alert_words)
 
         # Remove duplicates with our case-insensitive model.
         word_dict: Dict[str, str] = {}
@@ -28,7 +28,7 @@ def move_back_to_user_profile(apps: StateApps, schema_editor: DatabaseSchemaEdit
     UserProfile = apps.get_model('zerver', 'UserProfile')
 
     user_ids_and_words = AlertWord.objects.all().values("user_profile_id", "word")
-    user_ids_with_words: Dict[int, List[str]] = dict()
+    user_ids_with_words: Dict[int, List[str]] = {}
 
     for id_and_word in user_ids_and_words:
         user_ids_with_words.setdefault(id_and_word["user_profile_id"], [])
@@ -36,7 +36,7 @@ def move_back_to_user_profile(apps: StateApps, schema_editor: DatabaseSchemaEdit
 
     for (user_id, words) in user_ids_with_words.items():
         user_profile = UserProfile.objects.get(id=user_id)
-        user_profile.alert_words = ujson.dumps(words)
+        user_profile.alert_words = orjson.dumps(words).decode()
         user_profile.save(update_fields=['alert_words'])
 
 class Migration(migrations.Migration):

@@ -131,7 +131,7 @@ it as follows:
 
 6. [Restart the Zulip server](../production/settings.md) to ensure
 your settings changes take effect.  The Zulip login page should now
-have a button for SAML authentication that you can use to login or
+have a button for SAML authentication that you can use to log in or
 create an account (including when creating a new organization).
 
 7. If the configuration was successful, the server's metadata can be
@@ -369,7 +369,7 @@ the Zulip server).  Zulip will then treat users that are disabled via
 the "Disable Account" feature in Active Directory as deactivated in
 Zulip.
 
-Users disabled in active directory will be immediately unable to login
+Users disabled in active directory will be immediately unable to log in
 to Zulip, since Zulip queries the LDAP/Active Directory server on
 every login attempt.  The user will be fully deactivated the next time
 your `manage.py sync_ldap_user_data` cron job runs (at which point
@@ -548,11 +548,12 @@ This summary should help with understanding what's going on as you try
 to debug.
 
 * Since you've configured `/etc/zulip/settings.py` to only define the
-  `zproject.backends.ZulipRemoteUserBackend`, `zproject/settings.py`
-  configures `/accounts/login/sso/` as `HOME_NOT_LOGGED_IN`.  This
-  makes `https://zulip.example.com/` (a.k.a. the homepage for the main
-  Zulip Django app running behind nginx) redirect to
-  `/accounts/login/sso/` for a user that isn't logged in.
+  `zproject.backends.ZulipRemoteUserBackend`,
+  `zproject/computed_settings.py` configures `/accounts/login/sso/` as
+  `HOME_NOT_LOGGED_IN`.  This makes `https://zulip.example.com/`
+  (a.k.a. the homepage for the main Zulip Django app running behind
+  nginx) redirect to `/accounts/login/sso/` for a user that isn't
+  logged in.
 
 * nginx proxies requests to `/accounts/login/sso/` to an Apache
   instance listening on `localhost:8888`, via the config in
@@ -588,12 +589,12 @@ domain for your server).
 1. Create a [Sign in with Apple private key][apple-create-private-key].
 
 1. Store the resulting private key at
-   `/etc/zulip/apple/zulip-private-key.key`.  Be sure to set
+   `/etc/zulip/apple-auth-key.p8`.  Be sure to set
    permissions correctly:
 
    ```
-   chown -R zulip:zulip /etc/zulip/apple/
-   chmod 640 /etc/zulip/apple/zulip-private-key.key
+   chown zulip:zulip /etc/zulip/apple-auth-key.p8
+   chmod 640 /etc/zulip/apple-auth-key.p8
    ```
 
 1. Configure Apple authentication in `/etc/zulip/settings.py`:
@@ -601,7 +602,7 @@ domain for your server).
      string like "A1B2C3D4E5".
    * `SOCIAL_AUTH_APPLE_SERVICES_ID`: The Services ID you created in
      step 1, which might look like "com.example.services".
-   * `SOCIAL_AUTH_APPLE_BUNDLE_ID`: The Bundle ID, or App ID, of your
+   * `SOCIAL_AUTH_APPLE_APP_ID`: The App ID, or Bundle ID, of your
      app that you used in step 1 to configure your Services ID.
      This might look like "com.example.app".
    * `SOCIAL_AUTH_APPLE_KEY`: Despite the name this is not a key, but

@@ -1,9 +1,16 @@
+"use strict";
+
+const Handlebars = require("handlebars/runtime");
+const XDate = require("xdate");
+
+const render_draft_table_body = require("../templates/draft_table_body.hbs");
+
+const people = require("./people");
 const util = require("./util");
-const render_draft_table_body = require('../templates/draft_table_body.hbs');
 
 function set_count(count) {
     const draft_count = count.toString();
-    const text = i18n.t('Drafts (__draft_count__)', {draft_count: draft_count});
+    const text = i18n.t("Drafts (__draft_count__)", {draft_count});
     $(".compose_drafts_button").text(text);
 }
 
@@ -65,7 +72,7 @@ const draft_model = (function () {
     };
 
     return exports;
-}());
+})();
 
 exports.draft_model = draft_model;
 
@@ -101,12 +108,11 @@ exports.restore_message = function (draft) {
 
     if (draft.type === "stream") {
         compose_args = {
-            type: 'stream',
+            type: "stream",
             stream: draft.stream,
             topic: util.get_draft_topic(draft),
             content: draft.content,
         };
-
     } else {
         compose_args = {
             type: draft.type,
@@ -181,9 +187,7 @@ exports.restore_draft = function (draft_id) {
     } else {
         if (compose_args.private_message_recipient !== "") {
             narrow.activate(
-                [
-                    {operator: "pm-with", operand: compose_args.private_message_recipient},
-                ],
+                [{operator: "pm-with", operand: compose_args.private_message_recipient}],
                 {trigger: "restore draft"},
             );
         }
@@ -204,7 +208,7 @@ exports.restore_draft = function (draft_id) {
 const DRAFT_LIFETIME = 30;
 
 exports.remove_old_drafts = function () {
-    const old_date  = new Date().setDate(new Date().getDate() - DRAFT_LIFETIME);
+    const old_date = new Date().setDate(new Date().getDate() - DRAFT_LIFETIME);
     const drafts = draft_model.get();
     for (const [id, draft] of Object.entries(drafts)) {
         if (draft.updatedAt < old_date) {
@@ -229,37 +233,39 @@ exports.format_draft = function (draft) {
         let draft_topic = util.get_draft_topic(draft);
         const draft_stream_color = stream_data.get_color(draft.stream);
 
-        if (draft_topic === '') {
+        if (draft_topic === "") {
             draft_topic = compose.empty_topic_placeholder();
         }
 
         formatted = {
             draft_id: draft.id,
             is_stream: true,
-            stream: stream,
+            stream,
             stream_color: draft_stream_color,
             dark_background: stream_color.get_color_class(draft_stream_color),
             topic: draft_topic,
             raw_content: draft.content,
-            time_stamp: time_stamp,
+            time_stamp,
         };
     } else {
         const emails = util.extract_pm_recipients(draft.private_message_recipient);
-        const recipients = emails.map((email) => {
-            email = email.trim();
-            const person = people.get_by_email(email);
-            if (person !== undefined) {
-                return person.full_name;
-            }
-            return email;
-        }).join(', ');
+        const recipients = emails
+            .map((email) => {
+                email = email.trim();
+                const person = people.get_by_email(email);
+                if (person !== undefined) {
+                    return person.full_name;
+                }
+                return email;
+            })
+            .join(", ");
 
         formatted = {
             draft_id: draft.id,
             is_stream: false,
-            recipients: recipients,
+            recipients,
             raw_content: draft.content,
-            time_stamp: time_stamp,
+            time_stamp,
         };
     }
 
@@ -267,15 +273,19 @@ exports.format_draft = function (draft) {
         markdown.apply_markdown(formatted);
     } catch (error) {
         // In the unlikely event that there is syntax in the
-        // draft content which our markdown processor is
+        // draft content which our Markdown processor is
         // unable to process, we delete the draft, so that the
         // drafts overlay can be opened without any errors.
         // We also report the exception to the server so that
         // the bug can be fixed.
         draft_model.deleteDraft(id);
-        blueslip.error("Error in rendering draft.", {
-            draft_content: draft.content,
-        }, error.stack);
+        blueslip.error(
+            "Error in rendering draft.",
+            {
+                draft_content: draft.content,
+            },
+            error.stack,
+        );
         return;
     }
 
@@ -306,7 +316,7 @@ function remove_draft(draft_row) {
     draft_row.remove();
 
     if ($("#drafts_table .draft-row").length === 0) {
-        $('#drafts_table .no-drafts').show();
+        $("#drafts_table .no-drafts").show();
     }
 }
 
@@ -328,14 +338,14 @@ exports.launch = function () {
     }
 
     function render_widgets(drafts) {
-        $('#drafts_table').empty();
+        $("#drafts_table").empty();
         const rendered = render_draft_table_body({
-            drafts: drafts,
+            drafts,
             draft_lifetime: DRAFT_LIFETIME,
         });
-        $('#drafts_table').append(rendered);
+        $("#drafts_table").append(rendered);
         if ($("#drafts_table .draft-row").length > 0) {
-            $('#drafts_table .no-drafts').hide();
+            $("#drafts_table .no-drafts").hide();
         }
     }
 
@@ -365,7 +375,7 @@ exports.launch = function () {
 
     // We need to force a style calculation on the newly created
     // element in order for the CSS transition to take effect.
-    $('#draft_overlay').css('opacity');
+    $("#draft_overlay").css("opacity");
 
     exports.open_overlay();
     exports.set_initial_element(drafts);
@@ -373,27 +383,33 @@ exports.launch = function () {
 };
 
 function activate_element(elem) {
-    $('.draft-info-box').removeClass('active');
-    $(elem).expectOne().addClass('active');
+    $(".draft-info-box").removeClass("active");
+    $(elem).expectOne().addClass("active");
     elem.focus();
 }
 
 function drafts_initialize_focus(event_name) {
     // If a draft is not focused in draft modal, then focus the last draft
     // if up_arrow is clicked or the first draft if down_arrow is clicked.
-    if (event_name !== "up_arrow" && event_name !== "down_arrow" || $(".draft-info-box:focus")[0]) {
+    if (
+        (event_name !== "up_arrow" && event_name !== "down_arrow") ||
+        $(".draft-info-box:focus")[0]
+    ) {
         return;
     }
 
     const draft_arrow = draft_model.get();
     const draft_id_arrow = Object.getOwnPropertyNames(draft_arrow);
-    if (draft_id_arrow.length === 0) { // empty drafts modal
+    if (draft_id_arrow.length === 0) {
+        // empty drafts modal
         return;
     }
 
     let draft_element;
     if (event_name === "up_arrow") {
-        draft_element = document.querySelectorAll('[data-draft-id="' + draft_id_arrow[draft_id_arrow.length - 1] + '"]');
+        draft_element = document.querySelectorAll(
+            '[data-draft-id="' + draft_id_arrow[draft_id_arrow.length - 1] + '"]',
+        );
     } else if (event_name === "down_arrow") {
         draft_element = document.querySelectorAll('[data-draft-id="' + draft_id_arrow[0] + '"]');
     }
@@ -418,7 +434,8 @@ function drafts_scroll(next_focus_draft_row) {
 
     // If focused draft is the last draft, scroll to the bottom.
     if ($(".draft-info-box").last()[0].parentElement === next_focus_draft_row[0]) {
-        $(".drafts-list")[0].scrollTop = $('.drafts-list')[0].scrollHeight - $('.drafts-list').height();
+        $(".drafts-list")[0].scrollTop =
+            $(".drafts-list")[0].scrollHeight - $(".drafts-list").height();
     }
 
     // If focused draft is cut off from the top, scroll up halfway in draft modal.
@@ -455,7 +472,7 @@ exports.drafts_handle_events = function (e, event_key) {
     }
 
     const focused_draft_id = row_with_focus().data("draft-id");
-    // Allows user to delete drafts with backspace
+    // Allows user to delete drafts with Backspace
     if (event_key === "backspace" || event_key === "delete") {
         if (focused_draft_id !== undefined) {
             const draft_row = row_with_focus();
@@ -471,7 +488,9 @@ exports.drafts_handle_events = function (e, event_key) {
                 draft_to_be_focused_id = prev_draft_row.data("draft-id");
             }
 
-            const new_focus_element = document.querySelectorAll('[data-draft-id="' + draft_to_be_focused_id + '"]');
+            const new_focus_element = document.querySelectorAll(
+                '[data-draft-id="' + draft_to_be_focused_id + '"]',
+            );
             if (new_focus_element[0] !== undefined) {
                 activate_element(new_focus_element[0].children[0]);
             }
@@ -480,7 +499,7 @@ exports.drafts_handle_events = function (e, event_key) {
         }
     }
 
-    // This handles when pressing enter while looking at drafts.
+    // This handles when pressing Enter while looking at drafts.
     // It restores draft that is focused.
     if (event_key === "enter") {
         if (document.activeElement.parentElement.hasAttribute("data-draft-id")) {
@@ -494,9 +513,9 @@ exports.drafts_handle_events = function (e, event_key) {
 
 exports.open_overlay = function () {
     overlays.open_overlay({
-        name: 'drafts',
-        overlay: $('#draft_overlay'),
-        on_close: function () {
+        name: "drafts",
+        overlay: $("#draft_overlay"),
+        on_close() {
             hashchange.exit_overlay();
         },
     });
@@ -520,9 +539,9 @@ exports.initialize = function () {
 
     set_count(Object.keys(draft_model.get()).length);
 
-    $("#compose-textarea").focusout(exports.update_draft);
+    $("#compose-textarea").on("focusout", exports.update_draft);
 
-    $('body').on('focus', '.draft-info-box', (e) => {
+    $("body").on("focus", ".draft-info-box", (e) => {
         activate_element(e.target);
     });
 };

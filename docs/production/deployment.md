@@ -91,7 +91,7 @@ order to avoid it throwing an error when Zulip attempts to configure
 the database's dictionary files for full-text search; the details are
 below.
 
-#### Step 1: Setup Zulip
+#### Step 1: Set up Zulip
 
 Follow the [standard instructions](../production/install.md), with one
 change.  When running the installer, pass the `--no-init-db`
@@ -122,7 +122,7 @@ run the commands in `scripts/setup/create-db.sql` to:
 
 * Create a database called `zulip`.
 * Create a user called `zulip`.
-* Now login with the `zulip` user to create a schema called
+* Now log in with the `zulip` user to create a schema called
   `zulip` in the `zulip` database. You might have to grant `create`
   privileges first for the `zulip` user to do this.
 
@@ -224,7 +224,7 @@ instead of HTTPS.
 
 ### nginx configuration
 
-For `nginx` configuration, there's two things you need to setup:
+For `nginx` configuration, there's two things you need to set up:
 * The root `nginx.conf` file.  We recommend using
   `/etc/nginx/nginx.conf` from your Zulip server for our recommended
   settings.  E.g. if you don't set `client_max_body_size`, it won't be
@@ -282,7 +282,7 @@ make the following changes in two configuration files.
     ```
 
 
-3. Restart your Zulip server with `/home/zulip/deployments/current/restart-server`.
+3. Restart your Zulip server with `/home/zulip/deployments/current/scripts/restart-server`.
 
 4. Create an Apache2 virtual host configuration file, similar to the
    following.  Place it the appropriate path for your Apache2

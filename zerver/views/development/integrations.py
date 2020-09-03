@@ -1,7 +1,7 @@
 import os
 from typing import Any, Dict, List, Optional
 
-import ujson
+import orjson
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.test import Client
@@ -65,8 +65,8 @@ def get_fixtures(request: HttpResponse,
         with open(fixture_path) as f:
             body = f.read()
         try:
-            body = ujson.loads(body)
-        except ValueError:
+            body = orjson.loads(body)
+        except orjson.JSONDecodeError:
             pass  # The file extension will be used to determine the type.
 
         headers_raw = get_fixture_http_headers(valid_integration_name,
@@ -90,15 +90,15 @@ def check_send_webhook_fixture_message(request: HttpRequest,
                                        is_json: bool=REQ(validator=check_bool),
                                        custom_headers: str=REQ()) -> HttpResponse:
     try:
-        custom_headers_dict = ujson.loads(custom_headers)
-    except ValueError as ve:
+        custom_headers_dict = orjson.loads(custom_headers)
+    except orjson.JSONDecodeError as ve:
         return json_error(f"Custom HTTP headers are not in a valid JSON format. {ve}")  # nolint
 
     response = send_webhook_fixture_message(url, body, is_json,
                                             custom_headers_dict)
     if response.status_code == 200:
         responses = [{"status_code": response.status_code,
-                      "message": response.content}]
+                      "message": response.content.decode()}]
         return json_success({"responses": responses})
     else:
         return response
@@ -133,5 +133,5 @@ def send_all_webhook_fixture_messages(request: HttpRequest,
         response = send_webhook_fixture_message(url, content, is_json, headers)
         responses.append({"status_code": response.status_code,
                           "fixture_name": fixture,
-                          "message": response.content})
+                          "message": response.content.decode()})
     return json_success({"responses": responses})

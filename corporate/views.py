@@ -37,7 +37,11 @@ from corporate.models import (
     get_current_plan_by_realm,
     get_customer_by_realm,
 )
-from zerver.decorator import require_billing_access, zulip_login_required
+from zerver.decorator import (
+    require_billing_access,
+    require_organization_member,
+    zulip_login_required,
+)
 from zerver.lib.request import REQ, has_request_variables
 from zerver.lib.response import json_error, json_success
 from zerver.lib.send_email import FromAddress, send_email
@@ -100,6 +104,7 @@ def payment_method_string(stripe_customer: stripe.Customer) -> str:
         email=settings.ZULIP_ADMINISTRATOR,
     )  # nocoverage
 
+@require_organization_member
 @has_request_variables
 def upgrade(request: HttpRequest, user: UserProfile,
             billing_modality: str=REQ(validator=check_string),
@@ -135,7 +140,7 @@ def upgrade(request: HttpRequest, user: UserProfile,
             )
         return json_error(e.message, data={'error_description': e.description})
     except Exception:
-        billing_logger.exception("Uncaught exception in billing:")
+        billing_logger.exception("Uncaught exception in billing:", stack_info=True)
         error_message = BillingError.CONTACT_SUPPORT
         error_description = "uncaught exception during upgrade"
         return json_error(error_message, data={'error_description': error_description})
@@ -144,16 +149,20 @@ def upgrade(request: HttpRequest, user: UserProfile,
 
 @zulip_login_required
 def initial_upgrade(request: HttpRequest) -> HttpResponse:
-    if not settings.BILLING_ENABLED:
-        return render(request, "404.html")
-
     user = request.user
+
+    if not settings.BILLING_ENABLED or user.is_guest:
+        return render(request, "404.html", status=404)
+
+    billing_page_url = reverse('corporate.views.billing_home')
 
     customer = get_customer_by_realm(user.realm)
     if customer is not None and (get_current_plan_by_customer(customer) is not None or customer.sponsorship_pending):
-        billing_page_url = reverse('corporate.views.billing_home')
         if request.GET.get("onboarding") is not None:
             billing_page_url = f"{billing_page_url}?onboarding=true"
+        return HttpResponseRedirect(billing_page_url)
+
+    if user.realm.plan_type == user.realm.STANDARD_FREE:
         return HttpResponseRedirect(billing_page_url)
 
     percent_off = Decimal(0)
@@ -184,6 +193,7 @@ def initial_upgrade(request: HttpRequest) -> HttpResponse:
     response = render(request, 'corporate/upgrade.html', context=context)
     return response
 
+@require_organization_member
 @has_request_variables
 def sponsorship(request: HttpRequest, user: UserProfile,
                 organization_type: str=REQ("organization-type", validator=check_string),
@@ -192,14 +202,7 @@ def sponsorship(request: HttpRequest, user: UserProfile,
     realm = user.realm
 
     requested_by = user.full_name
-
-    role_id_to_name_map = {
-        UserProfile.ROLE_REALM_OWNER: "Realm owner",
-        UserProfile.ROLE_REALM_ADMINISTRATOR: "Realm adminstrator",
-        UserProfile.ROLE_MEMBER: "Member",
-        UserProfile.ROLE_GUEST: "Guest"
-    }
-    user_role = role_id_to_name_map[user.role]
+    user_role = user.get_role_name()
 
     support_realm_uri = get_realm(settings.STAFF_SUBDOMAIN).uri
     support_url = urljoin(support_realm_uri, urlunsplit(("", "", reverse('analytics.views.support'),
@@ -233,29 +236,27 @@ def sponsorship(request: HttpRequest, user: UserProfile,
 def billing_home(request: HttpRequest) -> HttpResponse:
     user = request.user
     customer = get_customer_by_realm(user.realm)
-    context: Dict[str, Any] = {}
+    context: Dict[str, Any] = {
+        "admin_access": user.has_billing_access,
+        'has_active_plan': False,
+    }
+
+    if user.realm.plan_type == user.realm.STANDARD_FREE:
+        context["is_sponsored"] = True
+        return render(request, 'corporate/billing.html', context=context)
 
     if customer is None:
         return HttpResponseRedirect(reverse('corporate.views.initial_upgrade'))
 
     if customer.sponsorship_pending:
-        if user.has_billing_access:
-            context = {"admin_access": True, "sponsorship_pending": True}
-        else:
-            context = {"admin_access": False}
+        context["sponsorship_pending"] = True
         return render(request, 'corporate/billing.html', context=context)
 
     if not CustomerPlan.objects.filter(customer=customer).exists():
         return HttpResponseRedirect(reverse('corporate.views.initial_upgrade'))
 
     if not user.has_billing_access:
-        context = {'admin_access': False}
         return render(request, 'corporate/billing.html', context=context)
-
-    context = {
-        'admin_access': True,
-        'has_active_plan': False,
-    }
 
     plan = get_current_plan_by_customer(customer)
     if plan is not None:
@@ -265,10 +266,6 @@ def billing_home(request: HttpRequest) -> HttpResponse:
             if new_plan is not None:  # nocoverage
                 plan = new_plan
             assert(plan is not None)  # for mypy
-            plan_name = {
-                CustomerPlan.STANDARD: 'Zulip Standard',
-                CustomerPlan.PLUS: 'Zulip Plus',
-            }[plan.tier]
             free_trial = plan.status == CustomerPlan.FREE_TRIAL
             downgrade_at_end_of_cycle = plan.status == CustomerPlan.DOWNGRADE_AT_END_OF_CYCLE
             switch_to_annual_at_end_of_cycle = plan.status == CustomerPlan.SWITCH_TO_ANNUAL_AT_END_OF_CYCLE
@@ -285,7 +282,7 @@ def billing_home(request: HttpRequest) -> HttpResponse:
                 payment_method = 'Billed by invoice'
 
             context.update({
-                'plan_name': plan_name,
+                'plan_name': plan.name,
                 'has_active_plan': True,
                 'free_trial': free_trial,
                 'downgrade_at_end_of_cycle': downgrade_at_end_of_cycle,

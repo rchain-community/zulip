@@ -56,7 +56,7 @@
         cursor: not-allowed;
         border: none;
         background-color: transparent;
-        padding: 0px;
+        padding: 0;
 
         .pill {
             padding-right: 4px;
@@ -84,7 +84,7 @@
         outline: none;
 
         &.shake {
-            animation: shake 0.3s cubic-bezier(.36, .07, .19, .97) both;
+            animation: shake 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
             transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
             perspective: 1000px;
@@ -93,7 +93,7 @@
 }
 
 .pm_recipient .pill-container {
-    padding: 0px 2px;
+    padding: 0 2px;
     border: none;
     flex-grow: 1;
     align-content: center;

@@ -10,7 +10,6 @@ from django.db.utils import IntegrityError
 from zerver.lib.actions import do_create_user
 from zerver.lib.initial_password import initial_password
 from zerver.lib.management import ZulipBaseCommand
-from zerver.models import email_to_username
 
 
 class Command(ZulipBaseCommand):
@@ -28,7 +27,6 @@ Omit both <email> and <full name> for interactive user creation.
                             default=False,
                             help='Acknowledgement that the user has already accepted the ToS.')
         parser.add_argument('--password',
-                            dest='password',
                             type=str,
                             default='',
                             help='password of new user. For development only.'
@@ -37,7 +35,6 @@ Omit both <email> and <full name> for interactive user creation.
                                  'on the server via `ps -ef` or by any superuser with'
                                  'read access to the user\'s bash history.')
         parser.add_argument('--password-file',
-                            dest='password_file',
                             type=str,
                             default='',
                             help='The file containing the password of the new user.')
@@ -87,6 +84,12 @@ parameters, or specify no parameters for interactive user creation.""")
                 if user_initial_password is None:
                     raise CommandError("Password is unusable.")
                 pw = user_initial_password
-            do_create_user(email, pw, realm, full_name, email_to_username(email), acting_user=None)
+            do_create_user(
+                email,
+                pw,
+                realm,
+                full_name,
+                acting_user=None,
+            )
         except IntegrityError:
             raise CommandError("User already exists.")

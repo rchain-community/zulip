@@ -6,9 +6,9 @@ import tempfile
 import urllib
 from contextlib import contextmanager
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple, Union
-from unittest import mock
+from unittest import TestResult, mock
 
-import ujson
+import orjson
 from django.apps import apps
 from django.conf import settings
 from django.db import connection
@@ -41,6 +41,12 @@ from zerver.lib.streams import (
     create_stream_if_needed,
     get_default_value_for_history_public_to_subscribers,
 )
+from zerver.lib.test_console_output import (
+    ExtraConsoleOutputFinder,
+    ExtraConsoleOutputInTestException,
+    TeeStderrAndFindExtraConsoleOutput,
+    TeeStdoutAndFindExtraConsoleOutput,
+)
 from zerver.lib.test_helpers import find_key_by_email, instrument_url
 from zerver.lib.users import get_api_key
 from zerver.lib.validator import check_string
@@ -64,9 +70,11 @@ from zerver.models import (
     get_user,
     get_user_by_delivery_email,
 )
-from zerver.openapi.openapi import validate_against_openapi_schema
+from zerver.openapi.openapi import validate_against_openapi_schema, validate_request
 from zerver.tornado.event_queue import clear_client_event_queues_for_testing
-from zilencer.models import get_remote_server_by_uuid
+
+if settings.ZILENCER_ENABLED:
+    from zilencer.models import get_remote_server_by_uuid
 
 
 class UploadSerializeMixin(SerializeMixin):
@@ -113,6 +121,35 @@ class ZulipTestCase(TestCase):
                 self.mock_ldap.reset()
             self.mock_initialize.stop()
 
+    def run(self, result: Optional[TestResult]=None) -> Optional[TestResult]:  # nocoverage
+        if not settings.BAN_CONSOLE_OUTPUT:
+            return super().run(result)
+        extra_output_finder = ExtraConsoleOutputFinder()
+        with TeeStderrAndFindExtraConsoleOutput(extra_output_finder), TeeStdoutAndFindExtraConsoleOutput(extra_output_finder):
+            test_result = super().run(result)
+        if extra_output_finder.full_extra_output:
+            exception_message = f"""
+---- UNEXPECTED CONSOLE OUTPUT DETECTED ----
+
+To ensure that we never miss important error output/warnings,
+we require test-backend to have clean console output.
+
+This message usually is triggered by forgotten debugging print()
+statements or new logging statements.  For the latter, you can
+use `with self.assertLogs()` to capture and verify the log output;
+use `git grep assertLogs` to see dozens of correct examples.
+
+You should be able to quickly reproduce this failure with:
+
+test-backend --ban-console-output {self.id()}
+
+Output:
+{extra_output_finder.full_extra_output}
+--------------------------------------------
+"""
+            raise ExtraConsoleOutputInTestException(exception_message)
+        return test_result
+
     '''
     WRAPPER_COMMENT:
 
@@ -151,7 +188,28 @@ class ZulipTestCase(TestCase):
         elif 'HTTP_USER_AGENT' not in kwargs:
             kwargs['HTTP_USER_AGENT'] = default_user_agent
 
-    def validate_api_response_openapi(self, url: str, method: str, result: HttpResponse) -> None:
+    def extract_api_suffix_url(self, url: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Function that extracts the url after `/api/v1` or `/json` and also
+        returns the query data in the url, if there is any.
+        """
+        url_split = url.split('?')
+        data: Dict[str, Any] = {}
+        if len(url_split) == 2:
+            data = urllib.parse.parse_qs(url_split[1])
+        url = url_split[0]
+        url = url.replace("/json/", "/").replace("/api/v1/", "/")
+        return (url, data)
+
+    def validate_api_response_openapi(
+        self,
+        url: str,
+        method: str,
+        result: HttpResponse,
+        data: Union[str, bytes, Dict[str, Any]],
+        http_headers: Dict[str, Any],
+        intentionally_undocumented: bool = False,
+    ) -> None:
         """
         Validates all API responses received by this test against Zulip's API documentation,
         declared in zerver/openapi/zulip.yaml.  This powerful test lets us use Zulip's
@@ -160,18 +218,26 @@ class ZulipTestCase(TestCase):
         """
         if not (url.startswith("/json") or url.startswith("/api/v1")):
             return
-
         try:
-            content = ujson.loads(result.content)
-        except ValueError:
+            content = orjson.loads(result.content)
+        except orjson.JSONDecodeError:
             return
-        url = re.sub(r"\?.*", "", url)
-        validate_against_openapi_schema(content,
-                                        url.replace("/json/", "/").replace("/api/v1/", "/"),
-                                        method, str(result.status_code))
+        json_url = False
+        if url.startswith('/json'):
+            json_url = True
+        url, query_data = self.extract_api_suffix_url(url)
+        if len(query_data) != 0:
+            # In some cases the query parameters are defined in the url itself. In such cases
+            # The `data` argument of our function is not used. Hence get `data` argument
+            # from url.
+            data = query_data
+        response_validated = validate_against_openapi_schema(content, url, method, str(result.status_code))
+        if response_validated:
+            validate_request(url, method, data, http_headers, json_url, str(result.status_code),
+                             intentionally_undocumented=intentionally_undocumented)
 
     @instrument_url
-    def client_patch(self, url: str, info: Dict[str, Any]={}, **kwargs: Any) -> HttpResponse:
+    def client_patch(self, url: str, info: Dict[str, Any]={}, intentionally_undocumented: bool=False, **kwargs: Any) -> HttpResponse:
         """
         We need to urlencode, since Django's function won't do it for us.
         """
@@ -179,7 +245,7 @@ class ZulipTestCase(TestCase):
         django_client = self.client  # see WRAPPER_COMMENT
         self.set_http_headers(kwargs)
         result = django_client.patch(url, encoded, **kwargs)
-        self.validate_api_response_openapi(url, "patch", result)
+        self.validate_api_response_openapi(url, "patch", result, info, kwargs, intentionally_undocumented=intentionally_undocumented)
         return result
 
     @instrument_url
@@ -200,7 +266,7 @@ class ZulipTestCase(TestCase):
             encoded,
             content_type=MULTIPART_CONTENT,
             **kwargs)
-        self.validate_api_response_openapi(url, "patch", result)
+        self.validate_api_response_openapi(url, "patch", result, info, kwargs)
         return result
 
     @instrument_url
@@ -216,7 +282,7 @@ class ZulipTestCase(TestCase):
         django_client = self.client  # see WRAPPER_COMMENT
         self.set_http_headers(kwargs)
         result = django_client.delete(url, encoded, **kwargs)
-        self.validate_api_response_openapi(url, "delete", result)
+        self.validate_api_response_openapi(url, "delete", result, info, kwargs)
         return result
 
     @instrument_url
@@ -234,11 +300,17 @@ class ZulipTestCase(TestCase):
         return django_client.head(url, encoded, **kwargs)
 
     @instrument_url
-    def client_post(self, url: str, info: Dict[str, Any]={}, **kwargs: Any) -> HttpResponse:
+    def client_post(
+        self,
+        url: str,
+        info: Union[str, bytes, Dict[str, Any]] = {},
+        **kwargs: Any,
+    ) -> HttpResponse:
+        intentionally_undocumented: bool = kwargs.pop("intentionally_undocumented", False)
         django_client = self.client  # see WRAPPER_COMMENT
         self.set_http_headers(kwargs)
         result = django_client.post(url, info, **kwargs)
-        self.validate_api_response_openapi(url, "post", result)
+        self.validate_api_response_openapi(url, "post", result, info, kwargs, intentionally_undocumented=intentionally_undocumented)
         return result
 
     @instrument_url
@@ -256,11 +328,12 @@ class ZulipTestCase(TestCase):
         return match.func(req)
 
     @instrument_url
-    def client_get(self, url: str, info: Dict[str, Any]={}, **kwargs: Any) -> HttpResponse:
+    def client_get(self, url: str, info: Dict[str, Any] = {}, **kwargs: Any) -> HttpResponse:
+        intentionally_undocumented: bool = kwargs.pop("intentionally_undocumented", False)
         django_client = self.client  # see WRAPPER_COMMENT
         self.set_http_headers(kwargs)
         result = django_client.get(url, info, **kwargs)
-        self.validate_api_response_openapi(url, "get", result)
+        self.validate_api_response_openapi(url, "get", result, info, kwargs, intentionally_undocumented=intentionally_undocumented)
         return result
 
     example_user_map = dict(
@@ -550,9 +623,9 @@ class ZulipTestCase(TestCase):
         kwargs['HTTP_AUTHORIZATION'] = self.encode_user(user)
         return self.client_get(*args, **kwargs)
 
-    def api_post(self, user: UserProfile, *args: Any, **kwargs: Any) -> HttpResponse:
+    def api_post(self, user: UserProfile, *args: Any, intentionally_undocumented: bool=False, **kwargs: Any) -> HttpResponse:
         kwargs['HTTP_AUTHORIZATION'] = self.encode_user(user)
-        return self.client_post(*args, **kwargs)
+        return self.client_post(*args, intentionally_undocumented=intentionally_undocumented, **kwargs)
 
     def api_patch(self, user: UserProfile, *args: Any, **kwargs: Any) -> HttpResponse:
         kwargs['HTTP_AUTHORIZATION'] = self.encode_user(user)
@@ -619,7 +692,7 @@ class ZulipTestCase(TestCase):
                               use_first_unread_anchor: bool=False) -> Dict[str, List[Dict[str, Any]]]:
         post_params = {"anchor": anchor, "num_before": num_before,
                        "num_after": num_after,
-                       "use_first_unread_anchor": ujson.dumps(use_first_unread_anchor)}
+                       "use_first_unread_anchor": orjson.dumps(use_first_unread_anchor).decode()}
         result = self.client_get("/json/messages", dict(post_params))
         data = result.json()
         return data
@@ -647,7 +720,7 @@ class ZulipTestCase(TestCase):
         "msg": ""}.
         """
         try:
-            json = ujson.loads(result.content)
+            json = orjson.loads(result.content)
         except Exception:  # nocoverage
             json = {'msg': "Error parsing JSON in response!"}
         self.assertEqual(result.status_code, 200, json['msg'])
@@ -660,7 +733,7 @@ class ZulipTestCase(TestCase):
 
     def get_json_error(self, result: HttpResponse, status_code: int=400) -> Dict[str, Any]:
         try:
-            json = ujson.loads(result.content)
+            json = orjson.loads(result.content)
         except Exception:  # nocoverage
             json = {'msg': "Error parsing JSON in response!"}
         self.assertEqual(result.status_code, status_code, msg=json.get('msg'))
@@ -730,6 +803,7 @@ class ZulipTestCase(TestCase):
 
     def make_stream(self, stream_name: str, realm: Optional[Realm]=None,
                     invite_only: bool=False,
+                    is_web_public: bool=False,
                     history_public_to_subscribers: Optional[bool]=None) -> Stream:
         if realm is None:
             realm = get_realm('zulip')
@@ -742,6 +816,7 @@ class ZulipTestCase(TestCase):
                 realm=realm,
                 name=stream_name,
                 invite_only=invite_only,
+                is_web_public=is_web_public,
                 history_public_to_subscribers=history_public_to_subscribers,
             )
         except IntegrityError:  # nocoverage -- this is for bugs in the tests
@@ -785,10 +860,12 @@ class ZulipTestCase(TestCase):
     # Subscribe to a stream by making an API request
     def common_subscribe_to_streams(self, user: UserProfile, streams: Iterable[str],
                                     extra_post_data: Dict[str, Any]={}, invite_only: bool=False,
+                                    is_web_public: bool=False,
                                     allow_fail: bool=False,
                                     **kwargs: Any) -> HttpResponse:
-        post_data = {'subscriptions': ujson.dumps([{"name": stream} for stream in streams]),
-                     'invite_only': ujson.dumps(invite_only)}
+        post_data = {'subscriptions': orjson.dumps([{"name": stream} for stream in streams]).decode(),
+                     'is_web_public': orjson.dumps(is_web_public).decode(),
+                     'invite_only': orjson.dumps(invite_only).decode()}
         post_data.update(extra_post_data)
         result = self.api_post(user, "/api/v1/users/me/subscriptions", post_data, **kwargs)
         if not allow_fail:
@@ -805,11 +882,31 @@ class ZulipTestCase(TestCase):
         for x, y in zip(subscribed_streams, streams):
             self.assertEqual(x["name"], y.name)
 
-    def send_json_payload(self, user_profile: UserProfile, url: str,
-                          payload: Union[str, Dict[str, Any]],
-                          stream_name: Optional[str]=None, **post_params: Any) -> Message:
-        if stream_name is not None:
-            self.subscribe(user_profile, stream_name)
+    def send_webhook_payload(
+        self,
+        user_profile: UserProfile,
+        url: str,
+        payload: Union[str, Dict[str, Any]],
+        **post_params: Any,
+    ) -> Message:
+        """
+        Send a webhook payload to the server, and verify that the
+        post is successful.
+
+        This is a pretty low-level function.  For most use cases
+        see the helpers that call this function, which do additional
+        checks.
+
+        Occasionally tests will call this directly, for unique
+        situations like having multiple messages go to a stream,
+        where the other helper functions are a bit too rigid,
+        and you'll want the test itself do various assertions.
+        Even in those cases, you're often better to simply
+        call client_post and assert_json_success.
+
+        If the caller expects a message to be sent to a stream,
+        the caller should make sure the user is subscribed.
+        """
 
         prior_msg = self.get_last_message()
 
@@ -825,12 +922,13 @@ class ZulipTestCase(TestCase):
                 not write any new messages.  It is probably
                 broken (but still returns 200 due to exception
                 handling).
+
+                One possible gotcha is that you forgot to
+                subscribe the test user to the stream that
+                the webhook sends to.
                 ''')  # nocoverage
 
         self.assertEqual(msg.sender.email, user_profile.email)
-        if stream_name is not None:
-            self.assertEqual(get_display_recipient(msg.recipient), stream_name)
-        # TODO: should also validate recipient for private messages
 
         return msg
 
@@ -889,7 +987,7 @@ class ZulipTestCase(TestCase):
         directory. If new user entries are needed to test for some additional unusual
         scenario, it's most likely best to add that to directory.json.
         """
-        directory = ujson.loads(self.fixture_data("directory.json", type="ldap"))
+        directory = orjson.loads(self.fixture_data("directory.json", type="ldap"))
 
         for dn, attrs in directory.items():
             if 'uid' in attrs:
@@ -963,45 +1061,101 @@ class WebhookTestCase(ZulipTestCase):
 
     def api_stream_message(self, user: UserProfile, *args: Any, **kwargs: Any) -> HttpResponse:
         kwargs['HTTP_AUTHORIZATION'] = self.encode_user(user)
-        return self.send_and_test_stream_message(*args, **kwargs)
+        return self.check_webhook(*args, **kwargs)
 
-    def send_and_test_stream_message(self, fixture_name: str, expected_topic: Optional[str]=None,
-                                     expected_message: Optional[str]=None,
-                                     content_type: Optional[str]="application/json", **kwargs: Any) -> Message:
-        payload = self.get_body(fixture_name)
+    def check_webhook(
+        self,
+        fixture_name: str,
+        expected_topic: str,
+        expected_message: str,
+        content_type: Optional[str]="application/json",
+        **kwargs: Any,
+    ) -> None:
+        """
+        check_webhook is the main way to test "normal" webhooks that
+        work by receiving a payload from a third party and then writing
+        some message to a Zulip stream.
+
+        We use `fixture_name` to find the payload data in of our test
+        fixtures.  Then we verify that a message gets sent to a stream:
+
+            self.STREAM_NAME: stream name
+            expected_topic: topic
+            expected_message: content
+
+        We simulate the delivery of the payload with `content_type`,
+        and you can pass other headers via `kwargs`.
+
+        For the rare cases of webhooks actually sending private messages,
+        see send_and_test_private_message.
+        """
+        assert self.STREAM_NAME is not None
+        self.subscribe(self.test_user, self.STREAM_NAME)
+
+        payload = self.get_payload(fixture_name)
         if content_type is not None:
             kwargs['content_type'] = content_type
         if self.FIXTURE_DIR_NAME is not None:
             headers = get_fixture_http_headers(self.FIXTURE_DIR_NAME, fixture_name)
             headers = standardize_headers(headers)
             kwargs.update(headers)
-        msg = self.send_json_payload(self.test_user, self.url, payload,
-                                     self.STREAM_NAME, **kwargs)
-        self.do_test_topic(msg, expected_topic)
-        self.do_test_message(msg, expected_message)
 
-        return msg
+        msg = self.send_webhook_payload(
+            self.test_user,
+            self.url,
+            payload,
+            **kwargs,
+        )
+
+        self.assert_stream_message(
+            message=msg,
+            stream_name=self.STREAM_NAME,
+            topic_name=expected_topic,
+            content=expected_message,
+        )
+
+    def assert_stream_message(
+        self,
+        message: Message,
+        stream_name: str,
+        topic_name: str,
+        content: str,
+    ) -> None:
+        self.assertEqual(get_display_recipient(message.recipient), stream_name)
+        self.assertEqual(message.topic_name(), topic_name)
+        self.assertEqual(message.content, content)
 
     def send_and_test_private_message(
         self,
         fixture_name: str,
-        expected_topic: Optional[str] = None,
-        expected_message: Optional[str] = None,
-        content_type: Optional[str] = "application/json",
+        expected_message: str,
+        content_type: str = "application/json",
         **kwargs: Any,
     ) -> Message:
-        payload = self.get_body(fixture_name)
-        if content_type is not None:
-            kwargs['content_type'] = content_type
+        """
+        For the rare cases that you are testing a webhook that sends
+        private messages, use this function.
+
+        Most webhooks send to streams, and you will want to look at
+        check_webhook.
+        """
+        payload = self.get_payload(fixture_name)
+        kwargs['content_type'] = content_type
+
         if self.FIXTURE_DIR_NAME is not None:
             headers = get_fixture_http_headers(self.FIXTURE_DIR_NAME, fixture_name)
             headers = standardize_headers(headers)
             kwargs.update(headers)
         # The sender profile shouldn't be passed any further in kwargs, so we pop it.
         sender = kwargs.pop('sender', self.test_user)
-        msg = self.send_json_payload(sender, self.url, payload,
-                                     stream_name=None, **kwargs)
-        self.do_test_message(msg, expected_message)
+
+        msg = self.send_webhook_payload(
+            sender,
+            self.url,
+            payload,
+            **kwargs,
+        )
+        self.assertEqual(msg.content, expected_message)
 
         return msg
 
@@ -1028,19 +1182,17 @@ class WebhookTestCase(ZulipTestCase):
 
         return url[:-1] if has_arguments else url
 
-    def get_body(self, fixture_name: str) -> Union[str, Dict[str, str]]:
-        """Can be implemented either as returning a dictionary containing the
-        post parameters or as string containing the body of the request."""
+    def get_payload(self, fixture_name: str) -> Union[str, Dict[str, str]]:
+        """
+        Generally webhooks that override this should return dicts."""
+        return self.get_body(fixture_name)
+
+    def get_body(self, fixture_name: str) -> str:
         assert self.FIXTURE_DIR_NAME is not None
-        return ujson.dumps(ujson.loads(self.webhook_fixture_data(self.FIXTURE_DIR_NAME, fixture_name)))
-
-    def do_test_topic(self, msg: Message, expected_topic: Optional[str]) -> None:
-        if expected_topic is not None:
-            self.assertEqual(msg.topic_name(), expected_topic)
-
-    def do_test_message(self, msg: Message, expected_message: Optional[str]) -> None:
-        if expected_message is not None:
-            self.assertEqual(msg.content, expected_message)
+        body = self.webhook_fixture_data(self.FIXTURE_DIR_NAME, fixture_name)
+        # fail fast if we don't have valid json
+        orjson.loads(body)
+        return body
 
 class MigrationsTestCase(ZulipTestCase):  # nocoverage
     """

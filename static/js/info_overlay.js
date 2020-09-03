@@ -1,3 +1,5 @@
+"use strict";
+
 // Make it explicit that our toggler is undefined until
 // set_up_toggler is called.
 exports.toggler = undefined;
@@ -7,24 +9,24 @@ exports.set_up_toggler = function () {
         selected: 0,
         child_wants_focus: true,
         values: [
-            { label: i18n.t("Keyboard shortcuts"), key: "keyboard-shortcuts" },
-            { label: i18n.t("Message formatting"), key: "message-formatting" },
-            { label: i18n.t("Search operators"), key: "search-operators" },
+            {label: i18n.t("Keyboard shortcuts"), key: "keyboard-shortcuts"},
+            {label: i18n.t("Message formatting"), key: "message-formatting"},
+            {label: i18n.t("Search operators"), key: "search-operators"},
         ],
-        callback: function (name, key) {
+        callback(name, key) {
             $(".overlay-modal").hide();
             $("#" + key).show();
-            ui.get_scroll_element($("#" + key).find(".modal-body")).focus();
+            ui.get_scroll_element($("#" + key).find(".modal-body")).trigger("focus");
         },
     };
 
     exports.toggler = components.toggle(opts);
     const elem = exports.toggler.get();
-    elem.addClass('large allow-overflow');
+    elem.addClass("large allow-overflow");
 
     const modals = opts.values.map((item) => {
         const key = item.key; // e.g. message-formatting
-        const modal = $('#' + key).find('.modal-body');
+        const modal = $("#" + key).find(".modal-body");
         return modal;
     });
 
@@ -54,10 +56,10 @@ exports.show = function (target) {
 
     if (!overlay.hasClass("show")) {
         overlays.open_overlay({
-            name: 'informationalOverlays',
-            overlay: overlay,
-            on_close: function () {
-                hashchange.changehash("");
+            name: "informationalOverlays",
+            overlay,
+            on_close() {
+                hashchange.exit_overlay();
             },
         });
     }

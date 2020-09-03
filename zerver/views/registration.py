@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, get_backends
 from django.core import validators
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -61,7 +62,6 @@ from zerver.models import (
     Realm,
     Stream,
     UserProfile,
-    email_to_username,
     get_default_stream_groups,
     get_realm,
     get_source_profile,
@@ -203,7 +203,7 @@ def accounts_register(request: HttpRequest) -> HttpResponse:
                     ldap_user = _LDAPUser(backend, ldap_username)
 
                     try:
-                        ldap_full_name, _ = backend.get_mapped_name(ldap_user)
+                        ldap_full_name = backend.get_mapped_name(ldap_user)
                     except TypeError:
                         break
 
@@ -286,7 +286,6 @@ def accounts_register(request: HttpRequest) -> HttpResponse:
         assert(realm is not None)
 
         full_name = form.cleaned_data['full_name']
-        short_name = email_to_username(email)
         default_stream_group_names = request.POST.getlist('default_stream_group')
         default_stream_groups = lookup_default_stream_groups(default_stream_group_names, realm)
 
@@ -374,7 +373,7 @@ def accounts_register(request: HttpRequest) -> HttpResponse:
             # make it respect invited_as_admin / is_realm_admin.
 
         if user_profile is None:
-            user_profile = do_create_user(email, password, realm, full_name, short_name,
+            user_profile = do_create_user(email, password, realm, full_name,
                                           prereg_user=prereg_user,
                                           role=role,
                                           tos_version=settings.TOS_VERSION,
@@ -603,8 +602,15 @@ def find_account(request: HttpRequest) -> HttpResponse:
         form = FindMyTeamForm(request.POST)
         if form.is_valid():
             emails = form.cleaned_data['emails']
+
+            # Django doesn't support __iexact__in lookup with EmailField, so we have
+            # to use Qs to get around that without needing to do multiple queries.
+            emails_q = Q()
+            for email in emails:
+                emails_q |= Q(delivery_email__iexact=email)
+
             for user in UserProfile.objects.filter(
-                    delivery_email__in=emails, is_active=True, is_bot=False,
+                    emails_q, is_active=True, is_bot=False,
                     realm__deactivated=False):
                 context = common_context(user)
                 context.update({

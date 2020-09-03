@@ -1,3 +1,5 @@
+"use strict";
+
 /* eslint-disable arrow-body-style */
 /*
   This file makes use of functional comments in a way that makes the
@@ -17,8 +19,8 @@ const ExamplesHandler = function () {
         const name = count !== false ? `${example.name}_${count}` : example.name;
         return {
             name,
-            endpoint: example.endpoint.split(':')[0],
-            method: example.endpoint.split(':')[1],
+            endpoint: example.endpoint.split(":")[0],
+            method: example.endpoint.split(":")[1],
             status_code: example.status_code.toString(),
             result,
         };
@@ -38,7 +40,7 @@ const ExamplesHandler = function () {
     };
 
     const main = async () => {
-        const Zulip = require('zulip-js');
+        const Zulip = require("zulip-js");
         const client = await Zulip(config);
 
         await generate_validation_data(client, examples.send_message);
@@ -83,16 +85,30 @@ const ExamplesHandler = function () {
 
 const {main, add_example} = ExamplesHandler();
 
+const send_test_message = async (client) => {
+    const params = {
+        to: "Verona",
+        type: "stream",
+        topic: "Castle",
+        // Use some random text for easier debugging if needed. We don't
+        // depend on the content of these messages for the tests.
+        content: `Random test message ${Math.random()}`,
+    };
+    const result = await client.messages.send(params);
+    // Only return the message id.
+    return result.id;
+};
+
 // Declare all the examples below.
 
-add_example('send_message', '/messages:post', 200, async (client) => {
+add_example("send_message", "/messages:post", 200, async (client) => {
     // {code_example|start}
     // Send a stream message
     let params = {
-        to: 'social',
-        type: 'stream',
-        topic: 'Castle',
-        content: 'I come not, friends, to steal away your hearts.',
+        to: "social",
+        type: "stream",
+        topic: "Castle",
+        content: "I come not, friends, to steal away your hearts.",
     };
     const result_1 = await client.messages.send(params);
     // {code_example|end}
@@ -102,38 +118,37 @@ add_example('send_message', '/messages:post', 200, async (client) => {
     const user_id = 9;
     params = {
         to: [user_id],
-        type: 'private',
-        content: 'With mirth and laughter let old wrinkles come.',
+        type: "private",
+        content: "With mirth and laughter let old wrinkles come.",
     };
     const result_2 = await client.messages.send(params);
     // {code_example|end}
     return [result_1, result_2];
 });
 
-add_example('create_user', '/users:post', 200, async (client) => {
+add_example("create_user", "/users:post", 200, async (client) => {
     // {code_example|start}
     const params = {
-        email: 'notnewbie@zulip.com',
-        password: 'temp',
-        full_name: 'New User',
-        short_name: 'newbie',
+        email: "notnewbie@zulip.com",
+        password: "temp",
+        full_name: "New User",
     };
 
     return await client.users.create(params);
     // {code_example|end}
 });
 
-add_example('get_custom_emoji', '/realm/emoji:get', 200, async (client) => {
+add_example("get_custom_emoji", "/realm/emoji:get", 200, async (client) => {
     // {code_example|start}
     return await client.emojis.retrieve();
     // {code_example|end}
 });
 
-add_example('delete_queue', '/events:delete', 200, async (client) => {
+add_example("delete_queue", "/events:delete", 200, async (client) => {
     // {code_example|start}
     // Register a queue
     const queueParams = {
-        event_types: ['message'],
+        event_types: ["message"],
     };
     const res = await client.queues.register(queueParams);
 
@@ -146,14 +161,16 @@ add_example('delete_queue', '/events:delete', 200, async (client) => {
     // {code_example|end}
 });
 
-add_example('get_messages', '/messages:get', 200, async (client) => {
+add_example("get_messages", "/messages:get", 200, async (client) => {
     // {code_example|start}
     const readParams = {
-        anchor: 'newest',
+        anchor: "newest",
         num_before: 100,
         num_after: 0,
-        narrow: [{operator: 'sender', operand: 'iago@zulip.com'},
-                 {operator: 'stream', operand: 'Verona'}],
+        narrow: [
+            {operator: "sender", operand: "iago@zulip.com"},
+            {operator: "stream", operand: "Verona"},
+        ],
     };
 
     // Get the 100 last messages sent by "iago@zulip.com" to the stream "Verona"
@@ -161,7 +178,7 @@ add_example('get_messages', '/messages:get', 200, async (client) => {
     // {code_example|end}
 });
 
-add_example('get_own_user', '/users/me:get', 200, async (client) => {
+add_example("get_own_user", "/users/me:get", 200, async (client) => {
     // {code_example|start}
     // Get the profile of the user/bot that requests this endpoint,
     // which is `client` in this case:
@@ -169,28 +186,28 @@ add_example('get_own_user', '/users/me:get', 200, async (client) => {
     // {code_example|end}
 });
 
-add_example('get_stream_id', '/get_stream_id:get', 200, async (client) => {
+add_example("get_stream_id", "/get_stream_id:get", 200, async (client) => {
     // {code_example|start}
     // Get the ID of a given stream
-    return await client.streams.getStreamId('Denmark');
+    return await client.streams.getStreamId("Denmark");
     // {code_example|end}
 });
 
-add_example('get_stream_topics', '/users/me/{stream_id}/topics:get', 200, async (client) => {
+add_example("get_stream_topics", "/users/me/{stream_id}/topics:get", 200, async (client) => {
     // {code_example|start}
     // Get all the topics in stream with ID 1
-    return client.streams.topics.retrieve({ stream_id: 1 });
+    return client.streams.topics.retrieve({stream_id: 1});
     // {code_example|end}
 });
 
-add_example('get_subscriptions', '/users/me/subscriptions:get', 200, async (client) => {
+add_example("get_subscriptions", "/users/me/subscriptions:get", 200, async (client) => {
     // {code_example|start}
     // Get all streams that the user is subscribed to
     return await client.streams.subscriptions.retrieve();
     // {code_example|end}
 });
 
-add_example('get_users', '/users:get', 200, async (client) => {
+add_example("get_users", "/users:get", 200, async (client) => {
     // {code_example|start}
     // Get all users in the realm
     const result_1 = await client.users.retrieve();
@@ -203,35 +220,35 @@ add_example('get_users', '/users:get', 200, async (client) => {
     return [result_1, result_2];
 });
 
-add_example('register_queue', '/register:post', 200, async (client) => {
+add_example("register_queue", "/register:post", 200, async (client) => {
     // {code_example|start}
     // Register a queue
     const params = {
-        event_types: ['message'],
+        event_types: ["message"],
     };
 
     return await client.queues.register(params);
     // {code_example|end}
 });
 
-add_example('render_message', '/messages/render:post', 200, async (client) => {
+add_example("render_message", "/messages/render:post", 200, async (client) => {
     // {code_example|start}
     // Render a message
     const params = {
-        content: '**foo**',
+        content: "**foo**",
     };
 
     return await client.messages.render(params);
     // {code_example|end}
 });
 
-add_example('set_typing_status', '/typing:post', 200, async (client) => {
+add_example("set_typing_status", "/typing:post", 200, async (client) => {
     // {code_example|start}
     const user_id1 = 9;
     const user_id2 = 10;
 
     const typingParams = {
-        op: 'start',
+        op: "start",
         to: [user_id1, user_id2],
     };
 
@@ -240,14 +257,11 @@ add_example('set_typing_status', '/typing:post', 200, async (client) => {
     // {code_example|end}
 });
 
-add_example('add_subscriptions', '/users/me/subscriptions:post', 200, async (client) => {
+add_example("add_subscriptions", "/users/me/subscriptions:post", 200, async (client) => {
     // {code_example|start}
     // Subscribe to the streams "Verona" and "Denmark"
     const meParams = {
-        subscriptions: JSON.stringify([
-            {name: 'Verona'},
-            {name: 'Denmark'},
-        ]),
+        subscriptions: JSON.stringify([{name: "Verona"}, {name: "Denmark"}]),
     };
     const result_1 = await client.users.me.subscriptions.add(meParams);
     // {code_example|end}
@@ -257,10 +271,7 @@ add_example('add_subscriptions', '/users/me/subscriptions:post', 200, async (cli
     // the `principals` parameter, like so:
     const user_id = 7;
     const anotherUserParams = {
-        subscriptions: JSON.stringify([
-            {name: 'Verona'},
-            {name: 'Denmark'},
-        ]),
+        subscriptions: JSON.stringify([{name: "Verona"}, {name: "Denmark"}]),
         principals: JSON.stringify([user_id]),
     };
     const result_2 = await client.users.me.subscriptions.add(anotherUserParams);
@@ -268,11 +279,11 @@ add_example('add_subscriptions', '/users/me/subscriptions:post', 200, async (cli
     return [result_1, result_2];
 });
 
-add_example('remove_subscriptions', '/users/me/subscriptions:delete', 200, async (client) => {
+add_example("remove_subscriptions", "/users/me/subscriptions:delete", 200, async (client) => {
     // {code_example|start}
     // Unsubscribe from the stream "Denmark"
     const meParams = {
-        subscriptions: JSON.stringify(['Denmark']),
+        subscriptions: JSON.stringify(["Denmark"]),
     };
     const result_1 = await client.users.me.subscriptions.remove(meParams);
     // {code_example|end}
@@ -281,7 +292,7 @@ add_example('remove_subscriptions', '/users/me/subscriptions:delete', 200, async
     const user_id = 7;
     // Unsubscribe Zoe from the stream "Denmark"
     const zoeParams = {
-        subscriptions: JSON.stringify(['Denmark']),
+        subscriptions: JSON.stringify(["Denmark"]),
         principals: JSON.stringify([user_id]),
     };
     const result_2 = await client.users.me.subscriptions.remove(zoeParams);
@@ -289,13 +300,18 @@ add_example('remove_subscriptions', '/users/me/subscriptions:delete', 200, async
     return [result_1, result_2];
 });
 
-add_example('update_message_flags', '/messages/flags:post', 200, async (client) => {
-    const message_ids = [4, 8, 15];
+add_example("update_message_flags", "/messages/flags:post", 200, async (client) => {
+    // Send 3 messages to run this example on
+    const message_ids = [...Array(3)];
+    for (let i = 0; i < message_ids.length; i = i + 1) {
+        message_ids[i] = await send_test_message(client);
+    }
+
     // {code_example|start}
     // Add the "read" flag to the messages with IDs in "message_ids"
     const addflag = {
         messages: message_ids,
-        flag: 'read',
+        flag: "read",
     };
     const result_1 = await client.messages.flags.add(addflag);
     // {code_example|end}
@@ -304,19 +320,19 @@ add_example('update_message_flags', '/messages/flags:post', 200, async (client) 
     // Remove the "starred" flag from the messages with IDs in "message_ids"
     const removeflag = {
         messages: message_ids,
-        flag: 'starred',
+        flag: "starred",
     };
     const result_2 = await client.messages.flags.remove(removeflag);
     // {code_example|end}
     return [result_1, result_2];
 });
 
-add_example('update_message', '/messages/{message_id}:patch', 200, async (client) => {
+add_example("update_message", "/messages/{message_id}:patch", 200, async (client) => {
     const request = {
-        to: 'Denmark',
-        type: 'stream',
-        topic: 'Castle',
-        content: 'I come not, friends, to steal away your hearts.',
+        to: "Denmark",
+        type: "stream",
+        topic: "Castle",
+        content: "I come not, friends, to steal away your hearts.",
     };
     const result = await client.messages.send(request);
     const message_id = result.id;
@@ -324,35 +340,29 @@ add_example('update_message', '/messages/{message_id}:patch', 200, async (client
     // {code_example|start}
     // Update a message with the given "message_id"
     const params = {
-        message_id: message_id,
-        content: 'New Content',
+        message_id,
+        content: "New Content",
     };
 
     return await client.messages.update(params);
     // {code_example|end}
 });
 
-add_example('get_events', '/events:get', 200, async (client) => {
+add_example("get_events", "/events:get", 200, async (client) => {
     // Register queue to receive messages for user.
     const queueParams = {
-        event_types: ['message'],
+        event_types: ["message"],
     };
     const res = await client.queues.register(queueParams);
     const queue_id = res.queue_id;
     // For setup, we send a message to ensure there are events in the
     // queue; this lets the automated tests complete quickly.
-    const params = {
-        to: 'social',
-        type: 'stream',
-        topic: 'Castle',
-        content: 'I come not, friends, to steal away your hearts.',
-    };
-    client.messages.send(params);
+    await send_test_message(client);
 
     // {code_example|start}
     // Retrieve events from a queue with given "queue_id"
     const eventParams = {
-        queue_id: queue_id,
+        queue_id,
         last_event_id: -1,
     };
 
@@ -360,7 +370,7 @@ add_example('get_events', '/events:get', 200, async (client) => {
     // {code_example|end}
 });
 
-add_example('get_streams', '/streams:get', 200, async (client) => {
+add_example("get_streams", "/streams:get", 200, async (client) => {
     // {code_example|start}
     // Get all streams that the user has access to
     return await client.streams.retrieve();

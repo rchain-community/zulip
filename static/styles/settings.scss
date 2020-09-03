@@ -78,7 +78,7 @@ h3 .fa-question-circle-o {
         #pw_strength {
             width: 140px;
             height: 8px;
-            margin: 6px 0px 0px 0px;
+            margin: 6px 0 0 0;
         }
     }
     .button {
@@ -106,7 +106,7 @@ h3 .fa-question-circle-o {
     }
 
     .inline-block {
-        box-shadow: 0px 0px 10px hsla(0, 0%, 0%, 0.1);
+        box-shadow: 0 0 10px hsla(0, 0%, 0%, 0.1);
     }
 }
 
@@ -130,7 +130,7 @@ h3 .fa-question-circle-o {
 }
 
 .side-padded-container {
-    padding: 0px 20px;
+    padding: 0 20px;
 }
 
 #notification_sound,
@@ -154,7 +154,7 @@ h3 .fa-question-circle-o {
     }
 
     &.table-condensed.table-striped {
-        margin: 0px;
+        margin: 0;
     }
 }
 
@@ -193,7 +193,7 @@ h3 .fa-question-circle-o {
 }
 
 td .button {
-    margin: 2px 0px;
+    margin: 2px 0;
     box-shadow: none;
 }
 
@@ -231,7 +231,7 @@ td .button {
     .settings-section-title {
         font-size: 1.4em;
         font-weight: 500;
-        margin: 10px 0px 10px 0px;
+        margin: 10px 0 10px 0;
 
         &.transparent {
             background-color: transparent;
@@ -240,7 +240,7 @@ td .button {
 
         .table-title {
             display: inline-block;
-            padding: 6px 0px;
+            padding: 6px 0;
             margin-left: 5px;
 
             i {
@@ -300,9 +300,9 @@ td .button {
         }
     }
 
-    input[type=text].search {
+    input[type="text"].search {
         float: right;
-        margin: 2px 5px 2px 0px;
+        margin: 2px 5px 2px 0;
         padding: 2px 5px;
         font-size: 0.9em;
     }
@@ -370,7 +370,7 @@ td .button {
 
     &:hover {
         outline: none;
-        box-shadow: 0px 0px 4px hsla(199, 79%, 56%, 1.0);
+        box-shadow: 0 0 4px hsla(199, 79%, 56%, 1);
     }
 
     div,
@@ -393,7 +393,7 @@ td .button {
         color: hsl(0, 0%, 67%);
     }
 
-    [contenteditable=true] {
+    [contenteditable="true"] {
         outline: none;
     }
 }
@@ -405,7 +405,7 @@ td .button {
 
 .input-group {
     .thinner {
-        margin: 10px 0px;
+        margin: 10px 0;
     }
 
     label.checkbox + label {
@@ -423,16 +423,16 @@ td .button {
 }
 
 .no-margin {
-    margin: 0px;
+    margin: 0;
 }
 
-input[type=checkbox] {
+input[type="checkbox"] {
     + .inline-block {
         margin-left: 10px;
     }
 
     .inline-block {
-        margin: -2px 0px 0px 0px;
+        margin: -2px 0 0 0;
     }
 }
 
@@ -442,7 +442,7 @@ input[type=checkbox] {
 }
 
 .realm_domains_info {
-    margin-bottom: 0px;
+    margin-bottom: 0;
 }
 
 .admin-realm-form {
@@ -455,101 +455,12 @@ input[type=checkbox] {
     }
 }
 
-#settings_page {
-    .icon-button {
-        border-radius: 5px;
-        border: 1px solid hsl(0, 0%, 80%);
-        font-size: 14px;
-        padding: 3px 14px 4px 11px;
-        text-decoration: none;
-        color: hsl(0, 0%, 47%);
-        min-width: 80px;
-        line-height: 16px;
-
-        &:hover {
-            background-color: hsl(0, 0%, 100%);
-            border: 1px solid hsl(0, 0%, 61%);
-            color: hsl(0, 0%, 18%);
-
-            .icon-button-icon {
-                color: hsl(0, 0%, 47%);
-            }
-        }
-
-        &.primary {
-            background-color: hsl(156, 30%, 50%);
-            color: hsl(0, 0%, 100%);
-            border: 1px solid hsl(155, 30%, 50%);
-
-            &:hover {
-                background-color: hsl(166, 35%, 57%);
-                border: 1px solid hsl(166, 35%, 57%);
-            }
-
-            .icon-button-icon {
-                font-weight: lighter;
-                color: hsl(0, 0%, 100%);
-            }
-
-            &.saving {
-                background-color: hsl(156, 14%, 40%);
-                border-color: hsl(156, 14%, 40%);
-            }
-        }
-
-        .icon-button-icon {
-            vertical-align: bottom;
-            margin-right: 3px;
-            margin-bottom: 1px;
-            font-size: 15px;
-            font-weight: 500;
-        }
-    }
-
-    .save-button-controls {
-        display: inline;
-        margin-left: 15px;
-
-        &.hide {
-            display: none;
-        }
-    }
-
-    .save-button {
-        margin-right: 5px;
-
-        .icon-button-loading {
-            display: none;
-        }
-
-        &.saving {
-            .icon-button-icon {
-                display: none;
-            }
-
-            .icon-button-loading {
-                display: inline-block;
-                margin-right: 2px;
-            }
-        }
-    }
-
-    .admin-realm-time-limit-input {
-        width: 5ch;
-        text-align: right;
-    }
-
-    .realm-time-limit-label {
-        vertical-align: middle;
-    }
-}
-
-.organization-settings-parent div:first-of-type {
+.organization-settings-parent > div:first-of-type {
     margin-top: 10px;
 }
 
 .org-settings-form .organization-submission {
-    margin-top: 0px;
+    margin-top: 0;
 }
 
 #id_org_profile_preview {
@@ -567,12 +478,12 @@ input[type=checkbox] {
 .remove-attachment {
     margin-right: 5px !important;
     font-size: 1.1em !important;
-    padding-left: 0px !important;
+    padding-left: 0 !important;
 }
 
 #download_attachment {
-    padding-left: 0px;
-    border-left: 0px;
+    padding-left: 0;
+    border-left: 0;
 }
 
 .alert-word-information-box {
@@ -591,7 +502,7 @@ input[type=checkbox] {
 }
 
 .alert-notification {
-    display: inline-block !important;
+    display: inline-block;
     vertical-align: top;
     height: auto !important;
     width: auto !important;
@@ -625,7 +536,7 @@ input[type=checkbox] {
     }
 
     .loading_indicator_text {
-        margin-top: 0px;
+        margin-top: 0;
         font-size: inherit;
         vertical-align: top;
     }
@@ -655,7 +566,7 @@ input[type=checkbox] {
 
             .stream-privacy span.hashtag,
             .filter-icon i {
-                padding-right: 0px;
+                padding-right: 0;
             }
         }
 
@@ -673,11 +584,11 @@ input[type=checkbox] {
     }
 
     .alert-notification.custom-field-status {
-        padding-top: 0px;
-        padding-bottom: 0px;
-        margin-top: 0px;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-top: 0;
         font-size: 14px;
-        padding-left: 0px;
+        padding-left: 0;
         margin-left: 5px;
         border: none;
     }
@@ -724,13 +635,13 @@ input[type=checkbox] {
 .add-new-user-group-box .new-user-group-form,
 .add-new-alert-word-box .new-alert-word-form,
 .add-new-export-box {
-    margin: 10px 0px;
+    margin: 10px 0;
 }
 
 .add-new-emoji-box,
 .add-new-user-group-box,
 .add-new-default-stream-box {
-    input[type=text] {
+    input[type="text"] {
         padding: 6px;
     }
 }
@@ -760,7 +671,7 @@ input[type=checkbox] {
 }
 
 .grey-box .wrapper {
-    margin: 10px 0px;
+    margin: 10px 0;
 }
 
 .admin_profile_fields_table,
@@ -797,7 +708,7 @@ input[type=checkbox] {
 .bots_list {
     display: none;
     list-style-type: none;
-    margin-left: 0px;
+    margin-left: 0;
 
     .image {
         vertical-align: top;
@@ -872,12 +783,12 @@ input[type=checkbox] {
     }
 
     img.avatar {
-        margin: 10px 5px 0px 10px;
+        margin: 10px 5px 0 10px;
         height: 50px;
         width: 50px;
         border-radius: 4px;
         vertical-align: top;
-        box-shadow: 0px 0px 4px hsla(0, 0%, 0%, 0.1);
+        box-shadow: 0 0 4px hsla(0, 0%, 0%, 0.1);
     }
 
     .email,
@@ -888,15 +799,14 @@ input[type=checkbox] {
     .email .value,
     .api_key .api-key-value-and-button {
         display: block;
-        margin-left: 0px;
-        white-space: pre-wrap;
+        margin-left: 0;
         word-wrap: break-word;
         word-break: break-all;
         white-space: normal;
     }
 
     .api_key .api-key-value-and-button {
-        font-family: "Inconsolata", Menlo, monospace;
+        font-family: Inconsolata, Menlo, monospace;
         font-size: 0.85em;
         display: flex;
     }
@@ -906,7 +816,6 @@ input[type=checkbox] {
     }
 
     .field {
-        font-weight: 300;
         text-transform: uppercase;
         font-weight: 600;
         color: hsl(0, 0%, 67%);
@@ -919,7 +828,7 @@ input[type=checkbox] {
 }
 
 .edit_bot h3 {
-    margin: 0px;
+    margin: 0;
     font-weight: 400;
 }
 
@@ -937,8 +846,8 @@ input[type=checkbox] {
 
 .edit_bot_form {
     font-size: 100%;
-    margin: 0px;
-    padding: 0px;
+    margin: 0;
+    padding: 0;
 
     label {
         text-transform: uppercase;
@@ -948,7 +857,7 @@ input[type=checkbox] {
     }
 
     .buttons {
-        margin: 10px 0px 5px 0px;
+        margin: 10px 0 5px 0;
     }
 }
 
@@ -956,7 +865,7 @@ input[type=checkbox] {
     font-weight: 400;
     font-size: 18px;
     text-align: left;
-    margin-top: 0px;
+    margin-top: 0;
     margin-bottom: 10px;
 
     overflow: hidden;
@@ -1010,7 +919,6 @@ input[type=checkbox] {
 
     .alert_word_listing .value {
         display: block;
-        white-space: pre-wrap;
         word-wrap: break-word;
         word-break: break-all;
         white-space: normal;
@@ -1022,13 +930,13 @@ input[type=checkbox] {
     .edit-attachment-buttons {
         position: absolute;
         right: 20px;
-        top: 0px;
+        top: 0;
     }
 }
 
 .emojiset_choices {
     width: 250px;
-    padding: 0px 10px;
+    padding: 0 10px;
 
     .emoji {
         height: 22px;
@@ -1037,16 +945,16 @@ input[type=checkbox] {
 
     label {
         border-bottom: 1px solid hsla(0, 0%, 0%, 0.2);
-        padding: 8px 0px 10px 0px;
+        padding: 8px 0 10px 0;
 
         &:last-of-type {
             border-bottom: none;
         }
 
-        input[type=radio] {
+        input[type="radio"] {
             position: relative;
             top: -2px;
-            margin: 0px 5px 0px 0px;
+            margin: 0 5px 0 0;
 
             &:checked + span {
                 font-weight: 600;
@@ -1088,7 +996,7 @@ input[type=checkbox] {
 
         h4 {
             font-weight: normal;
-            margin: 0px;
+            margin: 0;
             display: flex;
             align-items: center;
             justify-content: left;
@@ -1182,6 +1090,93 @@ input[type=checkbox] {
     overflow: hidden;
     border-radius: 4px;
 
+    .save-discard-widget-button {
+        border-radius: 5px;
+        border: 1px solid hsl(0, 0%, 80%);
+        font-size: 14px;
+        padding: 3px 14px 4px 11px;
+        text-decoration: none;
+        color: hsl(0, 0%, 47%);
+        min-width: 80px;
+        line-height: 16px;
+
+        &:hover {
+            background-color: hsl(0, 0%, 100%);
+            border: 1px solid hsl(0, 0%, 61%);
+            color: hsl(0, 0%, 18%);
+
+            .save-discard-widget-button-icon {
+                color: hsl(0, 0%, 47%);
+            }
+        }
+
+        &.primary {
+            background-color: hsl(156, 30%, 50%);
+            color: hsl(0, 0%, 100%);
+            border: 1px solid hsl(155, 30%, 50%);
+
+            &:hover {
+                background-color: hsl(166, 35%, 57%);
+                border: 1px solid hsl(166, 35%, 57%);
+            }
+
+            .save-discard-widget-button-icon {
+                font-weight: lighter;
+                color: hsl(0, 0%, 100%);
+            }
+
+            &.saving {
+                background-color: hsl(156, 14%, 40%);
+                border-color: hsl(156, 14%, 40%);
+            }
+        }
+
+        .save-discard-widget-button-icon {
+            vertical-align: bottom;
+            margin-right: 3px;
+            margin-bottom: 1px;
+            font-size: 15px;
+            font-weight: 500;
+        }
+    }
+
+    .save-button-controls {
+        display: inline;
+        margin-left: 15px;
+
+        &.hide {
+            display: none;
+        }
+    }
+
+    .save-button {
+        margin-right: 5px;
+
+        .save-discard-widget-button-loading {
+            display: none;
+        }
+
+        &.saving {
+            .save-discard-widget-button-icon {
+                display: none;
+            }
+
+            .save-discard-widget-button-loading {
+                display: inline-block;
+                margin-right: 2px;
+            }
+        }
+    }
+
+    .admin-realm-time-limit-input {
+        width: 5ch;
+        text-align: right;
+    }
+
+    .realm-time-limit-label {
+        vertical-align: middle;
+    }
+
     h3 {
         font-size: 1.5em;
         font-weight: normal;
@@ -1196,13 +1191,13 @@ input[type=checkbox] {
 
     input.search {
         font-size: 0.9rem;
-        margin: 10px 0px 20px 0px;
+        margin: 10px 0 20px 0;
     }
 
     .form-sidebar {
         position: absolute;
         top: 45px;
-        right: 0px;
+        right: 0;
         transform: translateX(303px);
         width: 300px;
         height: calc(100% - 45px);
@@ -1216,15 +1211,15 @@ input[type=checkbox] {
 
         &.show {
             pointer-events: auto;
-            transform: translateX(0px);
+            transform: translateX(0);
             visibility: visible;
         }
 
-        input[type=text] {
+        input[type="text"] {
             width: calc(100% - 10px - 4px);
         }
 
-        input[type=submit],
+        input[type="submit"],
         button {
             border-radius: 4px;
             outline: none;
@@ -1247,7 +1242,7 @@ input[type=checkbox] {
             h1 {
                 display: inline-block;
                 font-size: 1.3rem;
-                margin: 0px;
+                margin: 0;
             }
 
             .exit {
@@ -1288,7 +1283,7 @@ input[type=checkbox] {
         }
 
         li {
-            padding: 5px 0px;
+            padding: 5px 0;
             outline: none;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -1317,7 +1312,7 @@ input[type=checkbox] {
 
             .text {
                 width: calc(100% - 90px);
-                padding: 10px 12px 10px 0px;
+                padding: 10px 12px 10px 0;
             }
 
             .icon {
@@ -1353,7 +1348,7 @@ input[type=checkbox] {
         .sidebar-bottom-anchor {
             width: 100%;
             position: absolute;
-            bottom: 0px;
+            bottom: 0;
         }
 
         .tab-container {
@@ -1494,10 +1489,10 @@ input[type=checkbox] {
 }
 
 .modal {
-    box-shadow: 0px 0px 75px hsla(0, 0%, 0%, 0.5);
+    box-shadow: 0 0 75px hsla(0, 0%, 0%, 0.5);
     outline: 10000px solid hsla(0, 0%, 0%, 0.3);
     border: none;
-    border-radius: 0px;
+    border-radius: 0;
 
     &.fade {
         /* Ensure the modal is entirely off-screen while we fade the background */
@@ -1567,7 +1562,7 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
 
 .dropdown-list-widget {
     button {
-        margin: 0px 5px;
+        margin: 0 5px;
 
         &.dropdown_list_reset_button {
             // Prevent night mode from overriding background.
@@ -1583,7 +1578,7 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
         }
     }
 
-    .dropdown-search > input[type=text] {
+    .dropdown-search > input[type="text"] {
         margin: 9px;
     }
 
@@ -1592,11 +1587,17 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
         bottom: auto;
     }
 
-    .dropdown-list-body {
+    .dropdown-list-wrapper {
         position: relative;
         height: auto;
         max-height: 200px;
         overflow-y: auto;
+        margin-top: 0;
+        display: block;
+    }
+
+    .dropdown-list-body {
+        position: relative;
         margin-top: 0;
         display: block;
     }
@@ -1610,7 +1611,6 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
 }
 
 #muted_topics_table {
-    margin-bottom: 0px;
     width: 90%;
     margin: 0 auto;
 
@@ -1639,7 +1639,7 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
 
 #payload_url_inputbox,
 #service_name_list {
-    input[type=text] {
+    input[type="text"] {
         width: 340px;
     }
 }
@@ -1655,8 +1655,9 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
 
 @supports (-moz-appearance: none) {
     #settings_page select {
-        -moz-appearance: none;
-        background: hsl(0, 0%, 100%) url('../images/dropdown.png') right / 20px no-repeat;
+        appearance: none;
+        background: hsl(0, 0%, 100%) url(../images/dropdown.png) right / 20px
+            no-repeat;
         padding-right: 20px;
     }
 }
@@ -1697,7 +1698,8 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
         outline: 0;
         outline: 1px dotted \9;
 
-        box-shadow: inset 0 1px 1px hsla(0, 0%, 0%, 0.075), 0 0 8px hsla(206, 80%, 62%, 0.6);
+        box-shadow: inset 0 1px 1px hsla(0, 0%, 0%, 0.075),
+            0 0 8px hsla(206, 80%, 62%, 0.6);
     }
 }
 
@@ -1716,7 +1718,7 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
 }
 
 .collapse-settings-btn {
-    margin: 10px 0px 0px 10px;
+    margin: 10px 0 0 10px;
     color: hsl(200, 100%, 40%);
 
     &:hover {
@@ -1826,7 +1828,7 @@ body:not(.night-mode) #settings_page .custom_user_field .datepicker {
     #profile-field-settings .new-profile-field-form .control-label {
         display: block;
         width: 120px;
-        padding: 0px;
+        padding: 0;
         padding-top: 0;
         text-align: center;
         margin: auto;

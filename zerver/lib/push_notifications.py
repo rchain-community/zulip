@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 
 import gcm
 import lxml.html
-import ujson
+import orjson
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -40,11 +40,8 @@ logger = logging.getLogger(__name__)
 
 if settings.ZILENCER_ENABLED:
     from zilencer.models import RemotePushDeviceToken
-else:  # nocoverage  -- Not convenient to add test for this.
-    from unittest.mock import Mock
-    RemotePushDeviceToken = Mock()  # type: ignore[misc] # https://github.com/JukkaL/mypy/issues/1188
 
-DeviceToken = Union[PushDeviceToken, RemotePushDeviceToken]
+DeviceToken = Union[PushDeviceToken, "RemotePushDeviceToken"]
 
 # We store the token as b64, but apns-client wants hex strings
 def b64_to_hex(data: str) -> str:
@@ -109,6 +106,8 @@ APNS_MAX_RETRIES = 3
 @statsd_increment("apple_push_notification")
 def send_apple_push_notification(user_id: int, devices: List[DeviceToken],
                                  payload_data: Dict[str, Any], remote: bool=False) -> None:
+    if not devices:
+        return
     # We lazily do the APNS imports as part of optimizing Zulip's base
     # import time; since these are only needed in the push
     # notification queue worker, it's best to only import them in the
@@ -123,6 +122,7 @@ def send_apple_push_notification(user_id: int, devices: List[DeviceToken],
         return
 
     if remote:
+        assert settings.ZILENCER_ENABLED
         DeviceTokenClass = RemotePushDeviceToken
     else:
         DeviceTokenClass = PushDeviceToken
@@ -249,7 +249,7 @@ def parse_gcm_options(options: Dict[str, Any], data: Dict[str, Any]) -> str:
         # one-way compatibility.
         raise JsonableError(_(
             "Invalid GCM options to bouncer: {}",
-        ).format(ujson.dumps(options)))
+        ).format(orjson.dumps(options).decode()))
 
     return priority  # when this grows a second option, can make it a tuple
 
@@ -267,6 +267,8 @@ def send_android_push_notification(devices: List[DeviceToken], data: Dict[str, A
     options: Additional options to control the GCM message sent.
         For details, see `parse_gcm_options`.
     """
+    if not devices:
+        return
     if not gcm_client:
         logger.debug("Skipping sending a GCM push notification since "
                      "PUSH_NOTIFICATION_BOUNCER_URL and ANDROID_GCM_API_KEY are both unset")
@@ -291,6 +293,7 @@ def send_android_push_notification(devices: List[DeviceToken], data: Dict[str, A
             logger.info("GCM: Sent %s as %s", reg_id, msg_id)
 
     if remote:
+        assert settings.ZILENCER_ENABLED
         DeviceTokenClass = RemotePushDeviceToken
     else:
         DeviceTokenClass = PushDeviceToken
@@ -368,7 +371,7 @@ def num_push_devices_for_user(user_profile: UserProfile, kind: Optional[int]=Non
 def add_push_device_token(user_profile: UserProfile,
                           token_str: str,
                           kind: int,
-                          ios_app_id: Optional[str]=None) -> None:
+                          ios_app_id: Optional[str]=None) -> PushDeviceToken:
     logger.info("Registering push device: %d %r %d %r",
                 user_profile.id, token_str, kind, ios_app_id)
 
@@ -379,7 +382,7 @@ def add_push_device_token(user_profile: UserProfile,
     # keys for mobile push notifications.
     try:
         with transaction.atomic():
-            PushDeviceToken.objects.create(
+            token = PushDeviceToken.objects.create(
                 user_id=user_profile.id,
                 kind=kind,
                 token=token_str,
@@ -387,7 +390,11 @@ def add_push_device_token(user_profile: UserProfile,
                 # last_updated is to be renamed to date_created.
                 last_updated=timezone_now())
     except IntegrityError:
-        pass
+        token = PushDeviceToken.objects.get(
+            user_id=user_profile.id,
+            kind=kind,
+            token=token_str,
+        )
 
     # If we're sending things to the push notification bouncer
     # register this user with them here
@@ -405,6 +412,8 @@ def add_push_device_token(user_profile: UserProfile,
         logger.info("Sending new push device to bouncer: %r", post_data)
         # Calls zilencer.views.register_remote_push_device
         send_to_push_bouncer('POST', 'push/register', post_data)
+
+    return token
 
 def remove_push_device_token(user_profile: UserProfile, token_str: str, kind: int) -> None:
     try:
@@ -530,10 +539,19 @@ def get_mobile_push_content(rendered_content: str) -> str:
 
         return '\n'.join(items)
 
+    def render_spoiler(elem: lxml.html.HtmlElement) -> str:
+        header = elem.find_class('spoiler-header')[0]
+        text = process(header).strip()
+        if len(text) == 0:
+            return "(…)\n"
+        return f"{text} (…)\n"
+
     def process(elem: lxml.html.HtmlElement) -> str:
         plain_text = ''
         if elem.tag == 'ol':
             plain_text = render_olist(elem)
+        elif 'spoiler-block' in elem.get("class", ""):
+            plain_text += render_spoiler(elem)
         else:
             plain_text = get_text(elem)
             sub_text = ''
@@ -620,6 +638,14 @@ def get_apns_alert_subtitle(message: Message) -> str:
     return message.sender.full_name + ":"
 
 def get_apns_badge_count(user_profile: UserProfile, read_messages_ids: Optional[Sequence[int]]=[]) -> int:
+    # NOTE: We have temporarily set get_apns_badge_count to always
+    # return 0 until we can debug a likely mobile app side issue with
+    # handling notifications while the app is open.
+    return 0
+
+def get_apns_badge_count_future(user_profile: UserProfile, read_messages_ids: Optional[Sequence[int]]=[]) -> int:
+    # Future implementation of get_apns_badge_count; unused but
+    # we expect to use this once we resolve client-side bugs.
     return UserMessage.objects.filter(
         user_profile=user_profile
     ).extra(
@@ -753,7 +779,7 @@ def handle_push_notification(user_profile_id: int, missed_message: Dict[str, Any
             # If the cause is a race with the message being deleted,
             # that's normal and we have no need to log an error.
             return
-        logging.error(
+        logging.info(
             "Unexpected message access failure handling push notifications: %s %s",
             user_profile.id, missed_message['message_id'],
         )
@@ -803,9 +829,6 @@ def handle_push_notification(user_profile_id: int, missed_message: Dict[str, Any
     apple_devices = list(PushDeviceToken.objects.filter(user=user_profile,
                                                         kind=PushDeviceToken.APNS))
 
-    if apple_devices:
-        send_apple_push_notification(user_profile.id, apple_devices,
-                                     apns_payload)
+    send_apple_push_notification(user_profile.id, apple_devices, apns_payload)
 
-    if android_devices:
-        send_android_push_notification(android_devices, gcm_payload, gcm_options)
+    send_android_push_notification(android_devices, gcm_payload, gcm_options)

@@ -39,7 +39,7 @@ RUN apt-get update \
     locales \
     xvfb \
     parallel \
-    netcat unzip zip jq \
+    unzip zip jq \
     python3-pip \
   && ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime \
   && {{ locale-gen en_US.UTF-8 || true; }} \
@@ -92,9 +92,8 @@ RUN apt-get update \
     memcached rabbitmq-server redis-server \
     hunspell-en-us supervisor libssl-dev puppet \
     gettext libffi-dev libfreetype6-dev zlib1g-dev \
-    libjpeg-dev libldap2-dev libmemcached-dev \
-    libxml2-dev libxslt1-dev libpq-dev moreutils \
-    {extra_packages}
+    libjpeg-dev libldap2-dev \
+    libxml2-dev libxslt1-dev libpq-dev moreutils
 
 # Upgrade git if it is less than v2.18 because GitHub Actions'
 # checkout installs source code using Rest API as an optimization

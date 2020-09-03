@@ -3,8 +3,9 @@ import os
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 from unittest import mock
 
-import ujson
+import orjson
 from django.db import connection
+from django.http import HttpResponse
 from django.test import override_settings
 from django.utils.timezone import now as timezone_now
 from sqlalchemy.sql import and_, column, select, table
@@ -18,6 +19,7 @@ from zerver.lib.actions import (
     do_set_realm_property,
     do_update_message,
 )
+from zerver.lib.avatar import avatar_url
 from zerver.lib.markdown import MentionData
 from zerver.lib.message import (
     MessageDict,
@@ -29,7 +31,7 @@ from zerver.lib.message import (
 from zerver.lib.narrow import build_narrow_filter, is_web_public_compatible
 from zerver.lib.request import JsonableError
 from zerver.lib.sqlalchemy_utils import get_sqlalchemy_connection
-from zerver.lib.streams import create_streams_if_needed
+from zerver.lib.streams import create_streams_if_needed, get_public_streams_queryset
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import POSTRequestMock, get_user_messages, queries_captured
 from zerver.lib.topic import MATCH_TOPIC, TOPIC_NAME
@@ -41,8 +43,6 @@ from zerver.models import (
     Attachment,
     Message,
     Realm,
-    Recipient,
-    Stream,
     Subscription,
     UserMessage,
     UserProfile,
@@ -95,7 +95,7 @@ class NarrowBuilderTest(ZulipTestCase):
         super().setUp()
         self.realm = get_realm('zulip')
         self.user_profile = self.example_user('hamlet')
-        self.builder = NarrowBuilder(self.user_profile, column('id'))
+        self.builder = NarrowBuilder(self.user_profile, column('id'), self.realm)
         self.raw_query = select([column("id")], None, table("zerver_message"))
         self.hamlet_email = self.example_user('hamlet').email
         self.othello_email = self.example_user('othello').email
@@ -449,6 +449,16 @@ class NarrowBuilderTest(ZulipTestCase):
         query = self._build_query(term)
         self.assertEqual(get_sqlalchemy_sql(query), 'SELECT id \nFROM zerver_message')
 
+    def test_add_term_non_web_public_stream_in_web_public_query(self) -> None:
+        self.make_stream('non-web-public-stream', realm=self.realm)
+        term = dict(operator='stream', operand='non-web-public-stream')
+        builder = NarrowBuilder(self.user_profile, column('id'), self.realm, True)
+
+        def _build_query(term: Dict[str, Any]) -> Query:
+            return builder.add_term(self.raw_query, term)
+
+        self.assertRaises(BadNarrowOperator, _build_query, term)
+
     def _do_add_term_test(self, term: Dict[str, Any], where_clause: str,
                           params: Optional[Dict[str, Any]]=None) -> None:
         query = self._build_query(term)
@@ -464,8 +474,8 @@ class NarrowLibraryTest(ZulipTestCase):
     def test_build_narrow_filter(self) -> None:
         fixtures_path = os.path.join(os.path.dirname(__file__),
                                      'fixtures/narrow.json')
-        with open(fixtures_path) as f:
-            scenarios = ujson.load(f)
+        with open(fixtures_path, "rb") as f:
+            scenarios = orjson.loads(f.read())
         self.assertTrue(len(scenarios) == 9)
         for scenario in scenarios:
             narrow = scenario['narrow']
@@ -525,19 +535,19 @@ class IncludeHistoryTest(ZulipTestCase):
         narrow = [
             dict(operator='stream', operand='public_stream', negated=True),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # streams:public searches should include history for non-guest members.
         narrow = [
             dict(operator='streams', operand='public'),
         ]
-        self.assertTrue(ok_to_include_history(narrow, user_profile))
+        self.assertTrue(ok_to_include_history(narrow, user_profile, False))
 
         # Negated -streams:public searches should not include history.
         narrow = [
             dict(operator='streams', operand='public', negated=True),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # Definitely forbid seeing history on private streams.
         self.make_stream('private_stream', realm=user_profile.realm, invite_only=True)
@@ -546,7 +556,7 @@ class IncludeHistoryTest(ZulipTestCase):
         narrow = [
             dict(operator='stream', operand='private_stream'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # Verify that with stream.history_public_to_subscribers, subscribed
         # users can access history.
@@ -557,20 +567,20 @@ class IncludeHistoryTest(ZulipTestCase):
         narrow = [
             dict(operator='stream', operand='private_stream_2'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
-        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
+        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile, False))
 
         # History doesn't apply to PMs.
         narrow = [
             dict(operator='is', operand='private'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # History doesn't apply to unread messages.
         narrow = [
             dict(operator='is', operand='unread'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # If we are looking for something like starred messages, there is
         # no point in searching historical messages.
@@ -578,7 +588,7 @@ class IncludeHistoryTest(ZulipTestCase):
             dict(operator='stream', operand='public_stream'),
             dict(operator='is', operand='starred'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # No point in searching history for is operator even if included with
         # streams:public
@@ -586,30 +596,30 @@ class IncludeHistoryTest(ZulipTestCase):
             dict(operator='streams', operand='public'),
             dict(operator='is', operand='mentioned'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
         narrow = [
             dict(operator='streams', operand='public'),
             dict(operator='is', operand='unread'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
         narrow = [
             dict(operator='streams', operand='public'),
             dict(operator='is', operand='alerted'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, user_profile))
+        self.assertFalse(ok_to_include_history(narrow, user_profile, False))
 
         # simple True case
         narrow = [
             dict(operator='stream', operand='public_stream'),
         ]
-        self.assertTrue(ok_to_include_history(narrow, user_profile))
+        self.assertTrue(ok_to_include_history(narrow, user_profile, False))
 
         narrow = [
             dict(operator='stream', operand='public_stream'),
             dict(operator='topic', operand='whatever'),
             dict(operator='search', operand='needle in haystack'),
         ]
-        self.assertTrue(ok_to_include_history(narrow, user_profile))
+        self.assertTrue(ok_to_include_history(narrow, user_profile, False))
 
         # Tests for guest user
         guest_user_profile = self.example_user("polonius")
@@ -620,23 +630,23 @@ class IncludeHistoryTest(ZulipTestCase):
         narrow = [
             dict(operator='streams', operand='public'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, guest_user_profile))
+        self.assertFalse(ok_to_include_history(narrow, guest_user_profile, False))
 
         # Guest user can't access public stream
         self.subscribe(subscribed_user_profile, 'public_stream_2')
         narrow = [
             dict(operator='stream', operand='public_stream_2'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, guest_user_profile))
-        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile))
+        self.assertFalse(ok_to_include_history(narrow, guest_user_profile, False))
+        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile, False))
 
         # Definitely, a guest user can't access the unsubscribed private stream
         self.subscribe(subscribed_user_profile, 'private_stream_3')
         narrow = [
             dict(operator='stream', operand='private_stream_3'),
         ]
-        self.assertFalse(ok_to_include_history(narrow, guest_user_profile))
-        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile))
+        self.assertFalse(ok_to_include_history(narrow, guest_user_profile, False))
+        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile, False))
 
         # Guest user can access (history of) subscribed private streams
         self.subscribe(guest_user_profile, 'private_stream_4')
@@ -644,8 +654,8 @@ class IncludeHistoryTest(ZulipTestCase):
         narrow = [
             dict(operator='stream', operand='private_stream_4'),
         ]
-        self.assertTrue(ok_to_include_history(narrow, guest_user_profile))
-        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile))
+        self.assertTrue(ok_to_include_history(narrow, guest_user_profile, False))
+        self.assertTrue(ok_to_include_history(narrow, subscribed_user_profile, False))
 
 class PostProcessTest(ZulipTestCase):
     def test_basics(self) -> None:
@@ -1059,14 +1069,14 @@ class GetOldMessagesTest(ZulipTestCase):
         self.assertEqual(set(payload["Cache-Control"].split(", ")),
                          {"must-revalidate", "no-store", "no-cache", "max-age=0"})
 
-        result = ujson.loads(payload.content)
+        result = orjson.loads(payload.content)
 
         self.assertIn("messages", result)
         self.assertIsInstance(result["messages"], list)
         for message in result["messages"]:
             for field in ("content", "content_type", "display_recipient",
                           "avatar_url", "recipient_id", "sender_full_name",
-                          "sender_short_name", "timestamp", "reactions"):
+                          "timestamp", "reactions"):
                 self.assertIn(field, message)
         return result
 
@@ -1074,11 +1084,11 @@ class GetOldMessagesTest(ZulipTestCase):
                                 message_ids: List[int], pivot_index: int) -> None:
         num_before = len(message_ids)
 
-        post_params = dict(narrow=ujson.dumps(narrow), num_before=num_before,
+        post_params = dict(narrow=orjson.dumps(narrow).decode(), num_before=num_before,
                            num_after=0, anchor=LARGER_THAN_MAX_MESSAGE_ID)
         payload = self.client_get("/json/messages", dict(post_params))
         self.assert_json_success(payload)
-        result = ujson.loads(payload.content)
+        result = orjson.loads(payload.content)
 
         self.assertEqual(len(result["messages"]), len(message_ids))
         for message in result["messages"]:
@@ -1090,7 +1100,7 @@ class GetOldMessagesTest(ZulipTestCase):
             payload = self.client_get("/json/messages", dict(post_params))
 
         self.assert_json_success(payload)
-        result = ujson.loads(payload.content)
+        result = orjson.loads(payload.content)
 
         self.assertEqual(len(result["messages"]), len(message_ids[pivot_index:]))
         for message in result["messages"]:
@@ -1108,11 +1118,8 @@ class GetOldMessagesTest(ZulipTestCase):
         query_ids['othello_id'] = othello_user.id
         query_ids['hamlet_recipient'] = hamlet_user.recipient_id
         query_ids['othello_recipient'] = othello_user.recipient_id
-        recipients = Recipient.objects.filter(
-            type=Recipient.STREAM,
-            type_id__in=Stream.objects.filter(realm=hamlet_user.realm, invite_only=False),
-        ).values('id').order_by('id')
-        query_ids['public_streams_recipents'] = ", ".join(str(r['id']) for r in recipients)
+        recipients = get_public_streams_queryset(hamlet_user.realm).values_list("recipient_id", flat=True).order_by('id')
+        query_ids['public_streams_recipents'] = ", ".join(str(r) for r in recipients)
         return query_ids
 
     def test_content_types(self) -> None:
@@ -1123,7 +1130,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         def get_content_type(apply_markdown: bool) -> str:
             req: Dict[str, Any] = dict(
-                apply_markdown=ujson.dumps(apply_markdown),
+                apply_markdown=orjson.dumps(apply_markdown).decode(),
             )
             result = self.get_and_check_messages(req)
             message = result['messages'][0]
@@ -1144,7 +1151,7 @@ class GetOldMessagesTest(ZulipTestCase):
         Test old `/json/messages` returns reactions.
         """
         self.login('hamlet')
-        messages = self.get_and_check_messages(dict())
+        messages = self.get_and_check_messages({})
         message_id = messages['messages'][0]['id']
 
         self.login('othello')
@@ -1175,7 +1182,7 @@ class GetOldMessagesTest(ZulipTestCase):
         messages.
         """
         self.login('hamlet')
-        self.get_and_check_messages(dict())
+        self.get_and_check_messages({})
 
         othello_email = self.example_user('othello').email
 
@@ -1183,19 +1190,170 @@ class GetOldMessagesTest(ZulipTestCase):
         # clients around, which might include third party home-grown bots.
         self.get_and_check_messages(
             dict(
-                narrow=ujson.dumps(
+                narrow=orjson.dumps(
                     [['pm-with', othello_email]],
-                ),
+                ).decode(),
             ),
         )
 
         self.get_and_check_messages(
             dict(
-                narrow=ujson.dumps(
+                narrow=orjson.dumps(
                     [dict(operator='pm-with', operand=othello_email)],
-                ),
+                ).decode(),
             ),
         )
+
+    def test_unauthenticated_get_messages_non_existant_realm(self) -> None:
+        post_params = {
+            "anchor": 10000000000000000,
+            "num_before": 5,
+            "num_after": 1,
+            "narrow": orjson.dumps([dict(operator='streams', operand="web-public")]).decode(),
+        }
+
+        with mock.patch('zerver.context_processors.get_realm', side_effect=Realm.DoesNotExist):
+            result = self.client_get("/json/messages", dict(post_params))
+            self.assert_json_error(result, "Invalid subdomain",
+                                   status_code=404)
+
+    def test_unauthenticated_get_messages_without_web_public(self) -> None:
+        """
+        An unauthenticated call to GET /json/messages with valid parameters
+        returns a 401.
+        """
+        post_params = {
+            "anchor": 1,
+            "num_before": 1,
+            "num_after": 1,
+            "narrow": orjson.dumps([dict(operator='is', operand="private")]).decode(),
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        self.assert_json_error(result, "Not logged in: API authentication or user session required",
+                               status_code=401)
+
+        post_params = {
+            "anchor": 10000000000000000,
+            "num_before": 5,
+            "num_after": 1,
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        self.assert_json_error(result, "Not logged in: API authentication or user session required",
+                               status_code=401)
+
+    def test_unauthenticated_get_messages_with_web_public(self) -> None:
+        """
+        An unauthenticated call to GET /json/messages without valid
+        parameters in the `streams:web-public` narrow returns a 401.
+        """
+        post_params: Dict[str, Union[int, str, bool]] = {
+            "anchor": 1,
+            "num_before": 1,
+            "num_after": 1,
+            # "is:private" is not a is_web_public_compatible narrow.
+            "narrow": orjson.dumps([dict(operator="streams", operand="web-public"),
+                                    dict(operator="is", operand="private")]).decode(),
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        self.assert_json_error(result, 'Not logged in: API authentication or user session required',
+                               status_code=401)
+
+    def test_unauthenticated_narrow_to_non_web_public_streams_without_web_public(self) -> None:
+        """
+        An unauthenticated call to GET /json/messages without `streams:web-public` narrow returns a 401.
+        """
+        post_params: Dict[str, Union[int, str, bool]] = {
+            "anchor": 1,
+            "num_before": 1,
+            "num_after": 1,
+            "narrow": orjson.dumps([dict(operator='stream', operand='Scotland')]).decode(),
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        self.assert_json_error(result, "Not logged in: API authentication or user session required",
+                               status_code=401)
+
+    def test_unauthenticated_narrow_to_non_web_public_streams_with_web_public(self) -> None:
+        """
+        An unauthenticated call to GET /json/messages with valid
+        parameters in the `streams:web-public` narrow + narrow to stream returns
+        a 400 if the target stream is not web-public.
+        """
+        post_params: Dict[str, Union[int, str, bool]] = {
+            "anchor": 1,
+            "num_before": 1,
+            "num_after": 1,
+            "narrow": orjson.dumps([dict(operator="streams", operand="web-public"),
+                                    dict(operator='stream', operand='Scotland')]).decode(),
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        self.assert_json_error(result, 'Invalid narrow operator: unknown web-public stream Scotland',
+                               status_code=400)
+
+    def setup_web_public_test(self, num_web_public_message: int=1) -> None:
+        """
+        Send N+2 messages, N in a web-public stream, then one in a non web-public stream
+        and then a private message.
+        """
+        user_profile = self.example_user('iago')
+        self.login('iago')
+        web_public_stream = self.make_stream('web-public-stream', is_web_public=True)
+        non_web_public_stream = self.make_stream('non-web-public-stream')
+        self.subscribe(user_profile, web_public_stream.name)
+        self.subscribe(user_profile, non_web_public_stream.name)
+
+        for _ in range(num_web_public_message):
+            self.send_stream_message(user_profile, web_public_stream.name,
+                                     content="web-public message")
+        self.send_stream_message(user_profile, non_web_public_stream.name,
+                                 content="non web-public message")
+        self.send_personal_message(user_profile, self.example_user('hamlet'),
+                                   content="private message")
+        self.logout()
+
+    def verify_web_public_query_result_success(self, result: HttpResponse, expected_num_messages: int) -> None:
+        self.assert_json_success(result)
+        messages = orjson.loads(result.content)['messages']
+        self.assert_length(messages, expected_num_messages)
+        sender = self.example_user('iago')
+        for msg in messages:
+            self.assertEqual(msg['content'], '<p>web-public message</p>')
+            self.assertEqual(msg['flags'], ['read'])
+            self.assertEqual(msg['sender_email'], sender.email)
+            self.assertEqual(msg['avatar_url'], avatar_url(sender))
+
+    def test_unauthenticated_narrow_to_web_public_streams(self) -> None:
+        self.setup_web_public_test()
+
+        post_params: Dict[str, Union[int, str, bool]] = {
+            "anchor": 1,
+            "num_before": 1,
+            "num_after": 1,
+            "narrow": orjson.dumps([dict(operator="streams", operand="web-public"),
+                                    dict(operator='stream', operand='web-public-stream')]).decode(),
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        self.verify_web_public_query_result_success(result, 1)
+
+    def test_get_messages_with_web_public(self) -> None:
+        """
+        An unauthenticated call to GET /json/messages with valid parameters
+        including `streams:web-public` narrow returns list of messages in the
+        `web-public` streams.
+        """
+        self.setup_web_public_test(num_web_public_message=8)
+
+        post_params = {
+            "anchor": "first_unread",
+            "num_before": 5,
+            "num_after": 1,
+            "narrow": orjson.dumps([dict(operator='streams', operand="web-public")]).decode(),
+        }
+        result = self.client_get("/json/messages", dict(post_params))
+        # Of the last 7 (num_before + num_after + 1) messages, only 5
+        # messages are returned, which were all web-public messages.
+        # The other two messages should not be returned even though
+        # they are the most recent.
+        self.verify_web_public_query_result_success(result, 5)
 
     def test_client_avatar(self) -> None:
         """
@@ -1213,14 +1371,14 @@ class GetOldMessagesTest(ZulipTestCase):
         message = result['messages'][0]
         self.assertIn('gravatar.com', message['avatar_url'])
 
-        result = self.get_and_check_messages(dict(client_gravatar=ujson.dumps(True)))
+        result = self.get_and_check_messages(dict(client_gravatar=orjson.dumps(True).decode()))
         message = result['messages'][0]
         self.assertEqual(message['avatar_url'], None)
 
         # Now verify client_gravatar doesn't run with EMAIL_ADDRESS_VISIBILITY_ADMINS
         do_set_realm_property(hamlet.realm, "email_address_visibility",
                               Realm.EMAIL_ADDRESS_VISIBILITY_ADMINS)
-        result = self.get_and_check_messages(dict(client_gravatar=ujson.dumps(True)))
+        result = self.get_and_check_messages(dict(client_gravatar=orjson.dumps(True).decode()))
         message = result['messages'][0]
         self.assertIn('gravatar.com', message['avatar_url'])
 
@@ -1233,11 +1391,11 @@ class GetOldMessagesTest(ZulipTestCase):
 
         def dr_emails(dr: DisplayRecipientT) -> str:
             assert isinstance(dr, list)
-            return ','.join(sorted(set([r['email'] for r in dr] + [me.email])))
+            return ','.join(sorted({*(r['email'] for r in dr), me.email}))
 
         def dr_ids(dr: DisplayRecipientT) -> List[int]:
             assert isinstance(dr, list)
-            return list(sorted(set([r['id'] for r in dr] + [self.example_user('hamlet').id])))
+            return sorted({*(r['id'] for r in dr), self.example_user('hamlet').id})
 
         self.send_personal_message(me, self.example_user("iago"))
 
@@ -1264,7 +1422,7 @@ class GetOldMessagesTest(ZulipTestCase):
             emails = dr_emails(get_display_recipient(personal.recipient))
             self.login_user(me)
             narrow: List[Dict[str, Any]] = [dict(operator='pm-with', operand=emails)]
-            result = self.get_and_check_messages(dict(narrow=ujson.dumps(narrow)))
+            result = self.get_and_check_messages(dict(narrow=orjson.dumps(narrow).decode()))
 
             for message in result["messages"]:
                 self.assertEqual(dr_emails(message['display_recipient']), emails)
@@ -1272,7 +1430,7 @@ class GetOldMessagesTest(ZulipTestCase):
             # check passing id is conistent with passing emails as operand
             ids = dr_ids(get_display_recipient(personal.recipient))
             narrow = [dict(operator='pm-with', operand=ids)]
-            result = self.get_and_check_messages(dict(narrow=ujson.dumps(narrow)))
+            result = self.get_and_check_messages(dict(narrow=orjson.dumps(narrow).decode()))
 
             for message in result["messages"]:
                 self.assertEqual(dr_emails(message['display_recipient']), emails)
@@ -1340,7 +1498,7 @@ class GetOldMessagesTest(ZulipTestCase):
         test_operands = [cordelia.email, cordelia.id]
         for operand in test_operands:
             narrow = [dict(operator='group-pm-with', operand=operand)]
-            result = self.get_and_check_messages(dict(narrow=ujson.dumps(narrow)))
+            result = self.get_and_check_messages(dict(narrow=orjson.dumps(narrow).decode()))
             for message in result["messages"]:
                 self.assertIn(message["id"], matching_message_ids)
                 self.assertNotIn(message["id"], non_matching_message_ids)
@@ -1396,7 +1554,7 @@ class GetOldMessagesTest(ZulipTestCase):
         ]
 
         req = dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=LARGER_THAN_MAX_MESSAGE_ID,
             num_before=100,
             num_after=100,
@@ -1404,7 +1562,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         payload = self.client_get('/json/messages', req)
         self.assert_json_success(payload)
-        result = ujson.loads(payload.content)
+        result = orjson.loads(payload.content)
         messages = result['messages']
         self.assertEqual(len(messages), 2)
 
@@ -1437,7 +1595,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         for operand in [stream_name, stream_id]:
             narrow = [dict(operator='stream', operand=operand)]
-            result = self.get_and_check_messages(dict(narrow=ujson.dumps(narrow)))
+            result = self.get_and_check_messages(dict(narrow=orjson.dumps(narrow).decode()))
 
             for message in result["messages"]:
                 self.assertEqual(message["type"], "stream")
@@ -1476,7 +1634,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         narrow = [dict(operator='stream', operand='\u03bb-stream')]
         result = self.get_and_check_messages(dict(num_after=2,
-                                                  narrow=ujson.dumps(narrow)),
+                                                  narrow=orjson.dumps(narrow).decode()),
                                              subdomain="zephyr")
 
         messages = get_user_messages(self.mit_user("starnine"))
@@ -1507,7 +1665,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         narrow = [dict(operator='topic', operand='\u03bb-topic')]
         result = self.get_and_check_messages(
-            dict(num_after=100, narrow=ujson.dumps(narrow)),
+            dict(num_after=100, narrow=orjson.dumps(narrow).decode()),
             subdomain="zephyr")
 
         messages = get_user_messages(mit_user_profile)
@@ -1542,7 +1700,7 @@ class GetOldMessagesTest(ZulipTestCase):
         result = self.get_and_check_messages(
             dict(num_before=50,
                  num_after=50,
-                 narrow=ujson.dumps(narrow)),
+                 narrow=orjson.dumps(narrow).decode()),
             subdomain="zephyr")
 
         messages = get_user_messages(mit_user_profile)
@@ -1574,7 +1732,7 @@ class GetOldMessagesTest(ZulipTestCase):
         test_operands = [othello.email, othello.id]
         for operand in test_operands:
             narrow = [dict(operator='sender', operand=operand)]
-            result = self.get_and_check_messages(dict(narrow=ujson.dumps(narrow)))
+            result = self.get_and_check_messages(dict(narrow=orjson.dumps(narrow).decode()))
 
             for message in result["messages"]:
                 self.assertEqual(message["sender_id"], othello.id)
@@ -1616,7 +1774,7 @@ class GetOldMessagesTest(ZulipTestCase):
         ]
 
         raw_params = dict(msg_ids=msg_ids, narrow=narrow)
-        params = {k: ujson.dumps(v) for k, v in raw_params.items()}
+        params = {k: orjson.dumps(v).decode() for k, v in raw_params.items()}
         result = self.client_get('/json/messages/matches_narrow', params)
         self.assert_json_success(result)
         messages = result.json()['messages']
@@ -1661,7 +1819,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='lunch'),
         ]
         result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_before=0,
             num_after=10,
@@ -1671,7 +1829,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         narrow = [dict(operator='search', operand='https://google.com')]
         link_search_result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_before=0,
             num_after=10,
@@ -1709,7 +1867,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='after'),
         ]
         multi_search_result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(multi_search_narrow),
+            narrow=orjson.dumps(multi_search_narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1722,7 +1880,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='日本'),
         ]
         result = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1758,7 +1916,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='今日は'),
         ]
         multi_search_result = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(multi_search_narrow),
+            narrow=orjson.dumps(multi_search_narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1806,7 +1964,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='stream', operand='newstream'),
         ]
         stream_search_result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(stream_search_narrow),
+            narrow=orjson.dumps(stream_search_narrow).decode(),
             anchor=0,
             num_after=10,
             num_before=10,
@@ -1853,7 +2011,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='日本'),
         ]
         result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1889,7 +2047,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='wiki'),
         ]
         multi_search_result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(multi_search_narrow),
+            narrow=orjson.dumps(multi_search_narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1904,7 +2062,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='べました'),
         ]
         multi_search_result = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(multi_search_narrow),
+            narrow=orjson.dumps(multi_search_narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1915,7 +2073,7 @@ class GetOldMessagesTest(ZulipTestCase):
 
         narrow = [dict(operator='search', operand='https://google.com')]
         link_search_result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1929,7 +2087,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='butter'),
         ]
         special_search_result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(special_search_narrow),
+            narrow=orjson.dumps(special_search_narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1942,7 +2100,7 @@ class GetOldMessagesTest(ZulipTestCase):
             dict(operator='search', operand='&'),
         ]
         special_search_result = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(special_search_narrow),
+            narrow=orjson.dumps(special_search_narrow).decode(),
             anchor=next_message_id,
             num_after=10,
             num_before=0,
@@ -1976,7 +2134,7 @@ class GetOldMessagesTest(ZulipTestCase):
         ]
 
         raw_params = dict(msg_ids=msg_ids, narrow=narrow)
-        params = {k: ujson.dumps(v) for k, v in raw_params.items()}
+        params = {k: orjson.dumps(v).decode() for k, v in raw_params.items()}
         result = self.client_get('/json/messages/matches_narrow', params)
         self.assert_json_success(result)
         messages = result.json()['messages']
@@ -1999,14 +2157,14 @@ class GetOldMessagesTest(ZulipTestCase):
 
         narrow = [dict(operator='sender', operand=cordelia.email)]
         result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=anchor, num_before=0,
             num_after=0,
         ))
         self.assertEqual(len(result['messages']), 1)
 
         narrow = [dict(operator='is', operand='mentioned')]
-        result = self.get_and_check_messages(dict(narrow=ujson.dumps(narrow),
+        result = self.get_and_check_messages(dict(narrow=orjson.dumps(narrow).decode(),
                                                   anchor=anchor, num_before=0,
                                                   num_after=0))
         self.assertEqual(len(result['messages']), 0)
@@ -2291,7 +2449,7 @@ class GetOldMessagesTest(ZulipTestCase):
         """
         self.login('hamlet')
 
-        other_params = [("narrow", {}), ("anchor", 0)]
+        other_params = {"narrow": {}, "anchor": 0}
         int_params = ["num_before", "num_after"]
 
         bad_types = (False, "", "-1", -1)
@@ -2299,10 +2457,12 @@ class GetOldMessagesTest(ZulipTestCase):
             for type in bad_types:
                 # Rotate through every bad type for every integer
                 # parameter, one at a time.
-                post_params = dict(other_params + [(param, type)] +
-                                   [(other_param, 0) for other_param in
-                                    int_params[:idx] + int_params[idx + 1:]],
-                                   )
+                post_params = {
+                    **other_params,
+                    param: type,
+                    **{other_param: 0 for other_param in
+                       int_params[:idx] + int_params[idx + 1:]},
+                }
                 result = self.client_get("/json/messages", post_params)
                 self.assert_json_error(result,
                                        f"Bad value for '{param}': {type}")
@@ -2313,14 +2473,14 @@ class GetOldMessagesTest(ZulipTestCase):
         """
         self.login('hamlet')
 
-        other_params: List[Tuple[str, Union[int, str, bool]]] = [("anchor", 0), ("num_before", 0), ("num_after", 0)]
+        other_params = {"anchor": 0, "num_before": 0, "num_after": 0}
 
         bad_types: Tuple[Union[int, str, bool], ...] = (
             False, 0, '', '{malformed json,',
             '{foo: 3}', '[1,2]', '[["x","y","z"]]',
         )
         for type in bad_types:
-            post_params = dict(other_params + [("narrow", type)])
+            post_params = {**other_params, "narrow": type}
             result = self.client_get("/json/messages", post_params)
             self.assert_json_error(result,
                                    f"Bad value for 'narrow': {type}")
@@ -2332,7 +2492,7 @@ class GetOldMessagesTest(ZulipTestCase):
         self.login('hamlet')
         for operator in ['', 'foo', 'stream:verona', '__init__']:
             narrow = [dict(operator=operator, operand='')]
-            params = dict(anchor=0, num_before=0, num_after=0, narrow=ujson.dumps(narrow))
+            params = dict(anchor=0, num_before=0, num_after=0, narrow=orjson.dumps(narrow).decode())
             result = self.client_get("/json/messages", params)
             self.assert_json_error_contains(result,
                                             "Invalid narrow operator: unknown operator")
@@ -2373,17 +2533,16 @@ class GetOldMessagesTest(ZulipTestCase):
 
         for operand in operands:
             narrow = [dict(operator=operator, operand=operand)]
-            params = dict(anchor=0, num_before=0, num_after=0, narrow=ujson.dumps(narrow))
+            params = dict(anchor=0, num_before=0, num_after=0, narrow=orjson.dumps(narrow).decode())
             result = self.client_get('/json/messages', params)
             self.assert_json_error_contains(result, error_msg)
 
     def exercise_bad_narrow_operand(self, operator: str,
                                     operands: Sequence[Any],
                                     error_msg: str) -> None:
-        other_params: List[Tuple[str, Any]] = [("anchor", 0), ("num_before", 0), ("num_after", 0)]
+        other_params = {"anchor": "0", "num_before": "0", "num_after": "0"}
         for operand in operands:
-            post_params = dict(other_params + [
-                ("narrow", ujson.dumps([[operator, operand]]))])
+            post_params = {**other_params, "narrow": orjson.dumps([[operator, operand]]).decode()}
             result = self.client_get("/json/messages", post_params)
             self.assert_json_error_contains(result, error_msg)
 
@@ -2503,7 +2662,7 @@ class GetOldMessagesTest(ZulipTestCase):
         request = POSTRequestMock(query_params, user_profile)
 
         payload = get_messages_backend(request, user_profile)
-        result = ujson.loads(payload.content)
+        result = orjson.loads(payload.content)
         self.assertEqual(result['anchor'], first_message_id)
         self.assertEqual(result['found_newest'], True)
         self.assertEqual(result['found_oldest'], True)
@@ -2947,7 +3106,7 @@ WHERE user_profile_id = {hamlet_id} AND (content ILIKE '%jumping%' OR subject IL
             dict(operator='search', operand=othello.email),
         ]
         result: Dict[str, Any] = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_after=10,
         ))
@@ -2958,7 +3117,7 @@ WHERE user_profile_id = {hamlet_id} AND (content ILIKE '%jumping%' OR subject IL
             dict(operator='search', operand='othello'),
         ]
         result = self.get_and_check_messages(dict(
-            narrow=ujson.dumps(narrow),
+            narrow=orjson.dumps(narrow).decode(),
             anchor=next_message_id,
             num_after=10,
         ))
@@ -3041,7 +3200,7 @@ class MessageHasKeywordsTest(ZulipTestCase):
             msg_ids.append(self.send_stream_message(self.example_user('hamlet'),
                                                     'Denmark', content=msg_content))
         msgs = [Message.objects.get(id=id) for id in msg_ids]
-        self.assertTrue(all([msg.has_link for msg in msgs]))
+        self.assertTrue(all(msg.has_link for msg in msgs))
 
     def test_finds_only_links(self) -> None:
         msg_ids = []
@@ -3050,7 +3209,7 @@ class MessageHasKeywordsTest(ZulipTestCase):
             msg_ids.append(self.send_stream_message(self.example_user('hamlet'),
                                                     'Denmark', content=msg_content))
         msgs = [Message.objects.get(id=id) for id in msg_ids]
-        self.assertFalse(all([msg.has_link for msg in msgs]))
+        self.assertFalse(all(msg.has_link for msg in msgs))
 
     def update_message(self, msg: Message, content: str) -> None:
         hamlet = self.example_user('hamlet')

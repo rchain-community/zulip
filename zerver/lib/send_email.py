@@ -8,7 +8,7 @@ from email.policy import default
 from email.utils import formataddr, parseaddr
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-import ujson
+import orjson
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.core.management import CommandError
@@ -64,7 +64,7 @@ def build_email(template_prefix: str, to_user_ids: Optional[List[int]]=None,
     if to_user_ids is not None:
         to_users = [get_user_profile_by_id(to_user_id) for to_user_id in to_user_ids]
         if realm is None:
-            assert len(set([to_user.realm_id for to_user in to_users])) == 1
+            assert len({to_user.realm_id for to_user in to_users}) == 1
             realm = to_users[0].realm
         to_emails = [str(Address(display_name=to_user.full_name, addr_spec=to_user.delivery_email)) for to_user in to_users]
 
@@ -187,7 +187,7 @@ def send_future_email(template_prefix: str, realm: Realm, to_user_ids: Optional[
         type=EMAIL_TYPES[template_name],
         scheduled_timestamp=timezone_now() + delay,
         realm=realm,
-        data=ujson.dumps(email_fields))
+        data=orjson.dumps(email_fields).decode())
 
     # We store the recipients in the ScheduledEmail object itself,
     # rather than the JSON data object, so that we can find and clear
@@ -241,7 +241,7 @@ def handle_send_email_format_changes(job: Dict[str, Any]) -> None:
         del job['to_user_id']
 
 def deliver_email(email: ScheduledEmail) -> None:
-    data = ujson.loads(email.data)
+    data = orjson.loads(email.data)
     if email.users.exists():
         data['to_user_ids'] = [user.id for user in email.users.all()]
     if email.address is not None:
@@ -280,7 +280,7 @@ def send_custom_email(users: List[UserProfile], options: Dict[str, Any]) -> None
     subject_path = f"templates/{email_id}.subject.txt"
     os.makedirs(os.path.dirname(html_source_template_path), exist_ok=True)
 
-    # First, we render the markdown input file just like our
+    # First, we render the Markdown input file just like our
     # user-facing docs with render_markdown_path.
     with open(plain_text_template_path, "w") as f:
         f.write(parsed_email_template.get_payload())

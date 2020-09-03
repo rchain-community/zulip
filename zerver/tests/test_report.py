@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 from unittest import mock
 
-import ujson
+import orjson
 from django.test import override_settings
 
 from zerver.lib.test_classes import ZulipTestCase
@@ -11,7 +11,7 @@ from zerver.lib.utils import statsd
 def fix_params(raw_params: Dict[str, Any]) -> Dict[str, str]:
     # A few of our few legacy endpoints need their
     # individual parameters serialized as JSON.
-    return {k: ujson.dumps(v) for k, v in raw_params.items()}
+    return {k: orjson.dumps(v).decode() for k, v in raw_params.items()}
 
 class StatsMock:
     def __init__(self, settings: Callable[..., Any]) -> None:
@@ -97,6 +97,7 @@ class TestReport(ZulipTestCase):
     def test_report_error(self) -> None:
         user = self.example_user('hamlet')
         self.login_user(user)
+        self.make_stream('errors', user.realm)
 
         params = fix_params(dict(
             message='hello',
@@ -139,21 +140,33 @@ class TestReport(ZulipTestCase):
         # js_source_map actually gets instantiated.
         with \
                 self.settings(DEVELOPMENT=False, TEST_SUITE=False), \
-                mock.patch('zerver.lib.unminify.SourceMap.annotate_stacktrace') as annotate:
+                mock.patch('zerver.lib.unminify.SourceMap.annotate_stacktrace') as annotate, \
+                self.assertLogs(level='INFO') as info_logs:
             result = self.client_post("/json/report/error", params)
         self.assert_json_success(result)
         # fix_params (see above) adds quotes when JSON encoding.
         annotate.assert_called_once_with('"trace"')
+        self.assertEqual(info_logs.output, [
+            'INFO:root:Processing traceback with type browser for None'
+        ])
 
         # Now test without authentication.
         self.logout()
         with \
                 self.settings(DEVELOPMENT=False, TEST_SUITE=False), \
-                mock.patch('zerver.lib.unminify.SourceMap.annotate_stacktrace') as annotate:
+                mock.patch('zerver.lib.unminify.SourceMap.annotate_stacktrace') as annotate, \
+                self.assertLogs(level='INFO') as info_logs:
             result = self.client_post("/json/report/error", params)
         self.assert_json_success(result)
+        self.assertEqual(info_logs.output, [
+            'INFO:root:Processing traceback with type browser for None'
+        ])
 
     def test_report_csp_violations(self) -> None:
         fixture_data = self.fixture_data('csp_report.json')
-        result = self.client_post("/report/csp_violations", fixture_data, content_type="application/json")
+        with self.assertLogs(level='WARNING') as warn_logs:
+            result = self.client_post("/report/csp_violations", fixture_data, content_type="application/json")
         self.assert_json_success(result)
+        self.assertEqual(warn_logs.output, [
+            "WARNING:root:CSP Violation in Document(''). Blocked URI(''), Original Policy(''), Violated Directive(''), Effective Directive(''), Disposition(''), Referrer(''), Status Code(''), Script Sample('')"
+        ])

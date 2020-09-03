@@ -3,7 +3,7 @@ from email.headerregistry import Address
 from typing import Any, Dict, Iterable, List, Mapping, Optional, TypeVar, Union
 from unittest import mock
 
-import ujson
+import orjson
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.test import override_settings
@@ -205,7 +205,7 @@ class PermissionTest(ZulipTestCase):
         self.assertFalse(othello_dict['is_admin'])
 
         # Giveth
-        req = dict(role=ujson.dumps(UserProfile.ROLE_REALM_ADMINISTRATOR))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_REALM_ADMINISTRATOR).decode())
 
         events: List[Mapping[str, Any]] = []
         with tornado_redirected_to_list(events):
@@ -218,7 +218,7 @@ class PermissionTest(ZulipTestCase):
         self.assertEqual(person['role'], UserProfile.ROLE_REALM_ADMINISTRATOR)
 
         # Taketh away
-        req = dict(role=ujson.dumps(UserProfile.ROLE_MEMBER))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_MEMBER).decode())
         events = []
         with tornado_redirected_to_list(events):
             result = self.client_patch(f'/json/users/{othello.id}', req)
@@ -303,7 +303,7 @@ class PermissionTest(ZulipTestCase):
 
     def test_user_cannot_promote_to_admin(self) -> None:
         self.login('hamlet')
-        req = dict(role=ujson.dumps(UserProfile.ROLE_REALM_ADMINISTRATOR))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_REALM_ADMINISTRATOR).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_error(result, 'Insufficient permission')
 
@@ -311,7 +311,7 @@ class PermissionTest(ZulipTestCase):
         new_name = 'new name'
         self.login('iago')
         hamlet = self.example_user('hamlet')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch(f'/json/users/{hamlet.id}', req)
         self.assert_json_success(result)
         hamlet = self.example_user('hamlet')
@@ -319,51 +319,51 @@ class PermissionTest(ZulipTestCase):
 
     def test_non_admin_cannot_change_full_name(self) -> None:
         self.login('hamlet')
-        req = dict(full_name=ujson.dumps('new name'))
+        req = dict(full_name=orjson.dumps('new name').decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('othello').id), req)
         self.assert_json_error(result, 'Insufficient permission')
 
     def test_admin_cannot_set_long_full_name(self) -> None:
         new_name = 'a' * (UserProfile.MAX_NAME_LENGTH + 1)
         self.login('iago')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_error(result, 'Name too long!')
 
     def test_admin_cannot_set_short_full_name(self) -> None:
         new_name = 'a'
         self.login('iago')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_error(result, 'Name too short!')
 
     def test_not_allowed_format(self) -> None:
-        # Name of format "Alice|999" breaks in markdown
+        # Name of format "Alice|999" breaks in Markdown
         new_name = 'iago|72'
         self.login('iago')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_error(result, 'Invalid format!')
 
     def test_allowed_format_complex(self) -> None:
-        # Adding characters after r'|d+' doesn't break markdown
+        # Adding characters after r'|d+' doesn't break Markdown
         new_name = 'Hello- 12iago|72k'
         self.login('iago')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_success(result)
 
     def test_not_allowed_format_complex(self) -> None:
         new_name = 'Hello- 12iago|72'
         self.login('iago')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_error(result, 'Invalid format!')
 
     def test_admin_cannot_set_full_name_with_invalid_characters(self) -> None:
         new_name = 'Opheli*'
         self.login('iago')
-        req = dict(full_name=ujson.dumps(new_name))
+        req = dict(full_name=orjson.dumps(new_name).decode())
         result = self.client_patch('/json/users/{}'.format(self.example_user('hamlet').id), req)
         self.assert_json_error(result, 'Invalid characters in name!')
 
@@ -403,7 +403,7 @@ class PermissionTest(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         self.assertFalse(hamlet.is_guest)
 
-        req = dict(role=ujson.dumps(UserProfile.ROLE_GUEST))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_GUEST).decode())
         events: List[Mapping[str, Any]] = []
         with tornado_redirected_to_list(events):
             result = self.client_patch(f'/json/users/{hamlet.id}', req)
@@ -422,7 +422,7 @@ class PermissionTest(ZulipTestCase):
 
         polonius = self.example_user("polonius")
         self.assertTrue(polonius.is_guest)
-        req = dict(role=ujson.dumps(UserProfile.ROLE_MEMBER))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_MEMBER).decode())
         events: List[Mapping[str, Any]] = []
         with tornado_redirected_to_list(events):
             result = self.client_patch(f'/json/users/{polonius.id}', req)
@@ -445,7 +445,7 @@ class PermissionTest(ZulipTestCase):
         # Test changing a user from admin to guest and revoking admin status
         hamlet = self.example_user("hamlet")
         self.assertFalse(hamlet.is_guest)
-        req = dict(role=ujson.dumps(UserProfile.ROLE_GUEST))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_GUEST).decode())
         events: List[Mapping[str, Any]] = []
         with tornado_redirected_to_list(events):
             result = self.client_patch(f'/json/users/{hamlet.id}', req)
@@ -469,7 +469,7 @@ class PermissionTest(ZulipTestCase):
         # Test changing a user from guest to admin and revoking guest status
         polonius = self.example_user("polonius")
         self.assertFalse(polonius.is_realm_admin)
-        req = dict(role=ujson.dumps(UserProfile.ROLE_REALM_ADMINISTRATOR))
+        req = dict(role=orjson.dumps(UserProfile.ROLE_REALM_ADMINISTRATOR).decode())
         events: List[Mapping[str, Any]] = []
         with tornado_redirected_to_list(events):
             result = self.client_patch(f'/json/users/{polonius.id}', req)
@@ -603,7 +603,7 @@ class PermissionTest(ZulipTestCase):
             })
 
         result = self.client_patch(f'/json/users/{cordelia.id}',
-                                   {'profile_data': ujson.dumps(new_profile_data)})
+                                   {'profile_data': orjson.dumps(new_profile_data).decode()})
         self.assert_json_success(result)
 
         cordelia = self.example_user("cordelia")
@@ -628,7 +628,7 @@ class PermissionTest(ZulipTestCase):
             })
 
             result = self.client_patch(f'/json/users/{cordelia.id}',
-                                       {'profile_data': ujson.dumps(new_profile_data)})
+                                       {'profile_data': orjson.dumps(new_profile_data).decode()})
             self.assert_json_error(result, error_msg)
 
         # non-existent field and no data
@@ -637,7 +637,7 @@ class PermissionTest(ZulipTestCase):
             'value': '',
         }]
         result = self.client_patch(f'/json/users/{cordelia.id}',
-                                   {'profile_data': ujson.dumps(invalid_profile_data)})
+                                   {'profile_data': orjson.dumps(invalid_profile_data).decode()})
         self.assert_json_error(result, 'Field id 9001 not found.')
 
         # non-existent field and data
@@ -646,7 +646,7 @@ class PermissionTest(ZulipTestCase):
             'value': 'some data',
         }]
         result = self.client_patch(f'/json/users/{cordelia.id}',
-                                   {'profile_data': ujson.dumps(invalid_profile_data)})
+                                   {'profile_data': orjson.dumps(invalid_profile_data).decode()})
         self.assert_json_error(result, 'Field id 9001 not found.')
 
         # Test for clearing/resetting field values.
@@ -661,7 +661,7 @@ class PermissionTest(ZulipTestCase):
                 'value': value,
             })
         result = self.client_patch(f'/json/users/{cordelia.id}',
-                                   {'profile_data': ujson.dumps(empty_profile_data)})
+                                   {'profile_data': orjson.dumps(empty_profile_data).decode()})
         self.assert_json_success(result)
         for field_dict in cordelia.profile_data:
             with self.subTest(field_name=field_dict['name']):
@@ -690,7 +690,7 @@ class PermissionTest(ZulipTestCase):
                 'value': value,
             })
         result = self.client_patch(f'/json/users/{cordelia.id}',
-                                   {'profile_data': ujson.dumps(new_profile_data)})
+                                   {'profile_data': orjson.dumps(new_profile_data).decode()})
         self.assert_json_success(result)
         for field_dict in cordelia.profile_data:
             with self.subTest(field_name=field_dict['name']):
@@ -708,11 +708,11 @@ class PermissionTest(ZulipTestCase):
             'value': "New hamlet Biography",
         })
         result = self.client_patch(f'/json/users/{hamlet.id}',
-                                   {'profile_data': ujson.dumps(new_profile_data)})
+                                   {'profile_data': orjson.dumps(new_profile_data).decode()})
         self.assert_json_error(result, 'Insufficient permission')
 
         result = self.client_patch('/json/users/{}'.format(self.example_user("cordelia").id),
-                                   {'profile_data': ujson.dumps(new_profile_data)})
+                                   {'profile_data': orjson.dumps(new_profile_data).decode()})
         self.assert_json_error(result, 'Insufficient permission')
 
 class BulkCreateUserTest(ZulipTestCase):
@@ -768,7 +768,7 @@ class AdminCreateUserTest(ZulipTestCase):
         self.login_user(admin)
         do_change_user_role(admin, UserProfile.ROLE_REALM_ADMINISTRATOR)
 
-        result = self.client_post("/json/users", dict())
+        result = self.client_post("/json/users", {})
         self.assert_json_error(result, "Missing 'email' argument")
 
         result = self.client_post("/json/users", dict(
@@ -782,18 +782,19 @@ class AdminCreateUserTest(ZulipTestCase):
         ))
         self.assert_json_error(result, "Missing 'full_name' argument")
 
+        # Test short_name gets properly ignored
         result = self.client_post("/json/users", dict(
-            email='romeo@not-zulip.com',
+            email='romeo@zulip.com',
             password='xxxx',
             full_name='Romeo Montague',
+            short_name='DEPRECATED'
         ))
-        self.assert_json_error(result, "Missing 'short_name' argument")
+        self.assert_json_success(result)
 
         result = self.client_post("/json/users", dict(
             email='broken',
             password='xxxx',
             full_name='Romeo Montague',
-            short_name='Romeo',
         ))
         self.assert_json_error(result, "Bad name or username")
 
@@ -802,7 +803,6 @@ class AdminCreateUserTest(ZulipTestCase):
             email='romeo@not-zulip.com',
             password='xxxx',
             full_name='Romeo Montague',
-            short_name='Romeo',
         ))
         self.assert_json_error(result,
                                "Email 'romeo@not-zulip.com' not allowed in this organization")
@@ -812,7 +812,6 @@ class AdminCreateUserTest(ZulipTestCase):
             email='romeo@zulip.net',
             password='xxxx',
             full_name='Romeo Montague',
-            short_name='Romeo',
         )
         # Check can't use a bad password with zxcvbn enabled
         with self.settings(PASSWORD_MIN_LENGTH=6, PASSWORD_MIN_GUESSES=1000):
@@ -824,8 +823,9 @@ class AdminCreateUserTest(ZulipTestCase):
 
         # Romeo is a newly registered user
         new_user = get_user_by_delivery_email('romeo@zulip.net', get_realm('zulip'))
+        result = orjson.loads(result.content)
         self.assertEqual(new_user.full_name, 'Romeo Montague')
-        self.assertEqual(new_user.short_name, 'Romeo')
+        self.assertEqual(new_user.id, result['user_id'])
 
         # Make sure the recipient field is set correctly.
         self.assertEqual(new_user.recipient, Recipient.objects.get(type=Recipient.PERSONAL,
@@ -1134,13 +1134,13 @@ class UserProfileTest(ZulipTestCase):
         result = self.client_get(f"/json/users/{iago.id}/subscriptions/25")
         self.assert_json_error(result, "Invalid stream id")
 
-        result = ujson.loads(self.client_get(f"/json/users/{iago.id}/subscriptions/{stream.id}").content)
+        result = orjson.loads(self.client_get(f"/json/users/{iago.id}/subscriptions/{stream.id}").content)
         self.assertFalse(result['is_subscribed'])
 
         # Subscribe to the stream.
         self.subscribe(iago, stream.name)
         with queries_captured() as queries:
-            result = ujson.loads(self.client_get(f"/json/users/{iago.id}/subscriptions/{stream.id}").content)
+            result = orjson.loads(self.client_get(f"/json/users/{iago.id}/subscriptions/{stream.id}").content)
 
         self.assert_length(queries, 7)
         self.assertTrue(result['is_subscribed'])
@@ -1149,9 +1149,10 @@ class UserProfileTest(ZulipTestCase):
         polonius = self.example_user("polonius")
         self.login('polonius')
         self.assertTrue(polonius.is_guest)
+        self.assertTrue(stream.is_web_public)
 
-        result = self.client_get(f"/json/users/{iago.id}/subscriptions/{stream.id}")
-        self.assert_json_error(result, "Invalid stream id")
+        result = orjson.loads(self.client_get(f"/json/users/{iago.id}/subscriptions/{stream.id}").content)
+        self.assertTrue(result['is_subscribed'])
 
 class ActivateTest(ZulipTestCase):
     def test_basics(self) -> None:
@@ -1443,7 +1444,6 @@ class RecipientInfoTest(ZulipTestCase):
             password='',
             realm=realm,
             full_name='',
-            short_name='',
             bot_type=UserProfile.EMBEDDED_BOT,
         )
 
@@ -1463,7 +1463,6 @@ class RecipientInfoTest(ZulipTestCase):
             password='',
             realm=realm,
             full_name='',
-            short_name='',
             bot_type=UserProfile.DEFAULT_BOT,
         )
 
@@ -1502,7 +1501,7 @@ class BulkUsersTest(ZulipTestCase):
         hamlet = self.example_user('hamlet')
 
         def get_hamlet_avatar(client_gravatar: bool) -> Optional[str]:
-            data = dict(client_gravatar=ujson.dumps(client_gravatar))
+            data = dict(client_gravatar=orjson.dumps(client_gravatar).decode())
             result = self.client_get('/json/users', data)
             self.assert_json_success(result)
             rows = result.json()['members']
@@ -1551,7 +1550,7 @@ class GetProfileTest(ZulipTestCase):
         desdemona = self.example_user('desdemona')
 
         self.login('hamlet')
-        result = ujson.loads(self.client_get('/json/users/me').content)
+        result = orjson.loads(self.client_get('/json/users/me').content)
         self.assertEqual(result['email'], hamlet.email)
         self.assertEqual(result['full_name'], 'King Hamlet')
         self.assertIn("user_id", result)
@@ -1561,7 +1560,7 @@ class GetProfileTest(ZulipTestCase):
         self.assertFalse(result['is_guest'])
         self.assertFalse('delivery_email' in result)
         self.login('iago')
-        result = ujson.loads(self.client_get('/json/users/me').content)
+        result = orjson.loads(self.client_get('/json/users/me').content)
         self.assertEqual(result['email'], iago.email)
         self.assertEqual(result['full_name'], 'Iago')
         self.assertFalse(result['is_bot'])
@@ -1569,7 +1568,7 @@ class GetProfileTest(ZulipTestCase):
         self.assertFalse(result['is_owner'])
         self.assertFalse(result['is_guest'])
         self.login('desdemona')
-        result = ujson.loads(self.client_get('/json/users/me').content)
+        result = orjson.loads(self.client_get('/json/users/me').content)
         self.assertEqual(result['email'], desdemona.email)
         self.assertFalse(result['is_bot'])
         self.assertTrue(result['is_admin'])
@@ -1578,7 +1577,7 @@ class GetProfileTest(ZulipTestCase):
 
         # Tests the GET ../users/{id} api endpoint.
         user = self.example_user('hamlet')
-        result = ujson.loads(self.client_get(f'/json/users/{user.id}').content)
+        result = orjson.loads(self.client_get(f'/json/users/{user.id}').content)
         self.assertEqual(result['user']['email'], user.email)
         self.assertEqual(result['user']['full_name'], user.full_name)
         self.assertIn("user_id", result['user'])
@@ -1587,14 +1586,14 @@ class GetProfileTest(ZulipTestCase):
         self.assertFalse(result['user']['is_admin'])
         self.assertFalse(result['user']['is_owner'])
 
-        result = ujson.loads(self.client_get(f'/json/users/{user.id}?include_custom_profile_fields=true').content)
+        result = orjson.loads(self.client_get(f'/json/users/{user.id}?include_custom_profile_fields=true').content)
 
         self.assertIn('profile_data', result['user'])
         result = self.client_get(f'/json/users/{30}?')
         self.assert_json_error(result, "No such user")
 
         bot = self.example_user("default_bot")
-        result = ujson.loads(self.client_get(f'/json/users/{bot.id}').content)
+        result = orjson.loads(self.client_get(f'/json/users/{bot.id}').content)
         self.assertEqual(result['user']['email'], bot.email)
         self.assertTrue(result['user']['is_bot'])
 

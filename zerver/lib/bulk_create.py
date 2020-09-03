@@ -9,7 +9,7 @@ from zerver.models import Realm, RealmAuditLog, Recipient, Stream, Subscription,
 
 
 def bulk_create_users(realm: Realm,
-                      users_raw: Set[Tuple[str, str, str, bool]],
+                      users_raw: Set[Tuple[str, str, bool]],
                       bot_type: Optional[int]=None,
                       bot_owner: Optional[UserProfile]=None,
                       tos_version: Optional[str]=None,
@@ -20,14 +20,14 @@ def bulk_create_users(realm: Realm,
     """
     existing_users = frozenset(UserProfile.objects.filter(
         realm=realm).values_list('email', flat=True))
-    users = sorted([user_raw for user_raw in users_raw if user_raw[0] not in existing_users])
+    users = sorted(user_raw for user_raw in users_raw if user_raw[0] not in existing_users)
 
     # Now create user_profiles
     profiles_to_create: List[UserProfile] = []
-    for (email, full_name, short_name, active) in users:
+    for (email, full_name, active) in users:
         profile = create_user_profile(realm, email,
                                       initial_password(email), active, bot_type,
-                                      full_name, short_name, bot_owner, False, tos_version,
+                                      full_name, bot_owner, False, tos_version,
                                       timezone, tutorial_status=UserProfile.TUTORIAL_FINISHED,
                                       enter_sends=True)
         profiles_to_create.append(profile)
@@ -47,9 +47,9 @@ def bulk_create_users(realm: Realm,
     user_ids = {user.id for user in profiles_to_create}
 
     RealmAuditLog.objects.bulk_create(
-        [RealmAuditLog(realm=realm, modified_user=profile_,
-                       event_type=RealmAuditLog.USER_CREATED, event_time=profile_.date_joined)
-         for profile_ in profiles_to_create])
+        RealmAuditLog(realm=realm, modified_user=profile_,
+                      event_type=RealmAuditLog.USER_CREATED, event_time=profile_.date_joined)
+        for profile_ in profiles_to_create)
 
     recipients_to_create: List[Recipient] = []
     for user_id in user_ids:
@@ -90,21 +90,22 @@ def bulk_set_users_or_streams_recipient_fields(model: Model,
 
     objects_dict = {obj.id: obj for obj in objects}
 
+    objects_to_update = set()
     for recipient in recipients:
         assert recipient.type == recipient_type
         result = objects_dict.get(recipient.type_id)
         if result is not None:
             result.recipient = recipient
-            # TODO: Django 2.2 has a bulk_update method, so once we manage to migrate to that version,
-            # we take adventage of this, instead of calling save individually.
-            result.save(update_fields=['recipient'])
+            objects_to_update.add(result)
+    model.objects.bulk_update(objects_to_update, ['recipient'])
 
 # This is only sed in populate_db, so doesn't really need tests
 def bulk_create_streams(realm: Realm,
                         stream_dict: Dict[str, Dict[str, Any]]) -> None:  # nocoverage
-    existing_streams = frozenset([name.lower() for name in
-                                  Stream.objects.filter(realm=realm)
-                                  .values_list('name', flat=True)])
+    existing_streams = {
+        name.lower()
+        for name in Stream.objects.filter(realm=realm).values_list('name', flat=True)
+    }
     streams_to_create: List[Stream] = []
     for name, options in stream_dict.items():
         if 'history_public_to_subscribers' not in options:

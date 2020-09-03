@@ -2,8 +2,9 @@
 // debugging.  It also exposes the list of modules it knows about as the keys
 // of the require.ids object.
 
-import webpack, { Template } from "webpack";
 import path from "path";
+
+import webpack, {Template} from "webpack";
 
 export default class DebugRequirePlugin {
     apply(compiler: webpack.Compiler): void {
@@ -39,15 +40,15 @@ export default class DebugRequirePlugin {
 
         compiler.hooks.beforeCompile.tapPromise(
             "DebugRequirePlugin",
-            async ({ normalModuleFactory }: any) => {
+            async ({normalModuleFactory}: any) => {
                 const resolver = normalModuleFactory.getResolver("normal");
                 debugRequirePath = await new Promise((resolve, reject) =>
                     resolver.resolve(
                         {},
                         __dirname,
-                        "./debug-require.js",
+                        "./debug-require",
                         {},
-                        (err?: Error, result?: string) => err ? reject(err) : resolve(result),
+                        (err?: Error, result?: string) => (err ? reject(err) : resolve(result)),
                     ),
                 );
             },
@@ -60,7 +61,7 @@ export default class DebugRequirePlugin {
                     const ids: [string, string | number][] = [];
                     let debugRequireId;
                     chunk.hasModuleInGraph(
-                        ({ resource, rawRequest, id }: any) => {
+                        ({resource, rawRequest, id}: any) => {
                             if (resource === debugRequirePath) {
                                 debugRequireId = id;
                             }
@@ -80,12 +81,16 @@ export default class DebugRequirePlugin {
                     }
 
                     ids.sort();
-                    const { requireFn } = compilation.mainTemplate;
+                    const {requireFn} = compilation.mainTemplate;
                     return Template.asString([
                         source,
                         `${requireFn}(${JSON.stringify(
                             debugRequireId,
-                        )}).initialize(${JSON.stringify(Object.fromEntries(ids), null, "\t")});`,
+                        )}).initialize(${JSON.stringify(
+                            Object.fromEntries(ids),
+                            null,
+                            "\t",
+                        )}, modules);`,
                     ]);
                 },
             );

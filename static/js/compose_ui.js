@@ -1,4 +1,8 @@
-const autosize = require('autosize');
+"use strict";
+
+const autosize = require("autosize");
+
+const people = require("./people");
 
 exports.autosize_textarea = function () {
     autosize.update($("#compose-textarea"));
@@ -6,7 +10,7 @@ exports.autosize_textarea = function () {
 
 exports.smart_insert = function (textarea, syntax) {
     function is_space(c) {
-        return c === ' ' || c === '\t' || c === '\n';
+        return c === " " || c === "\t" || c === "\n";
     }
 
     const pos = textarea.caret();
@@ -18,18 +22,22 @@ exports.smart_insert = function (textarea, syntax) {
         // before the insert or (unlikely) at the start of the syntax,
         // add one.
         if (!is_space(before_str.slice(-1)) && !is_space(syntax[0])) {
-            syntax = ' ' + syntax;
+            syntax = " " + syntax;
         }
     }
 
     // If there isn't whitespace either at the end of the syntax or the
     // start of the content after the syntax, add one.
-    if (!(after_str.length > 0 && is_space(after_str[0]) ||
-          syntax.length > 0 && is_space(syntax.slice(-1)))) {
-        syntax += ' ';
+    if (
+        !(
+            (after_str.length > 0 && is_space(after_str[0])) ||
+            (syntax.length > 0 && is_space(syntax.slice(-1)))
+        )
+    ) {
+        syntax += " ";
     }
 
-    textarea.focus();
+    textarea.trigger("focus");
 
     // We prefer to use insertText, which supports things like undo better
     // for rich-text editing features like inserting links.  But we fall
@@ -48,7 +56,7 @@ exports.insert_syntax_and_focus = function (syntax, textarea) {
     // where the cursor was and focusing the area.  Mostly a thin
     // wrapper around smart_insert.
     if (textarea === undefined) {
-        textarea = $('#compose-textarea');
+        textarea = $("#compose-textarea");
     }
     exports.smart_insert(textarea, syntax);
 };
@@ -60,16 +68,20 @@ exports.replace_syntax = function (old_syntax, new_syntax, textarea) {
     // a RegExp with a global flag, it will replace all instances.
 
     if (textarea === undefined) {
-        textarea = $('#compose-textarea');
+        textarea = $("#compose-textarea");
     }
 
-    textarea.val(textarea.val().replace(old_syntax, () =>
-        // We need this anonymous function to avoid JavaScript's
-        // replace() function treating `$`s in new_syntax as special syntax.  See
-        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#Description
-        // for details.
-        new_syntax,
-    ));
+    textarea.val(
+        textarea.val().replace(
+            old_syntax,
+            () =>
+                // We need this anonymous function to avoid JavaScript's
+                // replace() function treating `$`s in new_syntax as special syntax.  See
+                // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#Description
+                // for details.
+                new_syntax,
+        ),
+    );
 };
 
 exports.compute_placeholder_text = function (opts) {
@@ -79,11 +91,12 @@ exports.compute_placeholder_text = function (opts) {
     // We return text with the stream and topic name unescaped,
     // because the caller is expected to insert this into the
     // placeholder field in a way that does HTML escaping.
-    if (opts.message_type === 'stream') {
+    if (opts.message_type === "stream") {
         if (opts.topic) {
-            return i18n.t("Message #__- stream_name__ > __- topic_name__",
-                          {stream_name: opts.stream,
-                           topic_name: opts.topic});
+            return i18n.t("Message #__- stream_name__ > __- topic_name__", {
+                stream_name: opts.stream,
+                topic_name: opts.topic,
+            });
         } else if (opts.stream) {
             return i18n.t("Message #__- stream_name__", {stream_name: opts.stream});
         }
@@ -92,22 +105,25 @@ exports.compute_placeholder_text = function (opts) {
     // For Private Messages
     if (opts.private_message_recipient) {
         const recipient_list = opts.private_message_recipient.split(",");
-        const recipient_names = recipient_list.map((recipient) => {
-            const user = people.get_by_email(recipient);
-            return user.full_name;
-        }).join(", ");
+        const recipient_names = recipient_list
+            .map((recipient) => {
+                const user = people.get_by_email(recipient);
+                return user.full_name;
+            })
+            .join(", ");
 
         if (recipient_list.length === 1) {
             // If it's a single user, display status text if available
             const user = people.get_by_email(recipient_list[0]);
             const status = user_status.get_status_text(user.user_id);
             if (status) {
-                return i18n.t("Message __- recipient_name__ (__- recipient_status__)",
-                              {recipient_name: recipient_names,
-                               recipient_status: status});
+                return i18n.t("Message __- recipient_name__ (__- recipient_status__)", {
+                    recipient_name: recipient_names,
+                    recipient_status: status,
+                });
             }
         }
-        return i18n.t("Message __- recipient_names__", {recipient_names: recipient_names});
+        return i18n.t("Message __- recipient_names__", {recipient_names});
     }
     return i18n.t("Compose your message here");
 };

@@ -1,3 +1,5 @@
+"use strict";
+
 /*
     We want his module to load pretty early in the process
     of starting the app, so that people.js can load early.
@@ -28,6 +30,5 @@ exports.set_state_to_pending = function () {
 exports.set_state_to_in_progress = function () {
     reload_in_progress = true;
 };
-
 
 window.reload_state = exports;

@@ -5,11 +5,11 @@ import os
 import uuid
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
-from unittest import mock
+from unittest import mock, skipUnless
 from unittest.mock import call
 
+import orjson
 import requests
-import ujson
 from django.conf import settings
 from django.db import transaction
 from django.db.models import F
@@ -32,6 +32,7 @@ from zerver.lib.push_notifications import (
     b64_to_hex,
     datetime_to_timestamp,
     get_apns_badge_count,
+    get_apns_badge_count_future,
     get_apns_client,
     get_display_recipient,
     get_message_payload_apns,
@@ -73,16 +74,19 @@ from zerver.models import (
     receives_online_notifications,
     receives_stream_notifications,
 )
-from zilencer.models import (
-    RemoteInstallationCount,
-    RemotePushDeviceToken,
-    RemoteRealmAuditLog,
-    RemoteRealmCount,
-    RemoteZulipServer,
-)
+
+if settings.ZILENCER_ENABLED:
+    from zilencer.models import (
+        RemoteInstallationCount,
+        RemotePushDeviceToken,
+        RemoteRealmAuditLog,
+        RemoteRealmCount,
+        RemoteZulipServer,
+    )
 
 ZERVER_DIR = os.path.dirname(os.path.dirname(__file__))
 
+@skipUnless(settings.ZILENCER_ENABLED, "requires zilencer")
 class BouncerTestCase(ZulipTestCase):
     def setUp(self) -> None:
         self.server_uuid = "1234-abcd"
@@ -175,11 +179,15 @@ class PushBouncerNotificationTest(BouncerTestCase):
 
         hamlet = self.example_user('hamlet')
 
-        result = self.api_post(
-            hamlet,
-            endpoint,
-            dict(user_id=user_id, token_kin=token_kind, token=token),
-        )
+        with self.assertLogs(level='WARNING') as warn_log:
+            result = self.api_post(
+                hamlet,
+                endpoint,
+                dict(user_id=user_id, token_kin=token_kind, token=token),
+            )
+        self.assertEqual(warn_log.output, [
+            'WARNING:root:User hamlet@zulip.com (zulip) attempted to access API on wrong subdomain ()'
+        ])
         self.assert_json_error(result, "Account is not associated with this subdomain",
                                status_code=401)
 
@@ -317,17 +325,24 @@ class PushBouncerNotificationTest(BouncerTestCase):
             self.assert_json_error(result, 'Token does not exist')
 
             with mock.patch('zerver.lib.remote_server.requests.request',
-                            side_effect=requests.ConnectionError):
+                            side_effect=requests.ConnectionError), self.assertLogs(level="ERROR") as error_log:
                 result = self.client_post(endpoint, {'token': token},
                                           subdomain="zulip")
                 self.assert_json_error(
                     result, "ConnectionError while trying to connect to push notification bouncer", 502)
+                self.assertEqual(error_log.output, [
+                    f'ERROR:django.request:Bad Gateway: {endpoint}',
+                ])
 
             with mock.patch('zerver.lib.remote_server.requests.request',
-                            return_value=Result(status=500)):
+                            return_value=Result(status=500)), self.assertLogs(level="WARNING") as warn_log:
                 result = self.client_post(endpoint, {'token': token},
                                           subdomain="zulip")
                 self.assert_json_error(result, "Received 500 from push notification bouncer", 502)
+                self.assertEqual(warn_log.output, [
+                    'WARNING:root:Received 500 from push notification bouncer',
+                    f'ERROR:django.request:Bad Gateway: {endpoint}',
+                ])
 
         # Add tokens
         for endpoint, token, kind in endpoints:
@@ -488,13 +503,13 @@ class AnalyticsBouncerTest(BouncerTestCase):
         result = self.uuid_post(
             self.server_uuid,
             '/api/v1/remotes/server/analytics',
-            {'realm_counts': ujson.dumps(realm_count_data),
-             'installation_counts': ujson.dumps(installation_count_data),
-             'realmauditlog_rows': ujson.dumps(realmauditlog_data)},
+            {'realm_counts': orjson.dumps(realm_count_data).decode(),
+             'installation_counts': orjson.dumps(installation_count_data).decode(),
+             'realmauditlog_rows': orjson.dumps(realmauditlog_data).decode()},
             subdomain="")
         self.assert_json_error(result, "Data is out of order.")
 
-        with mock.patch("zilencer.views.validate_incoming_table_data"):
+        with mock.patch("zilencer.views.validate_incoming_table_data"), self.assertLogs(level='WARNING') as warn_log:
             # We need to wrap a transaction here to avoid the
             # IntegrityError that will be thrown in here from breaking
             # the unittest transaction.
@@ -502,11 +517,14 @@ class AnalyticsBouncerTest(BouncerTestCase):
                 result = self.uuid_post(
                     self.server_uuid,
                     '/api/v1/remotes/server/analytics',
-                    {'realm_counts': ujson.dumps(realm_count_data),
-                     'installation_counts': ujson.dumps(installation_count_data),
-                     'realmauditlog_rows': ujson.dumps(realmauditlog_data)},
+                    {'realm_counts': orjson.dumps(realm_count_data).decode(),
+                     'installation_counts': orjson.dumps(installation_count_data).decode(),
+                     'realmauditlog_rows': orjson.dumps(realmauditlog_data).decode()},
                     subdomain="")
             self.assert_json_error(result, "Invalid data.")
+            self.assertEqual(warn_log.output, [
+                'WARNING:root:Invalid data saving zilencer_remoteinstallationcount for server demo.example.com/1234-abcd'
+            ])
 
     @override_settings(PUSH_NOTIFICATION_BOUNCER_URL='https://push.zulip.org.example.com')
     @mock.patch('zerver.lib.remote_server.requests.request')
@@ -538,7 +556,7 @@ class AnalyticsBouncerTest(BouncerTestCase):
         mock_request.side_effect = self.bounce_request
         # Send fixture generated with Zulip 2.0 code
         send_to_push_bouncer('POST', 'server/analytics', {
-            'realm_counts': '[{"id":1,"property":"invites_sent::day","subgroup":null,"end_time":574300800.0,"value":5,"realm":2}]',  # lint:ignore
+            'realm_counts': '[{"id":1,"property":"invites_sent::day","subgroup":null,"end_time":574300800.0,"value":5,"realm":2}]',
             'installation_counts': '[]',
             'version': '"2.0.6+git"'})
         self.assertEqual(mock_request.call_count, 1)
@@ -877,13 +895,13 @@ class HandlePushNotificationTest(PushNotificationTest):
 
         # This should log an error
         with mock.patch('zerver.lib.push_notifications.uses_notification_bouncer') as mock_check, \
-                mock.patch('logging.error') as mock_logging_error, \
+                mock.patch('logging.info') as mock_logging_info, \
                 mock.patch('zerver.lib.push_notifications.push_notifications_enabled', return_value = True) as mock_push_notifications:
             handle_push_notification(user_profile.id, missed_message)
             mock_push_notifications.assert_called_once()
             # Check we didn't proceed through.
             mock_check.assert_not_called()
-            mock_logging_error.assert_called_once()
+            mock_logging_info.assert_called_once()
 
     def test_send_notifications_to_bouncer(self) -> None:
         user_profile = self.example_user('hamlet')
@@ -1069,8 +1087,11 @@ class HandlePushNotificationTest(PushNotificationTest):
         self.setup_gcm_tokens()
         self.make_stream('public_stream')
         self.subscribe(self.user_profile, 'public_stream')
-        do_soft_deactivate_users([self.user_profile])
-
+        with self.assertLogs(level='INFO') as info_logs:
+            do_soft_deactivate_users([self.user_profile])
+        self.assertEqual(info_logs.output, [
+            'INFO:root:Soft-deactivated batch of 1 users; 0 remain to process'
+        ])
         sender = self.example_user('iago')
         message_id = self.send_stream_message(sender, "public_stream", "test")
         missed_message = {
@@ -1155,6 +1176,7 @@ class TestAPNs(PushNotificationTest):
             zerver.lib.push_notifications._apns_client = None
 
     def test_not_configured(self) -> None:
+        self.setup_apns_tokens()
         with mock.patch('zerver.lib.push_notifications.get_apns_client') as mock_get, \
                 mock.patch('zerver.lib.push_notifications.logger') as mock_logging:
             mock_get.return_value = None
@@ -1250,27 +1272,31 @@ class TestAPNs(PushNotificationTest):
 
     @mock.patch('zerver.lib.push_notifications.push_notifications_enabled', return_value = True)
     def test_apns_badge_count(self, mock_push_notifications: mock.MagicMock) -> None:
+
         user_profile = self.example_user('othello')
         # Test APNs badge count for personal messages.
         message_ids = [self.send_personal_message(self.sender,
                                                   user_profile,
                                                   'Content of message')
                        for i in range(3)]
-        self.assertEqual(get_apns_badge_count(user_profile), 3)
+        self.assertEqual(get_apns_badge_count(user_profile), 0)
+        self.assertEqual(get_apns_badge_count_future(user_profile), 3)
         # Similarly, test APNs badge count for stream mention.
         stream = self.subscribe(user_profile, "Denmark")
         message_ids += [self.send_stream_message(self.sender,
                                                  stream.name,
                                                  'Hi, @**Othello, the Moor of Venice**')
                         for i in range(2)]
-        self.assertEqual(get_apns_badge_count(user_profile), 5)
+        self.assertEqual(get_apns_badge_count(user_profile), 0)
+        self.assertEqual(get_apns_badge_count_future(user_profile), 5)
 
         num_messages = len(message_ids)
         # Mark the messages as read and test whether
         # the count decreases correctly.
         for i, message_id in enumerate(message_ids):
             do_update_message_flags(user_profile, get_client("website"), 'add', 'read', [message_id])
-            self.assertEqual(get_apns_badge_count(user_profile), num_messages - i - 1)
+            self.assertEqual(get_apns_badge_count(user_profile), 0)
+            self.assertEqual(get_apns_badge_count_future(user_profile), num_messages - i - 1)
 
         mock_push_notifications.assert_called()
 
@@ -1324,7 +1350,7 @@ class TestGetAPNsPayload(PushNotificationTest):
                 'body': message.content,
             },
             'sound': 'default',
-            'badge': 1,
+            'badge': 0,
             'custom': {
                 'zulip': {
                     'message_ids': [message.id],
@@ -1608,12 +1634,12 @@ class TestSendNotificationsToBouncer(ZulipTestCase):
         }
         mock_send.assert_called_with('POST',
                                      'push/notify',
-                                     ujson.dumps(post_data),
+                                     orjson.dumps(post_data),
                                      extra_headers={'Content-type':
                                                     'application/json'})
 
 class Result:
-    def __init__(self, status: int=200, content: str=ujson.dumps({'msg': 'error'})) -> None:
+    def __init__(self, status: int=200, content: bytes=orjson.dumps({'msg': 'error'})) -> None:
         self.status_code = status
         self.content = content
 
@@ -1638,21 +1664,19 @@ class TestSendToPushBouncer(ZulipTestCase):
         error_obj = InvalidZulipServerError("testRole")
         with mock.patch('requests.request',
                         return_value=Result(status=400,
-                                            content=ujson.dumps(error_obj.to_json()))):
+                                            content=orjson.dumps(error_obj.to_json()))):
             with self.assertRaises(PushNotificationBouncerException) as exc:
                 send_to_push_bouncer('register', 'register', {'msg': 'true'})
         self.assertEqual(str(exc.exception),
                          'Push notifications bouncer error: '
                          'Zulip server auth failure: testRole is not registered')
 
-    @mock.patch('requests.request', return_value=Result(status=400, content='/'))
+    @mock.patch('requests.request', return_value=Result(status=400, content=b'/'))
     def test_400_error_when_content_is_not_serializable(self, mock_request: mock.MagicMock) -> None:
-        with self.assertRaises(ValueError) as exc:
+        with self.assertRaises(orjson.JSONDecodeError):
             send_to_push_bouncer('register', 'register', {'msg': 'true'})
-        self.assertEqual(str(exc.exception),
-                         'Expected object or value')
 
-    @mock.patch('requests.request', return_value=Result(status=300, content='/'))
+    @mock.patch('requests.request', return_value=Result(status=300, content=b'/'))
     def test_300_error(self, mock_request: mock.MagicMock) -> None:
         with self.assertRaises(PushNotificationBouncerException) as exc:
             send_to_push_bouncer('register', 'register', {'msg': 'true'})
@@ -2068,7 +2092,7 @@ class TestReceivesNotificationsFunctions(ZulipTestCase):
 
 class TestPushNotificationsContent(ZulipTestCase):
     def test_fixtures(self) -> None:
-        fixtures = ujson.loads(self.fixture_data("markdown_test_cases.json"))
+        fixtures = orjson.loads(self.fixture_data("markdown_test_cases.json"))
         tests = fixtures["regular_tests"]
         for test in tests:
             if "text_content" in test:
@@ -2103,6 +2127,7 @@ class TestPushNotificationsContent(ZulipTestCase):
             actual_output = get_mobile_push_content(test["rendered_content"])
             self.assertEqual(actual_output, test["expected_output"])
 
+@skipUnless(settings.ZILENCER_ENABLED, "requires zilencer")
 class PushBouncerSignupTest(ZulipTestCase):
     def test_push_signup_invalid_host(self) -> None:
         zulip_org_id = str(uuid.uuid4())

@@ -4,7 +4,7 @@
     width: 70%;
     max-width: 1200px;
     max-height: 1000px;
-    padding: 0px;
+    padding: 0;
     border-radius: 4px;
     background-color: hsl(0, 0%, 100%);
     overflow: hidden;
@@ -53,7 +53,7 @@
     }
 
     .recent_topics_table {
-        margin: 0px;
+        margin: 0;
         padding: 15px;
         overflow: hidden !important;
         display: flex;
@@ -68,7 +68,7 @@
             display: inline-block;
 
             & > * {
-                outline: 0px;
+                outline: 0;
             }
 
             &:focus-within {
@@ -103,9 +103,9 @@
 
         .table_fix_head {
             padding: 10px;
-            padding-top: 0px !important;
+            padding-top: 0 !important;
             overflow-y: auto;
-            max-height: 100%;
+            max-height: 89%;
         }
 
         .table_fix_head table {
@@ -120,13 +120,19 @@
             justify-content: flex-start;
         }
 
+        .search_group {
+            display: flex;
+            flex-grow: 1;
+            margin: 0 0 10px 0;
+        }
+
         #recent_topics_search {
-            margin: 0 0 10px 0px;
             flex-grow: 1;
         }
 
-        #recent_topics_search_clear {
-            margin-top: -10px !important;
+        .clear_search_button {
+            // Overrides app_components.scss property.
+            padding-top: 6px !important;
         }
 
         .btn-recent-filters {
@@ -146,16 +152,34 @@
         .recent_topic_unread_count {
             background-color: hsl(105, 2%, 50%) !important;
             color: hsl(0, 0%, 100%);
-            float: right;
             height: 16px;
             line-height: 16px;
             font-size: 12px;
             font-weight: 400;
-            letter-spacing: .6px;
+            letter-spacing: 0.6px;
             border-radius: 4px;
-            background-color: hsl(0, 0%, 89%);
             padding: 0 4px;
             margin-right: 10px;
+            align-self: center;
+        }
+
+        .flex_container {
+            display: flex;
+            align-items: center;
+        }
+
+        .flex_container .left_part {
+            flex-wrap: wrap;
+        }
+
+        .flex_container .right_part {
+            margin-left: auto;
+            display: inline-flex;
+        }
+
+        .recent_topic_actions {
+            display: flex;
+            flex-flow: row nowrap;
         }
 
         .recent_avatars {
@@ -193,11 +217,25 @@
             display: block;
             height: 24px;
             text-align: center;
+            background-color: hsl(0, 0%, 88%);
         }
 
         .recent_avatars_others {
             color: hsl(0, 0%, 0%);
             line-height: 24px;
+        }
+
+        tr {
+            background-color: hsl(0, 0%, 100%);
+
+            &:hover {
+                background-color: hsl(210, 100%, 97%);
+            }
+        }
+
+        .last_msg_time {
+            float: left;
+            margin-right: 5px;
         }
 
         thead th {
@@ -237,6 +275,26 @@
                 &:not(.active)::after {
                     opacity: 0.3;
                 }
+            }
+        }
+
+        .recent_topic_stream,
+        thead .last_msg_time_header {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 750px) {
+            // Hide participants and last message time
+            // on smaller screens. This ensures user always
+            // has a nice UI experience.
+            .recent_topic_users,
+            .recent_topic_timestamp,
+            thead .participants_header,
+            thead .last_msg_time_header {
+                display: none;
+            }
+            table td {
+                line-height: 2em;
             }
         }
     }

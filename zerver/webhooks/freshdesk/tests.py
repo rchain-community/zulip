@@ -6,6 +6,7 @@ from zerver.lib.test_classes import WebhookTestCase
 class FreshdeskHookTests(WebhookTestCase):
     STREAM_NAME = 'freshdesk'
     URL_TEMPLATE = "/api/v1/external/freshdesk?stream={stream}"
+    FIXTURE_DIR_NAME = "freshdesk"
 
     def test_ticket_creation(self) -> None:
         """
@@ -42,19 +43,6 @@ Requester Bob <requester-bob@example.com> updated [ticket #11](http://test1234zz
 
         self.api_stream_message(self.test_user, 'status_changed', expected_topic, expected_message,
                                 content_type="application/x-www-form-urlencoded")
-
-    def test_status_change_fixture_without_required_key(self) -> None:
-        """
-        A fixture without the requisite keys should raise JsonableError.
-        """
-        self.url = self.build_webhook_url()
-        payload = self.get_body('status_changed_fixture_with_missing_key')
-        kwargs = {
-            'HTTP_AUTHORIZATION': self.encode_email(self.test_user.email),
-            'content_type': 'application/x-www-form-urlencoded',
-        }
-        result = self.client_post(self.url, payload, **kwargs)
-        self.assert_json_error(result, 'Missing key triggered_event in JSON')
 
     def test_priority_change(self) -> None:
         """
@@ -108,7 +96,7 @@ Requester Bob <requester-bob@example.com> added a {} note to \
     def test_inline_image(self) -> None:
         """
         Freshdesk sends us descriptions as HTML, so we have to make the
-        descriptions Zulip markdown-friendly while still doing our best to
+        descriptions Zulip Markdown-friendly while still doing our best to
         preserve links and images.
         """
         expected_topic = "#12: Not enough ☃ guinea pigs"
@@ -117,6 +105,3 @@ Requester \u2603 Bob <requester-bob@example.com> created [ticket #12](http://tes
 """.strip()
         self.api_stream_message(self.test_user, "inline_images", expected_topic, expected_message,
                                 content_type="application/x-www-form-urlencoded")
-
-    def get_body(self, fixture_name: str) -> str:
-        return self.webhook_fixture_data("freshdesk", fixture_name, file_type="json")

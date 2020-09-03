@@ -43,7 +43,7 @@ paths will be familiar to Django developers.
 
 -------------------------------------------------------------------
 
-### HTML Templates
+### HTML templates
 
 See [our docs](../subsystems/html-css.md) for details on Zulip's
 templating systems.
@@ -78,7 +78,7 @@ templating systems.
 
 * `frontend_tests/node_tests/` Node Frontend unit tests.
 
-* `frontend_tests/casper_tests/` Casper frontend tests.
+* `frontend_tests/puppeteer_tests/` Puppeteer frontend integration tests.
 
 * `tools/test-*` Developer-facing test runner scripts.
 
@@ -121,12 +121,12 @@ Django context (i.e. with database access).
   the development environment setup process.
 
 * `tools/ci/` Subdirectory of `tools/` for things only used to
-  setup and run our tests in CI.  Actual test suites should
+  set up and run our tests in CI.  Actual test suites should
   go in `tools/`.
 
 ---------------------------------------------------------
 
-### API and Bots
+### API and bots
 
 * See the [Zulip API repository](https://github.com/zulip/python-zulip-api).
   Zulip's Python API bindings, a number of Zulip integrations and
@@ -163,7 +163,7 @@ This is used to deploy essentially all configuration in production.
 
 -----------------------------------------------------------------------
 
-### Jinja2 Compatibility Files
+### Jinja2 compatibility files
 
 * `zproject/jinja2/__init__.py` Jinja2 environment.
 

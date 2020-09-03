@@ -5,7 +5,7 @@ from typing import Any, Dict
 from unittest.mock import patch
 
 import lxml.html
-import ujson
+import orjson
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils.timezone import now as timezone_now
@@ -13,6 +13,7 @@ from django.utils.timezone import now as timezone_now
 from corporate.models import Customer, CustomerPlan
 from zerver.lib.actions import do_change_logo_source, do_create_user
 from zerver.lib.events import add_realm_logo_fields
+from zerver.lib.home import get_furthest_read_time
 from zerver.lib.soft_deactivation import do_soft_deactivate_users
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import get_user_messages, queries_captured
@@ -28,7 +29,7 @@ from zerver.models import (
     get_system_bot,
     get_user,
 )
-from zerver.views.home import compute_navbar_logo_url, get_furthest_read_time
+from zerver.views.home import compute_navbar_logo_url
 from zerver.worker.queue_processors import UserActivityWorker
 
 
@@ -262,12 +263,12 @@ class HomeTest(ZulipTestCase):
 
         page_params = self._get_page_params(result)
 
-        actual_keys = sorted([str(k) for k in page_params.keys()])
+        actual_keys = sorted(str(k) for k in page_params.keys())
 
         self.assertEqual(actual_keys, expected_keys)
 
         # TODO: Inspect the page_params data further.
-        # print(ujson.dumps(page_params, indent=2))
+        # print(orjson.dumps(page_params, option=orjson.OPT_INDENT_2).decode())
         realm_bots_expected_keys = [
             'api_key',
             'avatar_url',
@@ -283,7 +284,7 @@ class HomeTest(ZulipTestCase):
             'user_id',
         ]
 
-        realm_bots_actual_keys = sorted([str(key) for key in page_params['realm_bots'][0].keys()])
+        realm_bots_actual_keys = sorted(str(key) for key in page_params['realm_bots'][0].keys())
         self.assertEqual(realm_bots_actual_keys, realm_bots_expected_keys)
 
     def test_home_under_2fa_without_otp_device(self) -> None:
@@ -317,7 +318,7 @@ class HomeTest(ZulipTestCase):
                 result = self._get_home_page()
                 self.assertEqual(result.status_code, 200)
                 self.assert_length(cache_mock.call_args_list, 6)
-            self.assert_length(queries, 40)
+            self.assert_length(queries, 39)
 
     def test_num_queries_with_streams(self) -> None:
         main_user = self.example_user('hamlet')
@@ -365,7 +366,7 @@ class HomeTest(ZulipTestCase):
         doc = lxml.html.document_fromstring(result.content)
         [div] = doc.xpath("//div[@id='page-params']")
         page_params_json = div.get("data-params")
-        page_params = ujson.loads(page_params_json)
+        page_params = orjson.loads(page_params_json)
         return page_params
 
     def _sanity_check(self, result: HttpResponse) -> None:
@@ -477,7 +478,6 @@ class HomeTest(ZulipTestCase):
             password='123',
             realm=owner.realm,
             full_name=bot_name,
-            short_name=bot_name,
             bot_type=UserProfile.DEFAULT_BOT,
             bot_owner=owner,
         )
@@ -489,7 +489,6 @@ class HomeTest(ZulipTestCase):
             password='123',
             realm=realm,
             full_name=name,
-            short_name=name,
         )
 
         # Doing a full-stack deactivation would be expensive here,
@@ -682,19 +681,27 @@ class HomeTest(ZulipTestCase):
 
     def test_show_billing(self) -> None:
         customer = Customer.objects.create(realm=get_realm("zulip"), stripe_customer_id="cus_id")
+        user = self.example_user('desdemona')
 
-        # realm admin, but no CustomerPlan -> no billing link
-        user = self.example_user('iago')
+        # realm owner, but no CustomerPlan -> no billing link
+        user.role = UserProfile.ROLE_REALM_OWNER
+        user.save(update_fields=["role"])
         self.login_user(user)
         result_html = self._get_home_page().content.decode('utf-8')
         self.assertNotIn('Billing', result_html)
 
-        # realm admin, with inactive CustomerPlan -> show billing link
+        # realm owner, with inactive CustomerPlan -> show billing link
         CustomerPlan.objects.create(customer=customer, billing_cycle_anchor=timezone_now(),
                                     billing_schedule=CustomerPlan.ANNUAL, next_invoice_date=timezone_now(),
                                     tier=CustomerPlan.STANDARD, status=CustomerPlan.ENDED)
         result_html = self._get_home_page().content.decode('utf-8')
         self.assertIn('Billing', result_html)
+
+        # realm admin, with CustomerPlan -> no billing link
+        user.role = UserProfile.ROLE_REALM_ADMINISTRATOR
+        user.save(update_fields=["role"])
+        result_html = self._get_home_page().content.decode('utf-8')
+        self.assertNotIn('Billing', result_html)
 
         # billing admin, with CustomerPlan -> show billing link
         user.role = UserProfile.ROLE_MEMBER
@@ -736,11 +743,16 @@ class HomeTest(ZulipTestCase):
 
     def test_show_plans(self) -> None:
         realm = get_realm("zulip")
-        self.login('hamlet')
 
-        # Show plans link to all users if plan_type is LIMITED
+        # Don't show plans to guest users
+        self.login('polonius')
         realm.plan_type = Realm.LIMITED
         realm.save(update_fields=["plan_type"])
+        result_html = self._get_home_page().content.decode('utf-8')
+        self.assertNotIn('Plans', result_html)
+
+        # Show plans link to all other users if plan_type is LIMITED
+        self.login('hamlet')
         result_html = self._get_home_page().content.decode('utf-8')
         self.assertIn('Plans', result_html)
 
@@ -771,12 +783,12 @@ class HomeTest(ZulipTestCase):
         page_params = {"color_scheme": user_profile.COLOR_SCHEME_NIGHT}
         add_realm_logo_fields(page_params, user_profile.realm)
         self.assertEqual(compute_navbar_logo_url(page_params),
-                         "/static/images/logo/zulip-org-logo.png?version=0")
+                         "/static/images/logo/zulip-org-logo.svg?version=0")
 
         page_params = {"color_scheme": user_profile.COLOR_SCHEME_LIGHT}
         add_realm_logo_fields(page_params, user_profile.realm)
         self.assertEqual(compute_navbar_logo_url(page_params),
-                         "/static/images/logo/zulip-org-logo.png?version=0")
+                         "/static/images/logo/zulip-org-logo.svg?version=0")
 
         do_change_logo_source(user_profile.realm, Realm.LOGO_UPLOADED, night=False, acting_user=user_profile)
         page_params = {"color_scheme": user_profile.COLOR_SCHEME_NIGHT}
@@ -811,7 +823,7 @@ class HomeTest(ZulipTestCase):
         page_params = {"color_scheme": user_profile.COLOR_SCHEME_LIGHT}
         add_realm_logo_fields(page_params, user_profile.realm)
         self.assertEqual(compute_navbar_logo_url(page_params),
-                         "/static/images/logo/zulip-org-logo.png?version=0")
+                         "/static/images/logo/zulip-org-logo.svg?version=0")
 
     def test_generate_204(self) -> None:
         self.login('hamlet')
@@ -824,7 +836,7 @@ class HomeTest(ZulipTestCase):
         hamlet = self.example_user('hamlet')
         self.login_user(hamlet)
         self.client_post("/json/messages/flags",
-                         {"messages": ujson.dumps([msg_id]),
+                         {"messages": orjson.dumps([msg_id]).decode(),
                           "op": "add",
                           "flag": "read"})
 
@@ -894,7 +906,11 @@ class HomeTest(ZulipTestCase):
         self.assertEqual(user_msg_list[-1].content, message)
         self.logout()
 
-        do_soft_deactivate_users([long_term_idle_user])
+        with self.assertLogs(level='INFO') as info_log:
+            do_soft_deactivate_users([long_term_idle_user])
+        self.assertEqual(info_log.output, [
+            'INFO:root:Soft-deactivated batch of 1 users; 0 remain to process'
+        ])
 
         self.login_user(long_term_idle_user)
         message = 'Test Message 2'
@@ -914,7 +930,11 @@ class HomeTest(ZulipTestCase):
         # We are sending this message to ensure that long_term_idle_user has
         # at least one UserMessage row.
         self.send_test_message('Testing', sender_name='hamlet')
-        do_soft_deactivate_users([long_term_idle_user])
+        with self.assertLogs(level='INFO') as info_log:
+            do_soft_deactivate_users([long_term_idle_user])
+        self.assertEqual(info_log.output, [
+            'INFO:root:Soft-deactivated batch of 1 users; 0 remain to process'
+        ])
 
         message = 'Test Message 1'
         self.send_test_message(message)
@@ -938,7 +958,11 @@ class HomeTest(ZulipTestCase):
         self.assertEqual(idle_user_msg_list[-1].content, message)
         self.logout()
 
-        do_soft_deactivate_users([long_term_idle_user])
+        with self.assertLogs(level='INFO') as info_log:
+            do_soft_deactivate_users([long_term_idle_user])
+        self.assertEqual(info_log.output, [
+            'INFO:root:Soft-deactivated batch of 1 users; 0 remain to process'
+        ])
 
         message = 'Test Message 3'
         self.send_test_message(message)

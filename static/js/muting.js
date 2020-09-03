@@ -1,4 +1,8 @@
-const FoldDict = require('./fold_dict').FoldDict;
+"use strict";
+
+const XDate = require("xdate");
+
+const FoldDict = require("./fold_dict").FoldDict;
 
 const muted_topics = new Map();
 
@@ -38,11 +42,11 @@ exports.get_muted_topics = function () {
             const date_muted = sub_dict.get(topic);
             const date_muted_str = timerender.render_now(new XDate(date_muted)).time_str;
             topics.push({
-                stream_id: stream_id,
-                stream: stream,
-                topic: topic,
-                date_muted: date_muted,
-                date_muted_str: date_muted_str,
+                stream_id,
+                stream,
+                topic,
+                date_muted,
+                date_muted_str,
             });
         }
     }
@@ -60,7 +64,7 @@ exports.set_muted_topics = function (tuples) {
         const stream_id = stream_data.get_stream_id(stream_name);
 
         if (!stream_id) {
-            blueslip.warn('Unknown stream in set_muted_topics: ' + stream_name);
+            blueslip.warn("Unknown stream in set_muted_topics: " + stream_name);
             continue;
         }
 

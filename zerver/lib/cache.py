@@ -8,7 +8,7 @@ import re
 import sys
 import time
 import traceback
-from functools import wraps
+from functools import lru_cache, wraps
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -29,7 +29,6 @@ from django.core.cache import caches
 from django.core.cache.backends.base import BaseCache
 from django.db.models import Q
 from django.http import HttpRequest
-from django.utils.lru_cache import lru_cache
 
 from zerver.lib.utils import make_safe_digest, statsd, statsd_key
 
@@ -472,7 +471,7 @@ def user_profile_by_api_key_cache_key(api_key: str) -> str:
     return f"user_profile_by_api_key:{api_key}"
 
 realm_user_dict_fields: List[str] = [
-    'id', 'full_name', 'short_name', 'email',
+    'id', 'full_name', 'email',
     'avatar_source', 'avatar_version', 'is_active',
     'role', 'is_bot', 'realm_id', 'timezone',
     'date_joined', 'bot_owner_id', 'delivery_email',
@@ -505,7 +504,6 @@ bot_dict_fields: List[str] = [
     'id',
     'is_active',
     'realm_id',
-    'short_name',
 ]
 
 def bot_dicts_in_realm_cache_key(realm: 'Realm') -> str:
@@ -569,7 +567,7 @@ def flush_user_profile(sender: Any, **kwargs: Any) -> None:
     if changed(kwargs, ['role']):
         cache_delete(active_non_guest_user_ids_cache_key(user_profile.realm_id))
 
-    if changed(kwargs, ['email', 'full_name', 'short_name', 'id', 'is_mirror_dummy']):
+    if changed(kwargs, ['email', 'full_name', 'id', 'is_mirror_dummy']):
         delete_display_recipient_cache(user_profile)
 
     # Invalidate our bots_in_realm info dict if any bot has
@@ -670,7 +668,9 @@ def ignore_unhashable_lru_cache(maxsize: int=128, typed: bool=False) -> DECORATO
             # In the development environment, we want every file
             # change to refresh the source files from disk.
             return user_function
-        cache_enabled_user_function = internal_decorator(user_function)
+
+        # Casting to Any since we're about to monkey-patch this.
+        cache_enabled_user_function = cast(Any, internal_decorator(user_function))
 
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             if not hasattr(cache_enabled_user_function, 'key_prefix'):

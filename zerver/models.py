@@ -365,6 +365,7 @@ class Realm(models.Model):
         },
         # ID 2 was used for the now-deleted Google Hangouts.
         # ID 3 reserved for optional Zoom, see below.
+        # ID 4 reserved for optional Big Blue Button, see below.
     }
 
     if settings.VIDEO_ZOOM_CLIENT_ID is not None and settings.VIDEO_ZOOM_CLIENT_SECRET is not None:
@@ -416,6 +417,7 @@ class Realm(models.Model):
         private_message_policy=int,
         user_group_edit_policy=int,
         default_code_block_language=(str, type(None)),
+        message_content_delete_limit_seconds=int,
     )
 
     DIGEST_WEEKDAY_VALUES = [0, 1, 2, 3, 4, 5, 6]
@@ -499,6 +501,10 @@ class Realm(models.Model):
         return UserProfile.objects.filter(realm=self, is_bot=False, is_active=True,
                                           role__in=[UserProfile.ROLE_REALM_ADMINISTRATOR,
                                                     UserProfile.ROLE_REALM_OWNER])
+
+    def get_human_billing_admin_users(self) -> Sequence['UserProfile']:
+        return UserProfile.objects.filter(Q(role=UserProfile.ROLE_REALM_OWNER) | Q(is_billing_admin=True),
+                                          realm=self, is_bot=False, is_active=True)
 
     def get_active_users(self) -> Sequence['UserProfile']:
         # TODO: Change return type to QuerySet[UserProfile]
@@ -734,7 +740,7 @@ def filter_format_validator(value: str) -> None:
 
 class RealmFilter(models.Model):
     """Realm-specific regular expressions to automatically linkify certain
-    strings inside the markdown processor.  See "Custom filters" in the settings UI.
+    strings inside the Markdown processor.  See "Custom filters" in the settings UI.
     """
     id: int = models.AutoField(auto_created=True, primary_key=True, verbose_name='ID')
     realm: Realm = models.ForeignKey(Realm, on_delete=CASCADE)
@@ -885,16 +891,13 @@ class UserProfile(AbstractBaseUser, PermissionsMixin):
     # Foreign key to the Recipient object for PERSONAL type messages to this user.
     recipient = models.ForeignKey(Recipient, null=True, on_delete=models.SET_NULL)
 
-    # The user's name.  We prefer the model of a full_name and
-    # short_name over first+last because cultures vary on how many
+    # The user's name.  We prefer the model of a full_name
+    # over first+last because cultures vary on how many
     # names one has, whether the family name is first or last, etc.
     # It also allows organizations to encode a bit of non-name data in
     # the "name" attribute if desired, like gender pronouns,
-    # graduation year, etc.  The short_name attribute is currently not
-    # used anywhere, but the intent is that it would be used as the
-    # shorter familiar name for addressing the user in the UI.
+    # graduation year, etc.
     full_name: str = models.CharField(max_length=MAX_NAME_LENGTH)
-    short_name: str = models.CharField(max_length=MAX_NAME_LENGTH)
 
     date_joined: datetime.datetime = models.DateTimeField(default=timezone_now)
     tos_version: Optional[str] = models.CharField(null=True, max_length=10)
@@ -1127,8 +1130,15 @@ class UserProfile(AbstractBaseUser, PermissionsMixin):
         presence_enabled=bool,
     )
 
-    class Meta:
-        unique_together = (('realm', 'email'),)
+    ROLE_ID_TO_NAME_MAP = {
+        ROLE_REALM_OWNER: _("Organization owner"),
+        ROLE_REALM_ADMINISTRATOR: _("Organization administrator"),
+        ROLE_MEMBER: _("Member"),
+        ROLE_GUEST: _("Guest"),
+    }
+
+    def get_role_name(self) -> str:
+        return self.ROLE_ID_TO_NAME_MAP[self.role]
 
     @property
     def profile_data(self) -> ProfileData:
@@ -1195,7 +1205,7 @@ class UserProfile(AbstractBaseUser, PermissionsMixin):
 
     @property
     def has_billing_access(self) -> bool:
-        return self.is_realm_admin or self.is_billing_admin
+        return self.is_realm_owner or self.is_billing_admin
 
     @property
     def is_realm_owner(self) -> bool:
@@ -1545,8 +1555,6 @@ class Stream(models.Model):
     # * is_in_zephyr_realm is a backend-only optimization.
     # * "deactivated" streams are filtered from the API entirely.
     # * "realm" and "recipient" are not exposed to clients via the API.
-    # * "date_created" should probably be added here, as it's useful information
-    #   to subscribers.
     API_FIELDS = [
         "name",
         "id",
@@ -1557,7 +1565,8 @@ class Stream(models.Model):
         "stream_post_policy",
         "history_public_to_subscribers",
         "first_message_id",
-        "message_retention_days"
+        "message_retention_days",
+        "date_created",
     ]
 
     @staticmethod
@@ -1570,6 +1579,9 @@ class Stream(models.Model):
         for field_name in self.API_FIELDS:
             if field_name == "id":
                 result['stream_id'] = self.id
+                continue
+            elif field_name == "date_created":
+                result['date_created'] = datetime_to_timestamp(self.date_created)
                 continue
             result[field_name] = getattr(self, field_name)
         result['is_announcement_only'] = self.stream_post_policy == Stream.STREAM_POST_POLICY_ADMINS
@@ -1888,6 +1900,44 @@ class ArchivedSubMessage(AbstractSubMessage):
 
 post_save.connect(flush_submessage, sender=SubMessage)
 
+class Draft(models.Model):
+    """ Server-side storage model for storing drafts so that drafts can be synced across
+    multiple clients/devices.
+    """
+    user_profile: UserProfile = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    recipient: Optional[Recipient] = models.ForeignKey(Recipient, null=True, on_delete=models.SET_NULL)
+    topic: str = models.CharField(max_length=MAX_TOPIC_NAME_LENGTH, db_index=True)
+    content: str = models.TextField()  # Length should not exceed MAX_MESSAGE_LENGTH
+    last_edit_time: datetime.datetime = models.DateTimeField(db_index=True)
+
+    def __str__(self) -> str:
+        return f"<{self.__class__.__name__}: {self.user_profile.email} / {self.id} / {self.last_edit_time}>"
+
+    def to_dict(self) -> Dict[str, Any]:  # nocoverage  # Will be added in a later commit.
+        if self.recipient is None:
+            _type = ""
+            to = []
+        elif self.recipient.type == Recipient.STREAM:
+            _type = "stream"
+            to = [self.recipient.type_id]
+        else:
+            _type = "private"
+            if self.recipient.type == Recipient.PERSONAL:
+                to = [self.recipient.type_id]
+            else:
+                to = []
+                for r in get_display_recipient(self.recipient):
+                    assert(not isinstance(r, str))  # It will only be a string for streams
+                    if not r["id"] == self.user_profile_id:
+                        to.append(r["id"])
+        return {
+            "type": _type,
+            "to": to,
+            "topic": self.topic,
+            "content": self.content,
+            "timestamp": self.last_edit_time.timestamp(),
+        }
+
 class AbstractReaction(models.Model):
     """For emoji reactions to messages (and potentially future reaction types).
 
@@ -2092,12 +2142,18 @@ class AbstractAttachment(models.Model):
     # Size of the uploaded file, in bytes
     size: int = models.IntegerField()
 
+    # The two fields below lets us avoid looking up the corresponding
+    # messages/streams to check permissions before serving these files.
+
     # Whether this attachment has been posted to a public stream, and
     # thus should be available to all non-guest users in the
     # organization (even if they weren't a recipient of a message
-    # linking to it).  This lets us avoid looking up the corresponding
-    # messages/streams to check permissions before serving these files.
+    # linking to it).
     is_realm_public: bool = models.BooleanField(default=False)
+    # Whether this attachment has been posted to a web-public stream,
+    # and thus should be available to everyone on the internet, even
+    # if the person isn't logged in.
+    is_web_public: bool = models.BooleanField(default=False)
 
     class Meta:
         abstract = True
@@ -2194,6 +2250,16 @@ class Subscription(models.Model):
     # resubscribes.
     active: bool = models.BooleanField(default=True)
 
+    ROLE_STREAM_ADMINISTRATOR = 20
+    ROLE_MEMBER = 50
+
+    ROLE_TYPES = [
+        ROLE_STREAM_ADMINISTRATOR,
+        ROLE_MEMBER,
+    ]
+
+    role: int = models.PositiveSmallIntegerField(default=ROLE_MEMBER, db_index=True)
+
     # Whether this user had muted this stream.
     is_muted: Optional[bool] = models.BooleanField(null=True, default=False)
 
@@ -2215,6 +2281,10 @@ class Subscription(models.Model):
 
     def __str__(self) -> str:
         return f"<Subscription: {self.user_profile} -> {self.recipient}>"
+
+    @property
+    def is_stream_admin(self) -> bool:
+        return self.role == Subscription.ROLE_STREAM_ADMINISTRATOR
 
     # Subscription fields included whenever a Subscription object is provided to
     # Zulip clients via the API.  A few details worth noting:
@@ -2240,6 +2310,7 @@ class Subscription(models.Model):
         "email_notifications",
         "push_notifications",
         "wildcard_mentions_notify",
+        "role",
     ]
 
 @cache_with_key(user_profile_by_id_cache_key, timeout=3600*24*7)
@@ -2285,7 +2356,7 @@ def get_user_by_delivery_email(email: str, realm: Realm) -> UserProfile:
         delivery_email__iexact=email.strip(), realm=realm)
 
 def get_users_by_delivery_email(emails: Set[str], realm: Realm) -> QuerySet:
-    """This is similar to get_users_by_delivery_email, and
+    """This is similar to get_user_by_delivery_email, and
     it has the same security caveats.  It gets multiple
     users and returns a QuerySet, since most callers
     will only need two or three fields.
@@ -2707,6 +2778,10 @@ class AbstractRealmAuditLog(models.Model):
     USER_TOS_VERSION_CHANGED = 126
     USER_API_KEY_CHANGED = 127
     USER_BOT_OWNER_CHANGED = 128
+    USER_DEFAULT_SENDING_STREAM_CHANGED = 129
+    USER_DEFAULT_REGISTER_STREAM_CHANGED = 130
+    USER_DEFAULT_ALL_PUBLIC_STREAMS_CHANGED = 131
+    USER_NOTIFICATION_SETTINGS_CHANGED = 132
 
     REALM_DEACTIVATED = 201
     REALM_REACTIVATED = 202
@@ -2715,10 +2790,12 @@ class AbstractRealmAuditLog(models.Model):
     REALM_LOGO_CHANGED = 205
     REALM_EXPORTED = 206
     REALM_PROPERTY_CHANGED = 207
+    REALM_ICON_SOURCE_CHANGED = 208
 
     SUBSCRIPTION_CREATED = 301
     SUBSCRIPTION_ACTIVATED = 302
     SUBSCRIPTION_DEACTIVATED = 303
+    SUBSCRIPTION_PROPERTY_CHANGED = 304
 
     STRIPE_CUSTOMER_CREATED = 401
     STRIPE_CARD_CHANGED = 402
@@ -2731,6 +2808,7 @@ class AbstractRealmAuditLog(models.Model):
 
     STREAM_CREATED = 601
     STREAM_DEACTIVATED = 602
+    STREAM_NAME_CHANGED = 603
 
     event_type: int = models.PositiveSmallIntegerField()
 
@@ -3010,7 +3088,8 @@ def get_fake_email_domain() -> str:
         # Check that the fake email domain can be used to form valid email addresses.
         validate_email("bot@" + settings.FAKE_EMAIL_DOMAIN)
     except ValidationError:
-        raise InvalidFakeEmailDomain(settings.FAKE_EMAIL_DOMAIN + ' is not a valid domain.')
+        raise InvalidFakeEmailDomain(settings.FAKE_EMAIL_DOMAIN + ' is not a valid domain. '
+                                     'Consider setting the FAKE_EMAIL_DOMAIN setting.')
 
     return settings.FAKE_EMAIL_DOMAIN
 

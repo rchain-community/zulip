@@ -61,6 +61,7 @@ from zerver.models import (
 from zerver.signals import email_on_new_login
 from zproject.backends import (
     AUTH_BACKEND_NAME_MAP,
+    AppleAuthBackend,
     ExternalAuthDataDict,
     ExternalAuthResult,
     SAMLAuthBackend,
@@ -240,13 +241,13 @@ def login_or_register_remote_user(request: HttpRequest, result: ExternalAuthResu
     browser to the appropriate place:
 
     * The logged-in app if the user already has a Zulip account and is
-      trying to login, potentially to an initial narrow or page that had been
+      trying to log in, potentially to an initial narrow or page that had been
       saved in the `redirect_to` parameter.
     * The registration form if is_signup was set (i.e. the user is
       trying to create a Zulip account)
     * A special `confirm_continue_registration.html` "do you want to
       register or try another account" if the user doesn't have a
-      Zulip account but is_signup is False (i.e. the user tried to login
+      Zulip account but is_signup is False (i.e. the user tried to log in
       and then did social authentication selecting an email address that does
       not have a Zulip account in this organization).
     * A zulip:// URL to send control back to the mobile or desktop apps if they
@@ -516,8 +517,13 @@ def start_social_login(request: HttpRequest, backend: str, extra_arg: Optional[s
             return redirect_to_config_error("saml")
         extra_url_params = {'idp': extra_arg}
 
+    if backend == "apple":
+        result = AppleAuthBackend.check_config()
+        if result is not None:
+            return result
+
     # TODO: Add AzureAD also.
-    if backend in ["github", "google", "gitlab", "apple"]:
+    if backend in ["github", "google", "gitlab"]:
         key_setting = "SOCIAL_AUTH_" + backend.upper() + "_KEY"
         secret_setting = "SOCIAL_AUTH_" + backend.upper() + "_SECRET"
         if not (getattr(settings, key_setting) and getattr(settings, secret_setting)):
@@ -793,6 +799,12 @@ def dev_direct_login(
     redirect_to = get_safe_redirect_to(next, user_profile.realm.uri)
     return HttpResponseRedirect(redirect_to)
 
+def check_dev_auth_backend() -> None:
+    if settings.PRODUCTION:
+        raise JsonableError(_("Endpoint not available in production."))
+    if not dev_auth_enabled():
+        raise JsonableError(_("DevAuthBackend not enabled."))
+
 @csrf_exempt
 @require_post
 @has_request_variables
@@ -801,8 +813,7 @@ def api_dev_fetch_api_key(request: HttpRequest, username: str=REQ()) -> HttpResp
     mobile apps when connecting to a Zulip development environment.  It
     requires DevAuthBackend to be included in settings.AUTHENTICATION_BACKENDS.
     """
-    if not dev_auth_enabled() or settings.PRODUCTION:
-        return json_error(_("Dev environment not enabled."))
+    check_dev_auth_backend()
 
     # Django invokes authenticate methods by matching arguments, and this
     # authentication flow will not invoke LDAP authentication because of
@@ -832,8 +843,8 @@ def api_dev_fetch_api_key(request: HttpRequest, username: str=REQ()) -> HttpResp
 
 @csrf_exempt
 def api_dev_list_users(request: HttpRequest) -> HttpResponse:
-    if not dev_auth_enabled() or settings.PRODUCTION:
-        return json_error(_("Dev environment not enabled."))
+    check_dev_auth_backend()
+
     users = get_dev_users()
     return json_success(dict(direct_admins=[dict(email=u.delivery_email, realm_uri=u.realm.uri)
                                             for u in users if u.is_realm_admin],
@@ -967,12 +978,6 @@ def logout_then_login(request: HttpRequest, **kwargs: Any) -> HttpResponse:
     return django_logout_then_login(request, kwargs)
 
 def password_reset(request: HttpRequest) -> HttpResponse:
-    if not Realm.objects.filter(string_id=get_subdomain(request)).exists():
-        # If trying to get to password reset on a subdomain that
-        # doesn't exist, just go to find_account.
-        redirect_url = reverse('zerver.views.registration.find_account')
-        return HttpResponseRedirect(redirect_url)
-
     view_func = DjangoPasswordResetView.as_view(template_name='zerver/reset.html',
                                                 form_class=ZulipPasswordResetForm,
                                                 success_url='/accounts/password/reset/done/')

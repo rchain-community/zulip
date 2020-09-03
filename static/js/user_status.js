@@ -1,15 +1,17 @@
+"use strict";
+
 const away_user_ids = new Set();
 const user_info = new Map();
 
 exports.server_update = function (opts) {
     channel.post({
-        url: '/json/users/me/status',
+        url: "/json/users/me/status",
         data: {
             away: opts.away,
             status_text: opts.status_text,
         },
         idempotent: true,
-        success: function () {
+        success() {
             if (opts.success) {
                 opts.success();
             }
@@ -26,15 +28,15 @@ exports.server_revoke_away = function () {
 };
 
 exports.set_away = function (user_id) {
-    if (typeof user_id !== 'number') {
-        blueslip.error('need ints for user_id');
+    if (typeof user_id !== "number") {
+        blueslip.error("need ints for user_id");
     }
     away_user_ids.add(user_id);
 };
 
 exports.revoke_away = function (user_id) {
-    if (typeof user_id !== 'number') {
-        blueslip.error('need ints for user_id');
+    if (typeof user_id !== "number") {
+        blueslip.error("need ints for user_id");
     }
     away_user_ids.delete(user_id);
 };

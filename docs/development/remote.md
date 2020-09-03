@@ -31,7 +31,7 @@ networks.
 
 ## Setting up user accounts
 
-You will need a non-root user account with sudo privileges to setup
+You will need a non-root user account with sudo privileges to set up
 the Zulip development environment.  If you have one already, continue
 to the next section.
 
@@ -44,7 +44,7 @@ account.)
 * You can add the user to the sudo group by running the command
 `usermod -aG sudo zulipdev`.
 * Finally, you can switch to the user by running the command `su -
-zulipdev` (or just login to that user using `ssh`).
+zulipdev` (or just log in to that user using `ssh`).
 
 ## Setting up the development environment
 
@@ -91,7 +91,7 @@ To properly secure your remote development environment, you can
 [port forward](https://help.ubuntu.com/community/SSH/OpenSSH/PortForwarding)
 using ssh instead of running the development environment on an exposed
 interface.  For example, if you're running Zulip on a remote server
-such as a DigitalOcean Droplet or an AWS EC2 instance, you can setup
+such as a DigitalOcean Droplet or an AWS EC2 instance, you can set up
 port-forwarding to access Zulip by running the following command in
 your terminal:
 
@@ -187,7 +187,7 @@ develop remotely from the comfort of your local machine.
 Similar packages/extensions exist for other popular code editors as
 well; contributions of precise documentation for them are welcome!
 
-To setup [rmate](https://github.com/textmate/rmate) for VS Code:
+To set up [rmate](https://github.com/textmate/rmate) for VS Code:
 1. Install the extension
 [Remote VSCode](https://marketplace.visualstudio.com/items?itemName=rafaelmaiolla.remote-vscode).
 2. On your remote machine, run:
@@ -217,11 +217,11 @@ Two editors often available by default on Linux systems are:
 * **Nano**: A very simple, beginner-friendly editor. However, it lacks a lot of
   features useful for programming, such as syntax highlighting, so we only
   recommended it for quick edits to things like configuration files. Launch by
-  running command `nano <filename>`. Exit by pressing *control-X*.
+  running command `nano <filename>`. Exit by pressing *Ctrl-X*.
 
 * **[Vim](https://www.vim.org/)**: A very powerful editor that can take a while
-  to learn. Launch by running `vim <filename>`. Quit Vim by pressing *escape*,
-  typing `:q`, and then pressing *return*. Vim comes with a program to learn it
+  to learn. Launch by running `vim <filename>`. Quit Vim by pressing *Esc*,
+  typing `:q`, and then pressing *Enter*. Vim comes with a program to learn it
   called `vimtutor` (just run that command to start it).
 
 Other options include:
@@ -235,7 +235,7 @@ If you are relatively new to working on the command line, or just want to get
 started working quickly, we recommend web-based IDE
 [Codeanywhere][codeanywhere].
 
-To setup Codeanywhere for Zulip:
+To set up Codeanywhere for Zulip:
 
 1. Create a [Codeanywhere][codeanywhere] account and log in.
 2. Create a new **SFTP-SSH** project. Use *Public key* for authentication.

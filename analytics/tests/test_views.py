@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from unittest import mock
 
-import ujson
+import orjson
 from django.http import HttpResponse
 from django.utils.timezone import now as timezone_now
 
@@ -10,12 +10,21 @@ from analytics.lib.counts import COUNT_STATS, CountStat
 from analytics.lib.time_utils import time_range
 from analytics.models import FillState, RealmCount, UserCount, last_successful_fill
 from analytics.views import rewrite_client_arrays, sort_by_totals, sort_client_labels
-from corporate.models import get_customer_by_realm
+from corporate.lib.stripe import add_months, update_sponsorship_status
+from corporate.models import Customer, CustomerPlan, LicenseLedger, get_customer_by_realm
 from zerver.lib.actions import do_create_multiuse_invite_link, do_send_realm_reactivation_email
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import reset_emails_in_zulip_realm
 from zerver.lib.timestamp import ceiling_to_day, ceiling_to_hour, datetime_to_timestamp
-from zerver.models import Client, MultiuseInvite, PreregistrationUser, get_realm
+from zerver.models import (
+    Client,
+    MultiuseInvite,
+    PreregistrationUser,
+    Realm,
+    UserMessage,
+    UserProfile,
+    get_realm,
+)
 
 
 class TestStatsEndpoint(ZulipTestCase):
@@ -92,14 +101,14 @@ class TestGetChartData(ZulipTestCase):
             insert_time = self.end_times_day[2]
             fill_time = self.end_times_day[-1]
 
-        RealmCount.objects.bulk_create([
+        RealmCount.objects.bulk_create(
             RealmCount(property=stat.property, subgroup=subgroup, end_time=insert_time,
                        value=100+i, realm=self.realm)
-            for i, subgroup in enumerate(realm_subgroups)])
-        UserCount.objects.bulk_create([
+            for i, subgroup in enumerate(realm_subgroups))
+        UserCount.objects.bulk_create(
             UserCount(property=stat.property, subgroup=subgroup, end_time=insert_time,
                       value=200+i, realm=self.realm, user=self.user)
-            for i, subgroup in enumerate(user_subgroups)])
+            for i, subgroup in enumerate(user_subgroups))
         FillState.objects.create(property=stat.property, end_time=fill_time, state=FillState.DONE)
 
     def test_number_of_humans(self) -> None:
@@ -293,7 +302,7 @@ class TestGetChartData(ZulipTestCase):
         data = result.json()
         end_times = [ceiling_to_day(self.realm.date_created) + timedelta(days=i) for i in range(-1, 4)]
         self.assertEqual(data['end_times'], [datetime_to_timestamp(dt) for dt in end_times])
-        self.assertEqual(data['everyone'], {'_1day': [0]+self.data(100), '_15day': [0]+self.data(100), 'all_time': [0]+self.data(100)})
+        self.assertEqual(data['everyone'], {'_1day': [0, *self.data(100)], '_15day': [0, *self.data(100)], 'all_time': [0, *self.data(100)]})
 
     def test_non_existent_chart(self) -> None:
         result = self.client_get('/json/analytics/chart_data',
@@ -443,7 +452,15 @@ class TestSupportEndpoint(ZulipTestCase):
                                              '<option value="active" selected>Active</option>',
                                              '<option value="deactivated" >Deactivated</option>',
                                              'scrub-realm-button">',
-                                             'data-string-id="lear"'], result)
+                                             'data-string-id="lear"',
+                                             '<b>Name</b>: Zulip Standard',
+                                             '<b>Status</b>: Active',
+                                             '<b>Billing schedule</b>: Annual',
+                                             '<b>Licenses</b>: 2/10 (Manual)',
+                                             '<b>Price per license</b>: $80.0',
+                                             '<b>Payment method</b>: Send invoice',
+                                             '<b>Next invoice date</b>: 02 January 2017',
+                                             ], result)
 
         def check_preregistration_user_query_result(result: HttpResponse, email: str, invite: bool=False) -> None:
             self.assert_in_success_response(['<span class="label">preregistration user</span>\n',
@@ -486,6 +503,14 @@ class TestSupportEndpoint(ZulipTestCase):
 
         self.login('iago')
 
+        customer = Customer.objects.create(realm=get_realm("lear"), stripe_customer_id='cus_123')
+        now = datetime(2016, 1, 2, tzinfo=timezone.utc)
+        plan = CustomerPlan.objects.create(customer=customer, billing_cycle_anchor=now,
+                                           billing_schedule=CustomerPlan.ANNUAL, tier=CustomerPlan.STANDARD,
+                                           price_per_license=8000, next_invoice_date=add_months(now, 12))
+        LicenseLedger.objects.create(licenses=10, licenses_at_next_renewal=10, event_time=timezone_now(),
+                                     is_renewal=True, plan=plan)
+
         result = self.client_get("/activity/support")
         self.assert_in_success_response(['<input type="text" name="q" class="input-xxlarge search-query"'], result)
 
@@ -522,7 +547,7 @@ class TestSupportEndpoint(ZulipTestCase):
         stream_ids = [self.get_stream_id("Denmark")]
         invitee_emails = [self.nonreg_email("test1")]
         self.client_post("/json/invites", {"invitee_emails": invitee_emails,
-                                           "stream_ids": ujson.dumps(stream_ids),
+                                           "stream_ids": orjson.dumps(stream_ids).decode(),
                                            "invite_as": PreregistrationUser.INVITE_AS['MEMBER']})
         result = self.client_get("/activity/support", {"q": self.nonreg_email("test1")})
         check_preregistration_user_query_result(result, self.nonreg_email("test1"), invite=True)
@@ -605,6 +630,36 @@ class TestSupportEndpoint(ZulipTestCase):
         assert(customer is not None)
         self.assertFalse(customer.sponsorship_pending)
 
+    def test_approve_sponsorship(self) -> None:
+        lear_realm = get_realm("lear")
+        update_sponsorship_status(lear_realm, True)
+        king_user = self.lear_user("king")
+        king_user.role = UserProfile.ROLE_REALM_OWNER
+        king_user.save()
+
+        cordelia = self.example_user('cordelia')
+        self.login_user(cordelia)
+
+        result = self.client_post("/activity/support", {"realm_id": f"{lear_realm.id}",
+                                                        "approve_sponsorship": "approve_sponsorship"})
+        self.assertEqual(result.status_code, 302)
+        self.assertEqual(result["Location"], "/login/")
+
+        iago = self.example_user("iago")
+        self.login_user(iago)
+
+        result = self.client_post("/activity/support", {"realm_id": f"{lear_realm.id}",
+                                                        "approve_sponsorship": "approve_sponsorship"})
+        self.assert_in_success_response(["Sponsorship approved for Lear &amp; Co."], result)
+        lear_realm.refresh_from_db()
+        self.assertEqual(lear_realm.plan_type, Realm.STANDARD_FREE)
+        customer = get_customer_by_realm(lear_realm)
+        assert(customer is not None)
+        self.assertFalse(customer.sponsorship_pending)
+        messages = UserMessage.objects.filter(user_profile=king_user)
+        self.assertIn("request for sponsored hosting has been approved", messages[0].message.content)
+        self.assertEqual(len(messages), 1)
+
     def test_activate_or_deactivate_realm(self) -> None:
         cordelia = self.example_user('cordelia')
         lear_realm = get_realm('lear')
@@ -643,8 +698,8 @@ class TestSupportEndpoint(ZulipTestCase):
             self.assert_in_success_response(["Lear &amp; Co. scrubbed"], result)
 
         with mock.patch("analytics.views.do_scrub_realm") as m:
-            with self.assertRaises(AssertionError):
-                result = self.client_post("/activity/support", {"realm_id": f"{lear_realm.id}"})
+            result = self.client_post("/activity/support", {"realm_id": f"{lear_realm.id}"})
+            self.assert_json_error(result, "Invalid parameters")
             m.assert_not_called()
 
 class TestGetChartDataHelpers(ZulipTestCase):

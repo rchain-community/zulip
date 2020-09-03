@@ -1,9 +1,13 @@
+"use strict";
+
+const people = require("./people");
 const util = require("./util");
+
 exports.initialize_pill = function () {
     const container = $("#private_message_recipient").parent();
 
     const pill = input_pill.create({
-        container: container,
+        container,
         create_item_from_text: user_pill.create_item_from_email,
         get_text_from_item: user_pill.get_email_from_item,
     });
@@ -23,7 +27,7 @@ exports.set_from_typeahead = function (person) {
     // We expect person to be an object returned from people.js.
     user_pill.append_person({
         pill_widget: exports.widget,
-        person: person,
+        person,
     });
 };
 
@@ -44,7 +48,7 @@ exports.has_unconverted_data = function () {
 exports.get_user_ids_string = function () {
     const user_ids = exports.get_user_ids();
     const sorted_user_ids = util.sorted_ids(user_ids);
-    const user_ids_string = sorted_user_ids.join(',');
+    const user_ids_string = sorted_user_ids.join(",");
     return user_ids_string;
 };
 

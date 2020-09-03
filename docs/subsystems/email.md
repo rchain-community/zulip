@@ -51,7 +51,7 @@ All the emails sent in the development environment can be accessed by
 visiting `/emails` in the browser.  The way that this works is that
 we've set the email backend (aka what happens when you call the email
 `.send()` method in Django) in the development environment to be our
-our custom backend, `EmailLogBackEnd`.  It does the following:
+custom backend, `EmailLogBackEnd`.  It does the following:
 
 * Logs any sent emails to `var/log/email_content.log`. This log is
   displayed by the `/emails` endpoint
@@ -65,7 +65,8 @@ account** in `/emails` page. This feature can be used for testing how
 emails gets rendered by different email clients. Before enabling this
 you have to first configure the following SMTP settings.
 
-* The hostname `EMAIL_HOST` in `zproject/dev_settings.py`
+* The hostname `EMAIL_HOST` in `zproject/dev_settings.py`.
+* The port `EMAIL_PORT` in `zproject/dev_settings.py`.
 * The username `EMAIL_HOST_USER` in `zproject/dev_settings.py`.
 * The password `email_password` in `zproject/dev-secrets.conf`.
 

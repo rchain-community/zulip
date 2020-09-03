@@ -28,14 +28,16 @@ if ! ./tools/build-release-tarball test; then
     exit 1
 fi
 
-# This list matches up against the persist_to_workspace step in
-# .circleci/config.yml
-mv /tmp/tmp.*/zulip-server-test.tar.gz /tmp/
+# Move all the required artifacts to /tmp/production-build
+# that will be later sent down to downstream install jobs.
+mkdir /tmp/production-build
+mv /tmp/tmp.*/zulip-server-test.tar.gz /tmp/production-build
 cp -a \
    tools/ci/success-http-headers.template.txt \
    tools/ci/production-install \
    tools/ci/production-verify \
    tools/ci/production-upgrade-pg \
    tools/ci/production-extract-tarball \
+   package.json yarn.lock \
    \
-   /tmp/
+   /tmp/production-build

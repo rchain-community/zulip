@@ -1,14 +1,15 @@
-import google_blob_css from "!style-loader?injectType=lazyStyleTag!css-loader!../generated/emoji-styles/google-blob-sprite.css";
 import google_blob_sheet from "emoji-datasource-google-blob/img/google/sheets-256/64.png";
-import google_css from "!style-loader?injectType=lazyStyleTag!css-loader!../generated/emoji-styles/google-sprite.css";
 import google_sheet from "emoji-datasource-google/img/google/sheets-256/64.png";
-import twitter_css from "!style-loader?injectType=lazyStyleTag!css-loader!../generated/emoji-styles/twitter-sprite.css";
 import twitter_sheet from "emoji-datasource-twitter/img/twitter/sheets-256/64.png";
 
+import google_blob_css from "!style-loader?injectType=lazyStyleTag!css-loader!../generated/emoji-styles/google-blob-sprite.css";
+import google_css from "!style-loader?injectType=lazyStyleTag!css-loader!../generated/emoji-styles/google-sprite.css";
+import twitter_css from "!style-loader?injectType=lazyStyleTag!css-loader!../generated/emoji-styles/twitter-sprite.css";
+
 const emojisets = new Map([
-    ["google", { css: google_css, sheet: google_sheet }],
-    ["google-blob", { css: google_blob_css, sheet: google_blob_sheet }],
-    ["twitter", { css: twitter_css, sheet: twitter_sheet }],
+    ["google", {css: google_css, sheet: google_sheet}],
+    ["google-blob", {css: google_blob_css, sheet: google_blob_sheet}],
+    ["twitter", {css: twitter_css, sheet: twitter_sheet}],
 ]);
 
 // For `text` emojiset we fallback to `google-blob` emojiset
@@ -44,5 +45,5 @@ export function initialize() {
     //
     // TODO: We should probably just make this work just like the Zulip emoji.
     const octopus_image = new Image();
-    octopus_image.src = '/static/generated/emoji/images-google-64/1f419.png';
+    octopus_image.src = "/static/generated/emoji/images-google-64/1f419.png";
 }

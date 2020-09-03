@@ -13,7 +13,7 @@ from typing import (
     Union,
 )
 
-import ujson
+import orjson
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -132,7 +132,6 @@ def check_if_removing_someone_else(user_profile: UserProfile,
     else:
         return principals[0] != user_profile.email
 
-@require_realm_admin
 def deactivate_stream_backend(request: HttpRequest,
                               user_profile: UserProfile,
                               stream_id: int) -> HttpResponse:
@@ -218,7 +217,6 @@ def remove_default_stream(request: HttpRequest,
     do_remove_default_stream(stream)
     return json_success()
 
-@require_realm_admin
 @has_request_variables
 def update_stream_backend(
         request: HttpRequest, user_profile: UserProfile,
@@ -340,7 +338,7 @@ def compose_views(
             response = method(request, user_profile, **kwargs)
             if response.status_code != 200:
                 raise JsonableError(response.content)
-            json_dict.update(ujson.loads(response.content))
+            json_dict.update(orjson.loads(response.content))
     return json_success(json_dict)
 
 check_principals: Validator[Union[List[str], List[int]]] = check_union(
@@ -356,16 +354,12 @@ def remove_subscriptions_backend(
 
     removing_someone_else = check_if_removing_someone_else(user_profile, principals)
 
-    if removing_someone_else and not user_profile.is_realm_admin:
-        # You can only unsubscribe other people from a stream if you are a realm
-        # admin (whether the stream is public or private).
-        return json_error(_("This action requires administrative rights"))
-
     streams_as_dict = []
     for stream_name in streams_raw:
         streams_as_dict.append({"name": stream_name.strip()})
 
-    streams, __ = list_to_streams(streams_as_dict, user_profile)
+    streams, __ = list_to_streams(streams_as_dict, user_profile,
+                                  admin_access_required=removing_someone_else)
 
     if principals:
         people_to_unsub = {principal_to_user_profile(
@@ -388,7 +382,7 @@ def remove_subscriptions_backend(
 def you_were_just_subscribed_message(acting_user: UserProfile,
                                      recipient_user: UserProfile,
                                      stream_names: Set[str]) -> str:
-    subscriptions = sorted(list(stream_names))
+    subscriptions = sorted(stream_names)
     if len(subscriptions) == 1:
         with override_language(recipient_user.default_language):
             return _("{user_full_name} subscribed you to the stream {stream_name}.").format(
@@ -482,7 +476,7 @@ def add_subscriptions_backend(
 
     # We can assume unique emails here for now, but we should eventually
     # convert this function to be more id-centric.
-    email_to_user_profile: Dict[str, UserProfile] = dict()
+    email_to_user_profile: Dict[str, UserProfile] = {}
 
     result: Dict[str, Any] = dict(subscribed=defaultdict(list), already_subscribed=defaultdict(list))
     for (subscriber, stream) in subscribed:
@@ -597,6 +591,7 @@ def get_subscribers_backend(request: HttpRequest, user_profile: UserProfile,
 def get_streams_backend(
         request: HttpRequest, user_profile: UserProfile,
         include_public: bool=REQ(validator=check_bool, default=True),
+        include_web_public: bool=REQ(validator=check_bool, default=False),
         include_subscribed: bool=REQ(validator=check_bool, default=True),
         include_all_active: bool=REQ(validator=check_bool, default=False),
         include_default: bool=REQ(validator=check_bool, default=False),
@@ -604,6 +599,7 @@ def get_streams_backend(
 ) -> HttpResponse:
 
     streams = do_get_streams(user_profile, include_public=include_public,
+                             include_web_public=include_web_public,
                              include_subscribed=include_subscribed,
                              include_all_active=include_all_active,
                              include_default=include_default,
@@ -736,7 +732,7 @@ def update_subscription_properties_backend(
             return json_error(error.message)
 
         do_change_subscription_property(user_profile, sub, stream,
-                                        property, value)
+                                        property, value, acting_user=user_profile)
 
         response_data.append({'stream_id': stream_id,
                               'property': property,

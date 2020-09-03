@@ -1,3 +1,7 @@
+"use strict";
+
+const marked = require("../third/marked/lib/marked");
+
 /*
 
 What in the heck is a zcommand?
@@ -20,19 +24,19 @@ exports.send = function (opts) {
     const command = opts.command;
     const on_success = opts.on_success;
     const data = {
-        command: command,
+        command,
     };
 
     channel.post({
-        url: '/json/zcommand',
-        data: data,
-        success: function (data) {
+        url: "/json/zcommand",
+        data,
+        success(data) {
             if (on_success) {
                 on_success(data);
             }
         },
-        error: function () {
-            exports.tell_user('server did not respond');
+        error() {
+            exports.tell_user("server did not respond");
         },
     });
 };
@@ -40,23 +44,25 @@ exports.send = function (opts) {
 exports.tell_user = function (msg) {
     // This is a bit hacky, but we don't have a super easy API now
     // for just telling users stuff.
-    $('#compose-send-status').removeClass(common.status_classes)
-        .addClass('alert-error')
-        .stop(true).fadeTo(0, 1);
-    $('#compose-error-msg').text(msg);
+    $("#compose-send-status")
+        .removeClass(common.status_classes)
+        .addClass("alert-error")
+        .stop(true)
+        .fadeTo(0, 1);
+    $("#compose-error-msg").text(msg);
 };
 
 exports.enter_day_mode = function () {
     exports.send({
         command: "/day",
-        on_success: function (data) {
+        on_success(data) {
             night_mode.disable();
             feedback_widget.show({
-                populate: function (container) {
+                populate(container) {
                     const rendered_msg = marked(data.msg).trim();
                     container.html(rendered_msg);
                 },
-                on_undo: function () {
+                on_undo() {
                     exports.send({
                         command: "/night",
                     });
@@ -71,14 +77,14 @@ exports.enter_day_mode = function () {
 exports.enter_night_mode = function () {
     exports.send({
         command: "/night",
-        on_success: function (data) {
+        on_success(data) {
             night_mode.enable();
             feedback_widget.show({
-                populate: function (container) {
+                populate(container) {
                     const rendered_msg = marked(data.msg).trim();
                     container.html(rendered_msg);
                 },
-                on_undo: function () {
+                on_undo() {
                     exports.send({
                         command: "/day",
                     });
@@ -93,14 +99,14 @@ exports.enter_night_mode = function () {
 exports.enter_fluid_mode = function () {
     exports.send({
         command: "/fluid-width",
-        on_success: function (data) {
+        on_success(data) {
             scroll_bar.set_layout_width();
             feedback_widget.show({
-                populate: function (container) {
+                populate(container) {
                     const rendered_msg = marked(data.msg).trim();
                     container.html(rendered_msg);
                 },
-                on_undo: function () {
+                on_undo() {
                     exports.send({
                         command: "/fixed-width",
                     });
@@ -115,14 +121,14 @@ exports.enter_fluid_mode = function () {
 exports.enter_fixed_mode = function () {
     exports.send({
         command: "/fixed-width",
-        on_success: function (data) {
+        on_success(data) {
             scroll_bar.set_layout_width();
             feedback_widget.show({
-                populate: function (container) {
+                populate(container) {
                     const rendered_msg = marked(data.msg).trim();
                     container.html(rendered_msg);
                 },
-                on_undo: function () {
+                on_undo() {
                     exports.send({
                         command: "/fluid-width",
                     });
@@ -135,15 +141,14 @@ exports.enter_fixed_mode = function () {
 };
 
 exports.process = function (message_content) {
-
     const content = message_content.trim();
 
-    if (content === '/ping') {
+    if (content === "/ping") {
         const start_time = new Date();
 
         exports.send({
             command: content,
-            on_success: function () {
+            on_success() {
                 const end_time = new Date();
                 let diff = end_time - start_time;
                 diff = Math.round(diff);
@@ -154,30 +159,30 @@ exports.process = function (message_content) {
         return true;
     }
 
-    const day_commands = ['/day', '/light'];
+    const day_commands = ["/day", "/light"];
     if (day_commands.includes(content)) {
         exports.enter_day_mode();
         return true;
     }
 
-    const night_commands = ['/night', '/dark'];
+    const night_commands = ["/night", "/dark"];
     if (night_commands.includes(content)) {
         exports.enter_night_mode();
         return true;
     }
 
-    if (content === '/fluid-width') {
+    if (content === "/fluid-width") {
         exports.enter_fluid_mode();
         return true;
     }
 
-    if (content === '/fixed-width') {
+    if (content === "/fixed-width") {
         exports.enter_fixed_mode();
         return true;
     }
 
-    if (content === '/settings') {
-        hashchange.go_to_location('settings/your-account');
+    if (content === "/settings") {
+        hashchange.go_to_location("settings/your-account");
         return true;
     }
 

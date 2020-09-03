@@ -4,7 +4,7 @@ import subprocess
 from typing import Any, Dict, List, Set, Tuple
 
 import dateutil.parser
-import ujson
+import orjson
 from django.conf import settings
 from django.forms.models import model_to_dict
 from django.utils.timezone import now as timezone_now
@@ -89,7 +89,6 @@ def build_userprofile(timestamp: Any, domain_name: str,
             # Build userprofile object
             userprofile = UserProfile(
                 full_name=user_data['displayName'],
-                short_name=user_data['username'],
                 id=user_id,
                 email=email,
                 delivery_email=email,
@@ -100,6 +99,11 @@ def build_userprofile(timestamp: Any, domain_name: str,
             # Set realm id separately as the corresponding realm is not yet a Realm model
             # instance
             userprofile_dict['realm'] = realm_id
+
+            # We use this later, even though Zulip doesn't
+            # support short_name
+            userprofile_dict['short_name'] = user_data['username']
+
             zerver_userprofile.append(userprofile_dict)
             user_id += 1
     logging.info('######### IMPORTING USERS FINISHED #########\n')
@@ -160,7 +164,7 @@ def build_recipient_and_subscription(
 
     # For streams
 
-    # Initial recipients correspond to intitial streams
+    # Initial recipients correspond to initial streams
     # We enumerate all streams, and build a recipient for each
     # Hence 'recipient_id'=n corresponds to 'stream_id'=n
     for stream in zerver_stream:
@@ -274,8 +278,8 @@ def do_convert_data(gitter_data_file: str, output_dir: str, threads: int=6) -> N
         raise Exception("Output directory should be empty!")
 
     # Read data from the gitter file
-    with open(gitter_data_file) as fp:
-        gitter_data = ujson.load(fp)
+    with open(gitter_data_file, "rb") as fp:
+        gitter_data = orjson.loads(fp.read())
 
     realm, avatar_list, user_map, stream_map = gitter_workspace_to_realm(
         domain_name, gitter_data, realm_subdomain)
@@ -317,5 +321,5 @@ def do_convert_data(gitter_data_file: str, output_dir: str, threads: int=6) -> N
     logging.info("Zulip data dump created at %s", output_dir)
 
 def write_data_to_file(output_file: str, data: Any) -> None:
-    with open(output_file, "w") as f:
-        f.write(ujson.dumps(data, indent=4))
+    with open(output_file, "wb") as f:
+        f.write(orjson.dumps(data, option=orjson.OPT_INDENT_2))

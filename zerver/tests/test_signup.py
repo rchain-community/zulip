@@ -6,7 +6,7 @@ import urllib
 from typing import Any, List, Optional, Sequence
 from unittest.mock import MagicMock, patch
 
-import ujson
+import orjson
 from django.conf import settings
 from django.contrib.auth.views import INTERNAL_RESET_URL_TOKEN
 from django.contrib.contenttypes.models import ContentType
@@ -424,7 +424,11 @@ class PasswordResetTest(ZulipTestCase):
             self.assert_length(outbox, 2)
 
             # Too many password reset emails sent to the address, we won't send more.
-            self.client_post('/accounts/password/reset/', {'email': email})
+            with self.assertLogs(level='INFO') as info_logs:
+                self.client_post('/accounts/password/reset/', {'email': email})
+            self.assertEqual(info_logs.output, [
+                'INFO:root:Too many password reset attempts for email hamlet@zulip.com'
+            ])
             self.assert_length(outbox, 2)
 
             # Resetting for a different address works though.
@@ -755,7 +759,7 @@ class LoginTest(ZulipTestCase):
         self.assertEqual(response["Location"], "http://zulip.testserver")
 
     def test_start_two_factor_auth(self) -> None:
-        request = MagicMock(POST=dict())
+        request = MagicMock(POST={})
         with patch('zerver.views.auth.TwoFactorLoginView') as mock_view:
             mock_view.as_view.return_value = lambda *a, **k: HttpResponse()
             response = start_two_factor_auth(request)
@@ -812,7 +816,7 @@ class InviteUserBase(ZulipTestCase):
             stream_ids.append(self.get_stream_id(stream_name))
         return self.client_post("/json/invites",
                                 {"invitee_emails": invitee_emails,
-                                 "stream_ids": ujson.dumps(stream_ids),
+                                 "stream_ids": orjson.dumps(stream_ids).decode(),
                                  "invite_as": invite_as})
 
 class InviteUserTest(InviteUserBase):
@@ -1184,7 +1188,7 @@ earl-test@zulip.com""", ["Denmark"]))
         self.login('iago')
         invitee_emails = "1@zulip.com, 2@zulip.com"
         self.invite(invitee_emails, ["Denmark"])
-        invitee_emails = ", ".join([str(i) for i in range(get_realm("zulip").max_invites - 1)])
+        invitee_emails = ", ".join(str(i) for i in range(get_realm("zulip").max_invites - 1))
         self.assert_json_error(self.invite(invitee_emails, ["Denmark"]),
                                "You do not have enough remaining invites. "
                                "Please contact desdemona+admin@zulip.com to have your limit raised. "
@@ -1579,7 +1583,7 @@ so we didn't send them an invitation. We did send invitations to everyone else!"
             'foo@zulip.com',
             'password',
             self.user_profile.realm,
-            'full name', 'short name',
+            'full name',
             prereg_user=prereg_user,
         )
 
@@ -1702,7 +1706,7 @@ class InvitationsTestCase(InviteUserBase):
 
         result = self.client_get("/json/invites")
         self.assertEqual(result.status_code, 200)
-        invites = ujson.loads(result.content)["invites"]
+        invites = orjson.loads(result.content)["invites"]
         self.assertEqual(len(invites), 2)
 
         self.assertFalse(invites[0]["is_multiuse"])
@@ -2133,7 +2137,7 @@ class MultiuseInviteTest(ZulipTestCase):
         stream_ids = [stream.id for stream in streams]
 
         result = self.client_post('/json/invites/multiuse',
-                                  {"stream_ids": ujson.dumps(stream_ids)})
+                                  {"stream_ids": orjson.dumps(stream_ids).decode()})
         self.assert_json_success(result)
 
         invite_link = result.json()["invite_link"]
@@ -2160,12 +2164,12 @@ class MultiuseInviteTest(ZulipTestCase):
     def test_multiuse_link_for_inviting_as_owner(self) -> None:
         self.login('iago')
         result = self.client_post('/json/invites/multiuse',
-                                  {"invite_as": ujson.dumps(PreregistrationUser.INVITE_AS['REALM_OWNER'])})
+                                  {"invite_as": orjson.dumps(PreregistrationUser.INVITE_AS['REALM_OWNER']).decode()})
         self.assert_json_error(result, "Must be an organization owner")
 
         self.login('desdemona')
         result = self.client_post('/json/invites/multiuse',
-                                  {"invite_as": ujson.dumps(PreregistrationUser.INVITE_AS['REALM_OWNER'])})
+                                  {"invite_as": orjson.dumps(PreregistrationUser.INVITE_AS['REALM_OWNER']).decode()})
         self.assert_json_success(result)
 
         invite_link = result.json()["invite_link"]
@@ -2174,7 +2178,7 @@ class MultiuseInviteTest(ZulipTestCase):
     def test_create_multiuse_link_invalid_stream_api_call(self) -> None:
         self.login('iago')
         result = self.client_post('/json/invites/multiuse',
-                                  {"stream_ids": ujson.dumps([54321])})
+                                  {"stream_ids": orjson.dumps([54321]).decode()})
         self.assert_json_error(result, "Invalid stream id 54321. No invites were sent.")
 
 class EmailUnsubscribeTests(ZulipTestCase):
@@ -2399,9 +2403,7 @@ class RealmCreationTest(ZulipTestCase):
 
         result = self.submit_reg_form_for_user(email, password,
                                                realm_subdomain = string_id,
-                                               realm_name=realm_name,
-                                               # Pass HTTP_HOST for the target subdomain
-                                               HTTP_HOST=string_id + ".testserver")
+                                               realm_name=realm_name)
         self.assertEqual(result.status_code, 302)
 
         result = self.client_get(result.url, subdomain=string_id)
@@ -2439,8 +2441,7 @@ class RealmCreationTest(ZulipTestCase):
 
         result = self.submit_reg_form_for_user(email, password,
                                                realm_subdomain = string_id,
-                                               realm_name=realm_name,
-                                               HTTP_HOST=string_id + ".testserver")
+                                               realm_name=realm_name)
         self.assertEqual(result.status_code, 302)
 
         result = self.client_get(result.url, subdomain=string_id)
@@ -3340,7 +3341,7 @@ class UserSignUpTest(InviteUserBase):
         subdomain = "zulip"
 
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
         full_name = 'New LDAP fullname'
 
         with patch('zerver.views.registration.get_subdomain', return_value=subdomain):
@@ -3392,8 +3393,6 @@ class UserSignUpTest(InviteUserBase):
             user_profile = UserProfile.objects.get(delivery_email=email)
             # Name comes from form which was set by LDAP.
             self.assertEqual(user_profile.full_name, full_name)
-            # Short name comes from LDAP.
-            self.assertEqual(user_profile.short_name, "shortname")
 
     @override_settings(AUTHENTICATION_BACKENDS=('zproject.backends.ZulipLDAPAuthBackend',
                                                 'zproject.backends.ZulipDummyBackend'))
@@ -3435,8 +3434,6 @@ class UserSignUpTest(InviteUserBase):
             user_profile = UserProfile.objects.get(delivery_email=email)
             # Name comes from form which was set by LDAP.
             self.assertEqual(user_profile.full_name, "First Last")
-            # Short name comes from LDAP.
-            self.assertEqual(user_profile.short_name, "First")
 
     @override_settings(AUTHENTICATION_BACKENDS=('zproject.backends.ZulipLDAPAuthBackend',
                                                 'zproject.backends.ZulipDummyBackend'))
@@ -3456,7 +3453,6 @@ class UserSignUpTest(InviteUserBase):
         self.init_default_ldap_database()
         ldap_user_attr_map = {
             'full_name': 'cn',
-            'short_name': 'sn',
             'custom_profile_field__phone_number': 'homePhone',
         }
         full_name = 'New LDAP fullname'
@@ -3472,7 +3468,6 @@ class UserSignUpTest(InviteUserBase):
             user_profile = UserProfile.objects.get(delivery_email=email)
             # Name comes from form which was set by LDAP.
             self.assertEqual(user_profile.full_name, full_name)
-            self.assertEqual(user_profile.short_name, 'shortname')
 
             # Test custom profile fields are properly synced.
             phone_number_field = CustomProfileField.objects.get(realm=user_profile.realm, name='Phone number')
@@ -3488,7 +3483,6 @@ class UserSignUpTest(InviteUserBase):
         self.init_default_ldap_database()
         ldap_user_attr_map = {
             'full_name': 'cn',
-            'short_name': 'sn',
         }
         do_create_realm('test', 'test', False)
 
@@ -3522,7 +3516,7 @@ class UserSignUpTest(InviteUserBase):
         subdomain = "zulip"
 
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
 
         with patch('zerver.views.registration.get_subdomain', return_value=subdomain):
             result = self.client_post('/register/', {'email': email})
@@ -3566,7 +3560,7 @@ class UserSignUpTest(InviteUserBase):
         subdomain = "zulip"
 
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
 
         with patch('zerver.views.registration.get_subdomain', return_value=subdomain):
             result = self.client_post('/register/', {'email': email})
@@ -3611,7 +3605,7 @@ class UserSignUpTest(InviteUserBase):
                 POPULATE_PROFILE_VIA_LDAP=True,
                 LDAP_APPEND_DOMAIN='zulip.com',
                 AUTH_LDAP_USER_ATTR_MAP=ldap_user_attr_map,
-        ):
+        ), self.assertLogs('zulip.ldap', 'DEBUG') as debug_log:
             result = self.submit_reg_form_for_user(email,
                                                    password,
                                                    full_name="Non-LDAP Full Name",
@@ -3622,6 +3616,9 @@ class UserSignUpTest(InviteUserBase):
             # aren't allowed to create non-ldap accounts.
             self.assertEqual(result.url, "/accounts/login/?email=newuser%40zulip.com")
             self.assertFalse(UserProfile.objects.filter(delivery_email=email).exists())
+            self.assertEqual(debug_log.output, [
+                'DEBUG:zulip.ldap:ZulipLDAPAuthBackend: No ldap user matching django_to_ldap_username result: newuser. Input username: newuser@zulip.com'
+            ])
 
         # If the email is outside of LDAP_APPEND_DOMAIN, we successfully create a non-ldap account,
         # with the password managed in the zulip database.
@@ -3642,12 +3639,15 @@ class UserSignUpTest(InviteUserBase):
                     "New account email %s could not be found in LDAP",
                     "newuser@zulip.com",
                 )
-
-            result = self.submit_reg_form_for_user(email,
-                                                   password,
-                                                   full_name="Non-LDAP Full Name",
-                                                   # Pass HTTP_HOST for the target subdomain
-                                                   HTTP_HOST=subdomain + ".testserver")
+            with self.assertLogs('zulip.ldap', 'DEBUG') as debug_log:
+                result = self.submit_reg_form_for_user(email,
+                                                       password,
+                                                       full_name="Non-LDAP Full Name",
+                                                       # Pass HTTP_HOST for the target subdomain
+                                                       HTTP_HOST=subdomain + ".testserver")
+            self.assertEqual(debug_log.output, [
+                'DEBUG:zulip.ldap:ZulipLDAPAuthBackend: Email newuser@zulip.com does not match LDAP domain example.com.'
+            ])
             self.assertEqual(result.status_code, 302)
             self.assertEqual(result.url, "http://zulip.testserver/")
             user_profile = UserProfile.objects.get(delivery_email=email)
@@ -3665,7 +3665,7 @@ class UserSignUpTest(InviteUserBase):
         subdomain = "zulip"
 
         self.init_default_ldap_database()
-        ldap_user_attr_map = {'full_name': 'cn', 'short_name': 'sn'}
+        ldap_user_attr_map = {'full_name': 'cn'}
 
         with patch('zerver.views.registration.get_subdomain', return_value=subdomain):
             result = self.client_post('/register/', {'email': email})
@@ -3732,11 +3732,15 @@ class UserSignUpTest(InviteUserBase):
                     "nonexistent@zulip.com",
                 )
 
-            result = self.submit_reg_form_for_user(email,
-                                                   password,
-                                                   full_name="Non-LDAP Full Name",
-                                                   # Pass HTTP_HOST for the target subdomain
-                                                   HTTP_HOST=subdomain + ".testserver")
+            with self.assertLogs('zulip.ldap', 'DEBUG') as debug_log:
+                result = self.submit_reg_form_for_user(email,
+                                                       password,
+                                                       full_name="Non-LDAP Full Name",
+                                                       # Pass HTTP_HOST for the target subdomain
+                                                       HTTP_HOST=subdomain + ".testserver")
+            self.assertEqual(debug_log.output, [
+                'DEBUG:zulip.ldap:ZulipLDAPAuthBackend: No ldap user matching django_to_ldap_username result: nonexistent@zulip.com. Input username: nonexistent@zulip.com'
+            ])
             self.assertEqual(result.status_code, 302)
             self.assertEqual(result.url, "http://zulip.testserver/")
             user_profile = UserProfile.objects.get(delivery_email=email)
@@ -3756,8 +3760,12 @@ class UserSignUpTest(InviteUserBase):
                 LDAP_APPEND_DOMAIN='zulip.com',
                 AUTH_LDAP_USER_ATTR_MAP=ldap_user_attr_map,
         ):
-            # Invite user.
-            self.login('iago')
+            with self.assertLogs('zulip.ldap', 'DEBUG') as debug_log:
+                # Invite user.
+                self.login('iago')
+            self.assertEqual(debug_log.output, [
+                'DEBUG:zulip.ldap:ZulipLDAPAuthBackend: No ldap user matching django_to_ldap_username result: iago. Input username: iago@zulip.com'
+            ])
             response = self.invite(invitee_emails='newuser@zulip.com',
                                    stream_names=streams,
                                    invite_as=invite_as)
@@ -3931,13 +3939,17 @@ class UserSignUpTest(InviteUserBase):
         # (this is an invalid state, so it's a bug we got here):
         user_profile.is_active = True
         user_profile.save()
-        with self.assertRaisesRegex(AssertionError, "Mirror dummy user is already active!"):
+        with self.assertRaisesRegex(AssertionError, "Mirror dummy user is already active!"), \
+                self.assertLogs('django.request', 'ERROR') as error_log:
             result = self.submit_reg_form_for_user(
                 email,
                 password,
                 from_confirmation='1',
                 # Pass HTTP_HOST for the target subdomain
                 HTTP_HOST=subdomain + ".testserver")
+        self.assertTrue('ERROR:django.request:Internal Server Error: /accounts/register/' in error_log.output[0])
+        self.assertTrue('raise AssertionError("Mirror dummy user is already active!' in error_log.output[0])
+        self.assertTrue('AssertionError: Mirror dummy user is already active!' in error_log.output[0])
 
         user_profile.is_active = False
         user_profile.save()
@@ -3966,8 +3978,12 @@ class UserSignUpTest(InviteUserBase):
         user_profile.is_active = True
         user_profile.save()
 
-        with self.assertRaisesRegex(AssertionError, "Mirror dummy user is already active!"):
+        with self.assertRaisesRegex(AssertionError, "Mirror dummy user is already active!"), \
+                self.assertLogs('django.request', 'ERROR') as error_log:
             self.client_post('/register/', {'email': email}, subdomain="zephyr")
+        self.assertTrue('ERROR:django.request:Internal Server Error: /register/' in error_log.output[0])
+        self.assertTrue('raise AssertionError("Mirror dummy user is already active!' in error_log.output[0])
+        self.assertTrue('AssertionError: Mirror dummy user is already active!' in error_log.output[0])
 
     @override_settings(TERMS_OF_SERVICE=False)
     def test_dev_user_registration(self) -> None:
@@ -4105,15 +4121,16 @@ class TestFindMyTeam(ZulipTestCase):
         self.assertIn("Find your Zulip accounts", result.content.decode('utf8'))
 
     def test_result(self) -> None:
+        # We capitalize a letter in cordelia's email to test that the search is case-insensitive.
         result = self.client_post('/accounts/find/',
-                                  dict(emails="iago@zulip.com,cordelia@zulip.com"))
+                                  dict(emails="iago@zulip.com,cordeliA@zulip.com"))
         self.assertEqual(result.status_code, 302)
-        self.assertEqual(result.url, "/accounts/find/?emails=iago%40zulip.com%2Ccordelia%40zulip.com")
+        self.assertEqual(result.url, "/accounts/find/?emails=iago%40zulip.com%2CcordeliA%40zulip.com")
         result = self.client_get(result.url)
         content = result.content.decode('utf8')
         self.assertIn("Emails sent! You will only receive emails", content)
-        self.assertIn(self.example_email("iago"), content)
-        self.assertIn(self.example_email("cordelia"), content)
+        self.assertIn("iago@zulip.com", content)
+        self.assertIn("cordeliA@zulip.com", content)
         from django.core.mail import outbox
 
         # 3 = 1 + 2 -- Cordelia gets an email each for the "zulip" and "lear" realms.
@@ -4187,7 +4204,7 @@ class TestFindMyTeam(ZulipTestCase):
         self.assertEqual(len(outbox), 0)
 
     def test_find_team_more_than_ten_emails(self) -> None:
-        data = {'emails': ','.join([f'hamlet-{i}@zulip.com' for i in range(11)])}
+        data = {'emails': ','.join(f'hamlet-{i}@zulip.com' for i in range(11))}
         result = self.client_post('/accounts/find/', data)
         self.assertEqual(result.status_code, 200)
         self.assertIn("Please enter at most 10", result.content.decode('utf8'))
@@ -4282,7 +4299,11 @@ class TwoFactorAuthTest(ZulipTestCase):
             first_step_data = {"username": email,
                                "password": password,
                                "two_factor_login_view-current_step": "auth"}
-            result = self.client_post("/accounts/login/", first_step_data)
+            with self.assertLogs('two_factor.gateways.fake', 'INFO') as info_logs:
+                result = self.client_post("/accounts/login/", first_step_data)
+            self.assertEqual(info_logs.output, [
+                'INFO:two_factor.gateways.fake:Fake SMS to +12125550100: "Your token is: 123456"'
+            ])
             self.assertEqual(result.status_code, 200)
 
             second_step_data = {"token-otp_token": str(token),

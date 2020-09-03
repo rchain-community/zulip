@@ -17,8 +17,8 @@ from typing import Iterator, List
 from unittest import mock
 
 import django
+import orjson
 import responses
-import ujson
 from django.conf import settings
 from django.test.utils import get_runner
 
@@ -108,10 +108,12 @@ not_yet_fully_covered = {path for target in [
     'zerver/lib/server_initialization.py',
     'zerver/lib/test_fixtures.py',
     'zerver/lib/test_runner.py',
+    'zerver/lib/test_console_output.py',
     'zerver/openapi/python_examples.py',
     # Tornado should ideally have full coverage, but we're not there.
     'zerver/tornado/autoreload.py',
     'zerver/tornado/descriptors.py',
+    'zerver/tornado/django_api.py',
     'zerver/tornado/event_queue.py',
     'zerver/tornado/exceptions.py',
     'zerver/tornado/handlers.py',
@@ -142,16 +144,16 @@ FAILED_TEST_PATH = 'var/last_test_failure.json'
 
 def get_failed_tests() -> List[str]:
     try:
-        with open(FAILED_TEST_PATH) as f:
-            return ujson.load(f)
+        with open(FAILED_TEST_PATH, "rb") as f:
+            return orjson.loads(f.read())
     except OSError:
         print("var/last_test_failure.json doesn't exist; running all tests.")
         return []
 
 def write_failed_tests(failed_tests: List[str]) -> None:
     if failed_tests:
-        with open(FAILED_TEST_PATH, 'w') as f:
-            ujson.dump(failed_tests, f)
+        with open(FAILED_TEST_PATH, 'wb') as f:
+            f.write(orjson.dumps(failed_tests))
 
 @contextlib.contextmanager
 def block_internet() -> Iterator[None]:
@@ -209,14 +211,14 @@ def main() -> None:
 
     parser.add_argument('--nonfatal-errors', action="store_false", default=True,
                         dest="fatal_errors", help="Continue past test failures to run all tests")
-    parser.add_argument('--coverage', dest='coverage',
+    parser.add_argument('--coverage',
                         action="store_true",
                         default=False,
                         help='Compute test coverage.')
-    parser.add_argument('--verbose-coverage', dest='verbose_coverage',
+    parser.add_argument('--verbose-coverage',
                         action="store_true",
                         default=False, help='Enable verbose print of coverage report.')
-    parser.add_argument('--no-cov-cleanup', dest='no_cov_cleanup',
+    parser.add_argument('--no-cov-cleanup',
                         action='store_true',
                         default=False,
                         help="Do not clean generated coverage files.")
@@ -227,40 +229,46 @@ def main() -> None:
                         default=default_parallel,
                         help='Specify the number of processes to run the '
                              'tests in. Default is the number of logical CPUs')
-    parser.add_argument('--profile', dest='profile',
+    parser.add_argument('--profile',
                         action="store_true",
                         default=False, help='Profile test runtime.')
-    parser.add_argument('--force', dest='force',
+    parser.add_argument('--force',
                         action="store_true",
                         default=False, help='Run tests despite possible problems.')
-    parser.add_argument('--no-shallow', dest='no_shallow',
+    parser.add_argument('--no-shallow',
                         action="store_true",
                         default=False,
                         help="Don't allow shallow testing of templates (deprecated)")
-    parser.add_argument('--verbose', dest='verbose',
+    parser.add_argument('--verbose',
                         action="store_true",
                         default=False,
                         help="Show detailed output")
-    parser.add_argument('--reverse', dest='reverse',
+    parser.add_argument('--reverse',
                         action="store_true",
                         default=False,
                         help="Run tests in reverse order.")
-    parser.add_argument('--rerun', dest="rerun",
+    parser.add_argument('--rerun',
                         action="store_true",
                         default=False,
                         help=("Run the tests which failed the last time "
                               "test-backend was run.  Implies --nonfatal-errors."))
-    parser.add_argument('--include-webhooks', dest="include_webhooks",
+    parser.add_argument('--include-webhooks',
                         action="store_true",
                         default=False,
                         help=("Include webhook tests.  By default, they are skipped for performance."))
-    parser.add_argument('--generate-stripe-fixtures', dest="generate_stripe_fixtures",
+    parser.add_argument('--generate-stripe-fixtures',
                         action="store_true",
                         default=False,
                         help=("Generate Stripe test fixtures by making requests to Stripe test network"))
     parser.add_argument('args', nargs='*')
+    parser.add_argument('--ban-console-output',
+                        action="store_true",
+                        default=False, help='Require stdout and stderr to be clean of unexpected output.')
 
     options = parser.parse_args()
+    if options.ban_console_output:
+        os.environ["BAN_CONSOLE_OUTPUT"] = "1"
+
     args = options.args
     parallel = options.processes
     include_webhooks = options.coverage or options.include_webhooks

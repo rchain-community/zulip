@@ -16,8 +16,8 @@ from typing import (
     TypeVar,
 )
 
+import orjson
 import requests
-import ujson
 from django.forms.models import model_to_dict
 
 from zerver.data_import.sequencer import NEXT_ID
@@ -41,8 +41,8 @@ ZerverFieldsT = Dict[str, Any]
 
 class SubscriberHandler:
     def __init__(self) -> None:
-        self.stream_info: Dict[int, Set[int]] = dict()
-        self.huddle_info: Dict[int, Set[int]] = dict()
+        self.stream_info: Dict[int, Set[int]] = {}
+        self.huddle_info: Dict[int, Set[int]] = {}
 
     def set_info(self,
                  users: Set[int],
@@ -99,10 +99,16 @@ def build_user_profile(avatar_source: str,
         is_active=is_active,
         role=role,
         realm_id=realm_id,
-        short_name=short_name,
         timezone=timezone,
     )
     dct = model_to_dict(obj)
+
+    '''
+    Even though short_name is no longer in the Zulip
+    UserProfile, it's helpful to have it in our import
+    dictionaries for legacy reasons.
+    '''
+    dct['short_name'] = short_name
     return dct
 
 def build_avatar(zulip_user_id: int, realm_id: int, email: str, avatar_url: str,
@@ -123,7 +129,7 @@ def make_subscriber_map(zerver_subscription: List[ZerverFieldsT]) -> Dict[int, S
     This can be convenient for building up UserMessage
     rows.
     '''
-    subscriber_map: Dict[int, Set[int]] = dict()
+    subscriber_map: Dict[int, Set[int]] = {}
     for sub in zerver_subscription:
         user_id = sub['user_profile']
         recipient_id = sub['recipient']
@@ -595,7 +601,7 @@ def run_parallel_wrapper(f: Callable[[ListJobData], None], full_items: List[List
             try:
                 f(item)
             except Exception:
-                logging.exception("Error processing item: %s", item)
+                logging.exception("Error processing item: %s", item, stack_info=True)
             count += 1
             if count % 1000 == 0:
                 logging.info("A download thread finished %s items", count)
@@ -703,5 +709,5 @@ def process_emojis(zerver_realmemoji: List[ZerverFieldsT], emoji_dir: str,
 def create_converted_data_files(data: Any, output_dir: str, file_path: str) -> None:
     output_file = output_dir + file_path
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    with open(output_file, 'w') as fp:
-        ujson.dump(data, fp, indent=4)
+    with open(output_file, 'wb') as fp:
+        fp.write(orjson.dumps(data, option=orjson.OPT_INDENT_2))

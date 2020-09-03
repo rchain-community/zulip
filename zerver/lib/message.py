@@ -4,7 +4,7 @@ import zlib
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import ahocorasick
-import ujson
+import orjson
 from django.db import connection
 from django.db.models import Sum
 from django.utils.timezone import now as timezone_now
@@ -154,10 +154,10 @@ def sew_messages_and_submessages(messages: List[Dict[str, Any]],
             message['submessages'].append(submessage)
 
 def extract_message_dict(message_bytes: bytes) -> Dict[str, Any]:
-    return ujson.loads(zlib.decompress(message_bytes).decode("utf-8"))
+    return orjson.loads(zlib.decompress(message_bytes))
 
 def stringify_message_dict(message_dict: Dict[str, Any]) -> bytes:
-    return zlib.compress(ujson.dumps(message_dict).encode())
+    return zlib.compress(orjson.dumps(message_dict))
 
 @cache_with_key(to_dict_cache_key, timeout=3600*24)
 def message_to_dict_json(message: Message, realm_id: Optional[int]=None) -> bytes:
@@ -395,19 +395,19 @@ class MessageDict:
         if last_edit_time is not None:
             obj['last_edit_timestamp'] = datetime_to_timestamp(last_edit_time)
             assert edit_history is not None
-            obj['edit_history'] = ujson.loads(edit_history)
+            obj['edit_history'] = orjson.loads(edit_history)
 
         if Message.need_to_render_content(rendered_content, rendered_content_version, markdown_version):
             # We really shouldn't be rendering objects in this method, but there is
-            # a scenario where we upgrade the version of markdown and fail to run
+            # a scenario where we upgrade the version of Markdown and fail to run
             # management commands to re-render historical messages, and then we
             # need to have side effects.  This method is optimized to not need full
-            # blown ORM objects, but the markdown renderer is unfortunately highly
+            # blown ORM objects, but the Markdown renderer is unfortunately highly
             # coupled to Message, and we also need to persist the new rendered content.
             # If we don't have a message object passed in, we get one here.  The cost
             # of going to the DB here should be overshadowed by the cost of rendering
             # and updating the row.
-            # TODO: see #1379 to eliminate markdown dependencies
+            # TODO: see #1379 to eliminate Markdown dependencies
             message = Message.objects.select_related().get(id=message_id)
 
             assert message is not None  # Hint for mypy.
@@ -445,7 +445,6 @@ class MessageDict:
         query = UserProfile.objects.values(
             'id',
             'full_name',
-            'short_name',
             'delivery_email',
             'email',
             'realm__string_id',
@@ -465,7 +464,6 @@ class MessageDict:
             sender_id = obj['sender_id']
             user_row = sender_dict[sender_id]
             obj['sender_full_name'] = user_row['full_name']
-            obj['sender_short_name'] = user_row['short_name']
             obj['sender_email'] = user_row['email']
             obj['sender_delivery_email'] = user_row['delivery_email']
             obj['sender_realm_str'] = user_row['realm__string_id']
@@ -487,7 +485,6 @@ class MessageDict:
         sender_is_mirror_dummy = obj['sender_is_mirror_dummy']
         sender_email = obj['sender_email']
         sender_full_name = obj['sender_full_name']
-        sender_short_name = obj['sender_short_name']
         sender_id = obj['sender_id']
 
         if recipient_type == Recipient.STREAM:
@@ -501,7 +498,6 @@ class MessageDict:
                 recip: UserDisplayRecipient = {
                     'email': sender_email,
                     'full_name': sender_full_name,
-                    'short_name': sender_short_name,
                     'id': sender_id,
                     'is_mirror_dummy': sender_is_mirror_dummy,
                 }
@@ -693,7 +689,7 @@ def do_render_markdown(message: Message,
                        realm_alert_words_automaton: Optional[ahocorasick.Automaton]=None,
                        mention_data: Optional[MentionData]=None,
                        email_gateway: bool=False) -> str:
-    """Return HTML for given markdown. Markdown may add properties to the
+    """Return HTML for given Markdown. Markdown may add properties to the
     message object such as `mentions_user_ids`, `mentions_user_group_ids`, and
     `mentions_wildcard`.  These are only on this Django object and are not
     saved in the database.
@@ -706,7 +702,7 @@ def do_render_markdown(message: Message,
     message.links_for_preview = set()
     message.user_ids_with_alert_words = set()
 
-    # DO MAIN WORK HERE -- call markdown to convert
+    # DO MAIN WORK HERE -- call markdown_convert to convert
     rendered_content = markdown_convert(
         content,
         realm_alert_words_automaton=realm_alert_words_automaton,
@@ -734,7 +730,7 @@ def huddle_users(recipient_id: int) -> str:
 def aggregate_message_dict(input_dict: Dict[int, Dict[str, Any]],
                            lookup_fields: List[str],
                            collect_senders: bool) -> List[Dict[str, Any]]:
-    lookup_dict: Dict[Tuple[Any, ...], Dict[str, Any]] = dict()
+    lookup_dict: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
 
     '''
     A concrete example might help explain the inputs here:
@@ -769,7 +765,7 @@ def aggregate_message_dict(input_dict: Dict[int, Dict[str, Any]],
     '''
 
     for message_id, attribute_dict in input_dict.items():
-        lookup_key = tuple([attribute_dict[f] for f in lookup_fields])
+        lookup_key = tuple(attribute_dict[f] for f in lookup_fields)
         if lookup_key not in lookup_dict:
             obj = {}
             for f in lookup_fields:
@@ -787,7 +783,7 @@ def aggregate_message_dict(input_dict: Dict[int, Dict[str, Any]],
     for dct in lookup_dict.values():
         dct['unread_message_ids'].sort()
         if collect_senders:
-            dct['sender_ids'] = sorted(list(dct['sender_ids']))
+            dct['sender_ids'] = sorted(dct['sender_ids'])
 
     sorted_keys = sorted(lookup_dict.keys())
 
@@ -1183,7 +1179,7 @@ def get_recent_private_conversations(user_profile: UserProfile) -> Dict[int, Dic
     for recipient_id, max_message_id in rows:
         recipient_map[recipient_id] = dict(
             max_message_id=max_message_id,
-            user_ids=list(),
+            user_ids=[],
         )
 
     # Now we need to map all the recipient_id objects to lists of user IDs

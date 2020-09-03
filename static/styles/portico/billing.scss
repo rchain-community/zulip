@@ -1,5 +1,5 @@
 .billing-upgrade-page {
-    font-family: Source Sans Pro, Helvetica, Arial, sans-serif;
+    font-family: "Source Sans Pro", Helvetica, Arial, sans-serif;
     background-color: hsl(0, 0%, 98%);
     height: 100vh;
 
@@ -76,7 +76,7 @@
             width: 120px;
             height: 70px;
             background-color: hsl(0, 0%, 94%);
-            transition: all .2s ease;
+            transition: all 0.2s ease;
             display: inline-block;
             text-align: center;
             cursor: pointer;
@@ -119,16 +119,19 @@
         padding: 11px 25px 11px 25px;
         font-weight: 400;
         color: hsl(0, 0%, 100%);
-        background-color: hsl(185, 38%, 55%);
-        background: linear-gradient(145deg, hsl(191, 56%, 55%), hsl(169, 65%, 42%));
-        box-shadow: 0px 3px 10px hsla(0, 0%, 0%, 0.2);
+        background: linear-gradient(
+            145deg,
+            hsl(191, 56%, 55%),
+            hsl(169, 65%, 42%)
+        );
+        box-shadow: 0 3px 10px hsla(0, 0%, 0%, 0.2);
         border: 0;
         height: 40px;
         margin: 5px 0 0 0;
         span {
             background: 0;
             box-shadow: none;
-            font-family: 'Source Sans Pro', Helvetica, Arial;
+            font-family: "Source Sans Pro", Helvetica, Arial;
             font-size: 1.4em;
             line-height: 20px;
         }
@@ -136,7 +139,7 @@
 
     .stripe-button-el:hover {
         background-color: hsl(169, 65%, 42%);
-        box-shadow: 0px 3px 10px hsla(0, 0%, 0%, 0.3);
+        box-shadow: 0 3px 10px hsla(0, 0%, 0%, 0.3);
     }
 
     .stripe-button-el:active,
@@ -272,9 +275,9 @@
 
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
+    appearance: none;
     margin: 0;
 }
 input[type="number"] {
-    -moz-appearance: textfield;
+    appearance: textfield;
 }

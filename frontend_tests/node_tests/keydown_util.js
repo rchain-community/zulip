@@ -1,37 +1,41 @@
-set_global('$', global.make_zjquery());
+"use strict";
 
-zrequire('keydown_util');
+set_global("$", global.make_zjquery());
 
-run_test('test_early_returns', () => {
-    const stub = $.create('stub');
+zrequire("keydown_util");
+
+run_test("test_early_returns", () => {
+    const stub = $.create("stub");
     const opts = {
         elem: stub,
         handlers: {
             left_arrow: () => {
-                throw Error('do not dispatch this with alt key');
+                throw Error("do not dispatch this with alt key");
             },
         },
     };
 
     keydown_util.handle(opts);
-    const keydown_f = stub.keydown;
 
     const e1 = {
+        type: "keydown",
         which: 17, // not in keys
     };
 
-    keydown_f(e1);
+    stub.trigger(e1);
 
     const e2 = {
+        type: "keydown",
         which: 13, // no handler
     };
 
-    keydown_f(e2);
+    stub.trigger(e2);
 
     const e3 = {
+        type: "keydown",
         which: 37,
         altKey: true, // let browser handle
     };
 
-    keydown_f(e3);
+    stub.trigger(e3);
 });

@@ -38,14 +38,9 @@ def check_our_files(modified_only: bool, all_dups: bool, fix: bool, targets: Lis
 def check_html_templates(templates: Iterable[str], all_dups: bool, fix: bool) -> None:
     # Our files with .html extensions are usually for Django, but we also
     # have a few static .html files.
-    #
-    # We also have .html files that we vendored from Casper.
-    # The casperjs files use HTML5 (whereas Zulip prefers XHTML), and
-    # there are also cases where Casper deliberately uses invalid HTML,
-    # so we exclude them from our linter.
     logging.basicConfig(format='%(levelname)s:%(message)s')
-    templates = sorted(fn for fn in templates if 'casperjs' not in fn)
-    # Use of underscore templates <%= %>.
+    templates = sorted(fn for fn in templates)
+    # Use of lodash templates <%= %>.
     if 'templates/zerver/team.html' in templates:
         templates.remove('templates/zerver/team.html')
 
@@ -72,7 +67,7 @@ def check_html_templates(templates: Iterable[str], all_dups: bool, fix: bool) ->
             # Temporary while we have searchbox forked
             'search_exit',
             'search_query',
-            'tab_bar',
+            'message_view_header',
             'search_arrows',
             'searchbox_form',
             'searchbox',
@@ -127,7 +122,7 @@ def check_html_templates(templates: Iterable[str], all_dups: bool, fix: bool) ->
     IGNORE_FILES = [
         # zephyr-mirror.html has some whitespace-dependent formatting
         # for code blocks that prevent cleaning it.  Might make sense
-        # to convert it to a /help/ markdown article.
+        # to convert it to a /help/ Markdown article.
         'templates/corporate/zephyr-mirror.html',
         # Can't clean this because of `preserve_spaces`
         'templates/zerver/app/markdown_help.html',

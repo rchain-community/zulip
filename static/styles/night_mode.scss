@@ -12,7 +12,7 @@ body.night-mode {
 
     .app-main,
     .header-main,
-    #tab_bar_underpadding,
+    #message_view_header_underpadding,
     .floating_recipient .message-header-wrapper,
     .column-middle,
     #compose,
@@ -26,11 +26,11 @@ body.night-mode {
 
     .compose-send-status-close {
         color: hsl(0, 0%, 100%);
-        opacity: 1.0;
+        opacity: 1;
     }
 
     .compose-send-status-close:hover {
-        opacity: .4;
+        opacity: 0.4;
     }
 
     .message_embed .data-container::after {
@@ -50,7 +50,7 @@ body.night-mode {
         color: hsl(212, 28%, 18%);
     }
 
-    .new-style label.checkbox input[type=checkbox] ~ span {
+    .new-style label.checkbox input[type="checkbox"] ~ span {
         border-color: hsla(0, 0%, 100%, 0.4);
     }
 
@@ -109,13 +109,14 @@ body.night-mode {
 
     /* do not turn the .message_header .stream_label text dark on hover because they're
 on a dark background, and don't change the dark labels dark either. */
-    .message_header:not(.dark_background) a.stream_label:not(.dark_background):hover {
+    .message_header:not(.dark_background)
+        a.stream_label:not(.dark_background):hover {
         color: hsl(212, 28%, 18%);
     }
 
     /* these are converting grey things to "new grey" */
-    *[disabled=disabled],
-    *[readonly=readonly],
+    *[disabled="disabled"],
+    *[readonly="readonly"],
     .sidebar-title,
     .recipient_row_date {
         color: inherit;
@@ -176,7 +177,7 @@ on a dark background, and don't change the dark labels dark either. */
     #search_arrows .pill,
     .pm_recipient .pill-container .pill {
         color: inherit;
-        border: 1px solid hsla(0, 0%, 0%, 0.50);
+        border: 1px solid hsla(0, 0%, 0%, 0.5);
         background-color: hsla(0, 0%, 0%, 0.25);
         font-weight: 600;
     }
@@ -192,7 +193,10 @@ on a dark background, and don't change the dark labels dark either. */
         background-color: transparent;
     }
 
-    .emoji-info-popover .emoji-popover .emoji-popover-category-tabs .emoji-popover-tab-item.active {
+    .emoji-info-popover
+        .emoji-popover
+        .emoji-popover-category-tabs
+        .emoji-popover-tab-item.active {
         background-color: hsla(0, 0%, 0%, 0.5);
     }
 
@@ -232,10 +236,6 @@ on a dark background, and don't change the dark labels dark either. */
     .message-header-contents,
     .message_header_private_message .message-header-contents {
         background-color: hsla(0, 0%, 0%, 0.2);
-    }
-
-    .message-header-contents,
-    .message_header_private_message .message-header-contents {
         border-color: transparent;
     }
 
@@ -252,28 +252,33 @@ on a dark background, and don't change the dark labels dark either. */
         border-color: hsla(0, 0%, 0%, 0.6);
     }
 
-    #tab_bar .sub_count {
+    #message_view_header .sub_count {
         &::before,
         &::after {
             color: hsla(0, 0%, 100%, 0.5);
         }
     }
 
-    #tab_bar span:nth-last-child(2):hover + .search_closed {
+    #message_view_header span:nth-last-child(2):hover + .search_closed {
         color: hsl(0, 0%, 100%);
     }
 
-    #tab_bar .stream {
+    #message_view_header .stream {
         color: hsl(236, 33%, 90%);
     }
-    #tab_bar .sub_count,
-    #tab_bar .narrow_description {
+    #message_view_header .sub_count,
+    #message_view_header .narrow_description {
         color: hsla(0, 0%, 90%, 1);
     }
 
     .overlay,
-    #subscription_overlay #stream-creation #stream_creation_form #stream_creating_indicator:not(:empty),
-    .emoji-info-popover .emoji-popover .emoji-popover-emoji:not(.reacted):focus {
+    #subscription_overlay
+        #stream-creation
+        #stream_creation_form
+        #stream_creating_indicator:not(:empty),
+    .emoji-info-popover
+        .emoji-popover
+        .emoji-popover-emoji:not(.reacted):focus {
         background-color: hsla(212, 28%, 8%, 0.75);
     }
 
@@ -281,7 +286,7 @@ on a dark background, and don't change the dark labels dark either. */
     .dropdown-menu.typeahead,
     #settings_page,
     .informational-overlays .overlay-content {
-        box-shadow: 0px 0px 30px hsl(212, 32%, 7%);
+        box-shadow: 0 0 30px hsl(212, 32%, 7%);
     }
 
     .dropdown-menu ul,
@@ -326,6 +331,7 @@ on a dark background, and don't change the dark labels dark either. */
     .clear_search_button:active,
     .clear_search_button[disabled]:hover,
     #user-groups .save-instructions,
+    #message_view_header .search_icon,
     #searchbox_legacy .search_icon,
     #searchbox_legacy .search_button,
     #searchbox .search_icon,
@@ -341,6 +347,8 @@ on a dark background, and don't change the dark labels dark either. */
 
     #message_edit_tooltip:hover,
     .clear_search_button:hover,
+    #message_view_header .search_icon:hover,
+    .search_icon_hover_highlight,
     #searchbox_legacy .search_icon:hover,
     #searchbox_legacy .search_button:hover,
     #searchbox .search_icon:hover,
@@ -381,16 +389,17 @@ on a dark background, and don't change the dark labels dark either. */
         background-color: hsla(199, 33%, 46%, 0.2);
     }
 
-    .top_left_row:hover,
-    .bottom_left_row:hover,
-    #stream_filters li.highlighted_stream,
+    :not(.active-sub-filter) {
+        &.top_left_row:hover,
+        &.bottom_left_row:hover,
+        &#stream_filters li.highlighted_stream {
+            background-color: hsla(136, 25%, 73%, 0.2);
+        }
+    }
+
     #user_presences li:hover,
     #user_presences li.highlighted_user {
         background-color: hsla(136, 25%, 73%, 0.2);
-    }
-
-    #stream_filters li.active-sub-filter:hover {
-        background-color: hsla(136, 25%, 73%, 0.5);
     }
 
     .floating_recipient .recipient_row {
@@ -411,6 +420,7 @@ on a dark background, and don't change the dark labels dark either. */
 
     .recent_avatars_others {
         color: hsl(0, 0%, 100%) !important;
+        background-color: hsl(211, 18%, 25%) !important;
     }
 
     .btn-recent-filters {
@@ -421,6 +431,14 @@ on a dark background, and don't change the dark labels dark either. */
         &:focus {
             background-color: hsla(0, 0%, 0%, 0.5) !important;
             outline: 0;
+        }
+    }
+
+    #recent_topics_table tr {
+        background-color: hsl(212, 28%, 18%);
+
+        &:hover {
+            background-color: hsl(208, 26%, 11%, 0.6);
         }
     }
 
@@ -516,13 +534,17 @@ on a dark background, and don't change the dark labels dark either. */
     .rendered_markdown {
         .user-mention,
         .user-group-mention {
-            background: linear-gradient(to bottom, hsla(0, 0%, 0%, 0.2) 0%, hsla(0, 0%, 0%, 0.1) 100%);
-            box-shadow: 0px 0px 0px 1px hsla(0, 0%, 0%, 0.4);
+            background: linear-gradient(
+                to bottom,
+                hsla(0, 0%, 0%, 0.2) 0%,
+                hsla(0, 0%, 0%, 0.1) 100%
+            );
+            box-shadow: 0 0 0 1px hsla(0, 0%, 0%, 0.4);
         }
 
         .user-mention-me :not(.silent) {
             background-color: hsla(355, 37%, 31%, 1);
-            box-shadow: 0px 0px 0px 1px hsla(330, 40%, 20%, 1);
+            box-shadow: 0 0 0 1px hsla(330, 40%, 20%, 1);
         }
 
         .codehilite code,
@@ -718,7 +740,7 @@ on a dark background, and don't change the dark labels dark either. */
 
     time {
         background: hsla(0, 0%, 0%, 0.2);
-        box-shadow: 0px 0px 0px 1px hsla(0, 0%, 0%, 0.4);
+        box-shadow: 0 0 0 1px hsla(0, 0%, 0%, 0.4);
     }
 
     .tip {
@@ -743,7 +765,7 @@ on a dark background, and don't change the dark labels dark either. */
 
     .alert.alert-success {
         color: inherit;
-        background-color: hsla(161, 60%, 46%, 0.20);
+        background-color: hsla(161, 60%, 46%, 0.2);
         border-color: hsl(165, 68%, 37%);
     }
 
@@ -781,9 +803,8 @@ on a dark background, and don't change the dark labels dark either. */
             .code-context {
                 color: hsl(314, 27%, 82%);
                 background-color: hsl(312, 7%, 14%);
-                box-shadow:
-                    inset 0px 11px 10px -10px hsl(0, 0%, 6%),
-                    inset 0px -11px 10px -10px hsl(0, 0%, 6%);
+                box-shadow: inset 0 11px 10px -10px hsl(0, 0%, 6%),
+                    inset 0 -11px 10px -10px hsl(0, 0%, 6%);
 
                 .line-number {
                     color: hsl(318, 14%, 44%);
@@ -933,7 +954,7 @@ on a dark background, and don't change the dark labels dark either. */
 
     .simplebar-track .simplebar-scrollbar::before {
         background-color: hsl(0, 0%, 100%);
-        box-shadow: 0px 0px 0px 1px hsla(0, 0%, 0%, 0.33);
+        box-shadow: 0 0 0 1px hsla(0, 0%, 0%, 0.33);
     }
 
     .collapse-settings-btn:hover {
@@ -963,6 +984,10 @@ on a dark background, and don't change the dark labels dark either. */
                 color: hsl(0, 0%, 18%);
             }
         }
+    }
+
+    a:not(:active):focus {
+        outline-color: hsl(0, 0%, 100%);
     }
 }
 

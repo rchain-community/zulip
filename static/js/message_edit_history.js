@@ -1,10 +1,16 @@
-const render_message_edit_history = require('../templates/message_edit_history.hbs');
+"use strict";
+
+const XDate = require("xdate");
+
+const render_message_edit_history = require("../templates/message_edit_history.hbs");
+
+const people = require("./people");
 
 exports.fetch_and_render_message_history = function (message) {
     channel.get({
         url: "/json/messages/" + message.id + "/history",
         data: {message_id: JSON.stringify(message.id)},
-        success: function (data) {
+        success(data) {
             const content_edit_history = [];
             let prev_datestamp = null;
 
@@ -47,21 +53,26 @@ exports.fetch_and_render_message_history = function (message) {
 
                 prev_datestamp = datestamp;
             }
-            $('#message-history').attr('data-message-id', message.id);
-            $('#message-history').html(render_message_edit_history({
-                edited_messages: content_edit_history,
-            }));
+            $("#message-history").attr("data-message-id", message.id);
+            $("#message-history").html(
+                render_message_edit_history({
+                    edited_messages: content_edit_history,
+                }),
+            );
         },
-        error: function (xhr) {
-            ui_report.error(i18n.t("Error fetching message edit history"), xhr,
-                            $("#message-history-error"));
+        error(xhr) {
+            ui_report.error(
+                i18n.t("Error fetching message edit history"),
+                xhr,
+                $("#message-history-error"),
+            );
         },
     });
 };
 
 exports.show_history = function (message) {
-    $('#message-history').html('');
-    $('#message-edit-history').modal("show");
+    $("#message-history").html("");
+    $("#message-edit-history").modal("show");
     exports.fetch_and_render_message_history(message);
 };
 

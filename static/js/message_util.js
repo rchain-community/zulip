@@ -1,3 +1,5 @@
+"use strict";
+
 exports.do_unread_count_updates = function do_unread_count_updates(messages) {
     unread.process_loaded_messages(messages);
     unread_ui.update_unread_counts();
@@ -9,23 +11,32 @@ function add_messages(messages, msg_list, opts) {
         return;
     }
 
-    loading.destroy_indicator($('#page_loading_indicator'));
+    loading.destroy_indicator($("#page_loading_indicator"));
 
     const render_info = msg_list.add_messages(messages, opts);
 
     return render_info;
 }
 
+// We need to check if the message content contains the specified HTML
+// elements.  We wrap the message.content in a <div>; this is
+// important because $("Text <a>link</a>").find("a") returns nothing;
+// one needs an outer element wrapping an object to use this
+// construction.
+function is_element_in_message_content(message, element_selector) {
+    return $(`<div>${message.content}</div>`).find(element_selector).length > 0;
+}
+
 exports.message_has_link = function (message) {
-    return $(message.content).find(`a`).length > 0;
+    return is_element_in_message_content(message, "a");
 };
 
 exports.message_has_image = function (message) {
-    return $(message.content).find(`.message_inline_image`).length > 0;
+    return is_element_in_message_content(message, ".message_inline_image");
 };
 
 exports.message_has_attachment = function (message) {
-    return $(message.content).find(`a[href^='/user_uploads']`).length > 0;
+    return is_element_in_message_content(message, "a[href^='/user_uploads']");
 };
 
 exports.add_old_messages = function (messages, msg_list) {
@@ -45,13 +56,26 @@ exports.add_new_messages = function (messages, msg_list) {
 };
 
 exports.get_messages_in_topic = function (stream_id, topic) {
-    // This function is very expensive since it searches
-    // all the messages. Please only use it in case of
-    // very rare events like topic edits. Its primary
-    // use case is the new experimental Recent Topics UI.
-    return message_list.all.all_messages().filter((x) => x.type === 'stream' &&
-               x.stream_id === stream_id &&
-               x.topic.toLowerCase() === topic.toLowerCase());
+    return message_list.all
+        .all_messages()
+        .filter(
+            (x) =>
+                x.type === "stream" &&
+                x.stream_id === stream_id &&
+                x.topic.toLowerCase() === topic.toLowerCase(),
+        );
+};
+
+exports.get_max_message_id_in_stream = function (stream_id) {
+    let max_message_id = 0;
+    for (const msg of message_list.all.all_messages()) {
+        if (msg.type === "stream" && msg.stream_id === stream_id) {
+            if (msg.id > max_message_id) {
+                max_message_id = msg.id;
+            }
+        }
+    }
+    return max_message_id;
 };
 
 window.message_util = exports;

@@ -1,7 +1,7 @@
 from typing import Any, List, Mapping, Set
 from unittest import mock
 
-import ujson
+import orjson
 from django.db import connection
 from django.http import HttpResponse
 
@@ -29,6 +29,16 @@ from zerver.models import (
     get_stream,
 )
 
+
+def check_flags(flags: List[str], expected: Set[str]) -> None:
+    '''
+    The has_alert_word flag can be ignored for most tests.
+    '''
+    assert 'has_alert_word' not in expected
+    flag_set = set(flags)
+    flag_set.discard('has_alert_word')
+    if flag_set != expected:
+        raise AssertionError(f'expected flags (ignoring has_alert_word) to be {expected}')
 
 class FirstUnreadAnchorTests(ZulipTestCase):
     '''
@@ -77,7 +87,7 @@ class FirstUnreadAnchorTests(ZulipTestCase):
 
         # Let's set this old message to be unread
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps([old_message_id]),
+                                  {"messages": orjson.dumps([old_message_id]).decode(),
                                    "op": "remove",
                                    "flag": "read"})
 
@@ -158,7 +168,7 @@ class UnreadCountTests(ZulipTestCase):
         self.login('hamlet')
 
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps(self.unread_msg_ids),
+                                  {"messages": orjson.dumps(self.unread_msg_ids).decode(),
                                    "op": "add",
                                    "flag": "read"})
         self.assert_json_success(result)
@@ -167,21 +177,21 @@ class UnreadCountTests(ZulipTestCase):
         found = 0
         for msg in self.get_messages():
             if msg['id'] in self.unread_msg_ids:
-                self.assertEqual(msg['flags'], ['read'])
+                check_flags(msg['flags'], {'read'})
                 found += 1
         self.assertEqual(found, 2)
 
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps([self.unread_msg_ids[1]]),
+                                  {"messages": orjson.dumps([self.unread_msg_ids[1]]).decode(),
                                    "op": "remove", "flag": "read"})
         self.assert_json_success(result)
 
         # Ensure we properly remove just one flag
         for msg in self.get_messages():
             if msg['id'] == self.unread_msg_ids[0]:
-                self.assertEqual(msg['flags'], ['read'])
+                check_flags(msg['flags'], {'read'})
             elif msg['id'] == self.unread_msg_ids[1]:
-                self.assertEqual(msg['flags'], [])
+                check_flags(msg['flags'], set())
 
     def test_mark_all_in_stream_read(self) -> None:
         self.login('hamlet')
@@ -363,8 +373,20 @@ class FixUnreadTests(ZulipTestCase):
         assert_unread(um_unsubscribed_id)
 
         # fix unsubscribed
-        with connection.cursor() as cursor:
+        with connection.cursor() as cursor, \
+                self.assertLogs('zulip.fix_unreads', 'INFO') as info_logs:
             fix_unsubscribed(cursor, user)
+
+        self.assertEqual(info_logs.output[0], 'INFO:zulip.fix_unreads:get recipients')
+        self.assertTrue('INFO:zulip.fix_unreads:[' in info_logs.output[1])
+        self.assertTrue('INFO:zulip.fix_unreads:elapsed time:' in info_logs.output[2])
+        self.assertEqual(info_logs.output[3],
+                         'INFO:zulip.fix_unreads:finding unread messages for non-active streams')
+        self.assertEqual(info_logs.output[4], 'INFO:zulip.fix_unreads:rows found: 1')
+        self.assertTrue('INFO:zulip.fix_unreads:elapsed time:' in info_logs.output[5])
+        self.assertEqual(info_logs.output[6],
+                         'INFO:zulip.fix_unreads:fixing unread messages for non-active streams')
+        self.assertTrue('INFO:zulip.fix_unreads:elapsed time:' in info_logs.output[7])
 
         # Muted messages don't change.
         assert_unread(um_muted_topic_id)
@@ -374,8 +396,18 @@ class FixUnreadTests(ZulipTestCase):
         # The unsubscribed entry should change.
         assert_read(um_unsubscribed_id)
 
-        # test idempotency
-        fix(user)
+        with self.assertLogs('zulip.fix_unreads', 'INFO') as info_logs:
+            # test idempotency
+            fix(user)
+
+        self.assertEqual(info_logs.output[0], f'INFO:zulip.fix_unreads:\n---\nFixing {user.id}:')
+        self.assertEqual(info_logs.output[1], 'INFO:zulip.fix_unreads:get recipients')
+        self.assertTrue('INFO:zulip.fix_unreads:[' in info_logs.output[2])
+        self.assertTrue('INFO:zulip.fix_unreads:elapsed time:' in info_logs.output[3])
+        self.assertEqual(info_logs.output[4],
+                         'INFO:zulip.fix_unreads:finding unread messages for non-active streams')
+        self.assertEqual(info_logs.output[5], 'INFO:zulip.fix_unreads:rows found: 0')
+        self.assertTrue('INFO:zulip.fix_unreads:elapsed time:' in info_logs.output[6])
 
         assert_unread(um_normal_id)
         assert_unread(um_muted_topic_id)
@@ -400,13 +432,13 @@ class PushNotificationMarkReadFlowsTest(ZulipTestCase):
 
         property_name = "push_notifications"
         result = self.api_post(user_profile, "/api/v1/users/me/subscriptions/properties",
-                               {"subscription_data": ujson.dumps([{"property": property_name,
-                                                                   "value": True,
-                                                                   "stream_id": stream.id}])})
+                               {"subscription_data": orjson.dumps([{"property": property_name,
+                                                                    "value": True,
+                                                                    "stream_id": stream.id}]).decode()})
         result = self.api_post(user_profile, "/api/v1/users/me/subscriptions/properties",
-                               {"subscription_data": ujson.dumps([{"property": property_name,
-                                                                   "value": True,
-                                                                   "stream_id": second_stream.id}])})
+                               {"subscription_data": orjson.dumps([{"property": property_name,
+                                                                    "value": True,
+                                                                    "stream_id": second_stream.id}]).decode()})
         self.assert_json_success(result)
         self.assertEqual(self.get_mobile_push_notification_ids(user_profile), [])
 
@@ -475,7 +507,7 @@ class GetUnreadMsgsTest(ZulipTestCase):
             self.subscribe(cordelia, stream_name)
 
         all_message_ids: Set[int] = set()
-        message_ids = dict()
+        message_ids = {}
 
         tups = [
             ('social', 'lunch'),
@@ -868,32 +900,38 @@ class MessageAccessTests(ZulipTestCase):
 
         self.login('hamlet')
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps([message]),
+                                  {"messages": orjson.dumps([message]).decode(),
                                    "op": "add",
                                    "flag": "invalid"})
         self.assert_json_error(result, "Invalid flag: 'invalid'")
 
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps([message]),
+                                  {"messages": orjson.dumps([message]).decode(),
                                    "op": "add",
                                    "flag": "is_private"})
         self.assert_json_error(result, "Invalid flag: 'is_private'")
 
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps([message]),
+                                  {"messages": orjson.dumps([message]).decode(),
                                    "op": "add",
                                    "flag": "active_mobile_push_notification"})
         self.assert_json_error(result, "Invalid flag: 'active_mobile_push_notification'")
 
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps([message]),
+                                  {"messages": orjson.dumps([message]).decode(),
                                    "op": "add",
                                    "flag": "mentioned"})
         self.assert_json_error(result, "Flag not editable: 'mentioned'")
 
+        result = self.client_post("/json/messages/flags",
+                                  {"messages": orjson.dumps([message]).decode(),
+                                   "op": "bogus",
+                                   "flag": "starred"})
+        self.assert_json_error(result, "Invalid message flag operation: 'bogus'")
+
     def change_star(self, messages: List[int], add: bool=True, **kwargs: Any) -> HttpResponse:
         return self.client_post("/json/messages/flags",
-                                {"messages": ujson.dumps(messages),
+                                {"messages": orjson.dumps(messages).decode(),
                                  "op": "add" if add else "remove",
                                  "flag": "starred"},
                                 **kwargs)
@@ -914,17 +952,17 @@ class MessageAccessTests(ZulipTestCase):
 
         for msg in self.get_messages():
             if msg['id'] in message_ids:
-                self.assertEqual(msg['flags'], ['starred'])
+                check_flags(msg['flags'], {'starred'})
             else:
-                self.assertEqual(msg['flags'], ['read'])
+                check_flags(msg['flags'], {'read'})
 
+        # Remove the stars.
         result = self.change_star(message_ids, False)
         self.assert_json_success(result)
 
-        # Remove the stars.
         for msg in self.get_messages():
             if msg['id'] in message_ids:
-                self.assertEqual(msg['flags'], [])
+                check_flags(msg['flags'], set())
 
     def test_change_star_public_stream_historical(self) -> None:
         """
@@ -960,13 +998,13 @@ class MessageAccessTests(ZulipTestCase):
             ),
         ]
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps(sent_message_ids),
+                                  {"messages": orjson.dumps(sent_message_ids).decode(),
                                    "op": "add",
                                    "flag": "read"})
 
         # We can't change flags other than "starred" on historical messages:
         result = self.client_post("/json/messages/flags",
-                                  {"messages": ujson.dumps(message_ids),
+                                  {"messages": orjson.dumps(message_ids).decode(),
                                    "op": "add",
                                    "flag": "read"})
         self.assert_json_error(result, 'Invalid message(s)')
@@ -981,11 +1019,11 @@ class MessageAccessTests(ZulipTestCase):
 
         for msg in self.get_messages():
             if msg['id'] in message_ids:
-                self.assertEqual(set(msg['flags']), {'starred', 'historical', 'read'})
+                check_flags(msg['flags'], {'starred', 'historical', 'read'})
             elif msg['id'] in received_message_ids:
-                self.assertEqual(msg['flags'], [])
+                check_flags(msg['flags'], set())
             else:
-                self.assertEqual(msg['flags'], ['read'])
+                check_flags(msg['flags'], {'read'})
             self.assertNotIn(msg['id'], other_message_ids)
 
         result = self.change_star(message_ids, False)

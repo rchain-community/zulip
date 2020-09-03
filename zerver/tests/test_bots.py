@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict, List, Mapping, Optional
 from unittest.mock import MagicMock, patch
 
-import ujson
+import orjson
 from django.core import mail
 from django.test import override_settings
 from zulip_bots.custom_exceptions import ConfigValidationError
@@ -175,6 +175,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             if e['event']['type'] == 'realm_bot'
         ]
 
+        self.assertEqual(result["user_id"], bot.id)
         self.assertEqual(
             dict(
                 type='realm_bot',
@@ -198,10 +199,8 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         )
 
         users_result = self.client_get('/json/users')
-        members = ujson.loads(users_result.content)['members']
-        bots = [m for m in members if m['email'] == 'hambot-bot@zulip.testserver']
-        self.assertEqual(len(bots), 1)
-        bot = bots[0]
+        members = orjson.loads(users_result.content)['members']
+        [bot] = [m for m in members if m['email'] == 'hambot-bot@zulip.testserver']
         self.assertEqual(bot['bot_owner_id'], self.example_user('hamlet').id)
         self.assertEqual(bot['user_id'], self.get_bot_user(email).id)
 
@@ -330,10 +329,8 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         )
 
         users_result = self.client_get('/json/users')
-        members = ujson.loads(users_result.content)['members']
-        bots = [m for m in members if m['email'] == 'hambot-bot@zulip.testserver']
-        self.assertEqual(len(bots), 1)
-        bot = bots[0]
+        members = orjson.loads(users_result.content)['members']
+        [bot] = [m for m in members if m['email'] == 'hambot-bot@zulip.testserver']
         self.assertEqual(bot['bot_owner_id'], user.id)
         self.assertEqual(bot['user_id'], self.get_bot_user(email).id)
 
@@ -429,7 +426,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             ),
             event['event'],
         )
-        self.assertEqual(event['users'], {user_profile.id})
+        self.assertEqual(event['users'], [user_profile.id])
 
     def test_add_bot_with_default_sending_stream_private_denied(self) -> None:
         self.login('hamlet')
@@ -504,7 +501,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             ),
             event['event'],
         )
-        self.assertEqual(event['users'], {user_profile.id})
+        self.assertEqual(event['users'], [user_profile.id])
 
     def test_add_bot_with_default_events_register_stream_private_denied(self) -> None:
         self.login('hamlet')
@@ -525,7 +522,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
     def test_add_bot_with_default_all_public_streams(self) -> None:
         self.login('hamlet')
         self.assert_num_bots_equal(0)
-        result = self.create_bot(default_all_public_streams=ujson.dumps(True))
+        result = self.create_bot(default_all_public_streams=orjson.dumps(True).decode())
         self.assert_num_bots_equal(1)
         self.assertTrue(result['default_all_public_streams'])
 
@@ -573,9 +570,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         result = self.client_post("/json/bots", bot_info)
         self.assert_json_success(result)
 
-        all_bots = UserProfile.objects.filter(is_bot=True, bot_owner=user, is_active=True)
-        bots = [bot for bot in all_bots]
-        self.assertEqual(len(bots), 2)
+        self.assertEqual(UserProfile.objects.filter(is_bot=True, bot_owner=user, is_active=True).count(), 2)
 
         result = self.client_delete('/json/users/me')
         self.assert_json_success(result)
@@ -583,9 +578,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         self.assertFalse(user.is_active)
 
         self.login('iago')
-        all_bots = UserProfile.objects.filter(is_bot=True, bot_owner=user, is_active=True)
-        bots = [bot for bot in all_bots]
-        self.assertEqual(len(bots), 0)
+        self.assertFalse(UserProfile.objects.filter(is_bot=True, bot_owner=user, is_active=True).exists())
 
     def test_cannot_deactivate_other_realm_bot(self) -> None:
         user = self.mit_user('starnine')
@@ -1302,7 +1295,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         result = self.client_post("/json/bots", bot_info)
         self.assert_json_success(result)
         bot_info = {
-            'default_all_public_streams': ujson.dumps(True),
+            'default_all_public_streams': orjson.dumps(True).decode(),
         }
         email = 'hambot-bot@zulip.testserver'
         result = self.client_patch(f"/json/bots/{self.get_bot_user(email).id}", bot_info)
@@ -1322,7 +1315,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         result = self.client_post("/json/bots", bot_info)
         self.assert_json_success(result)
         bot_info = {
-            'default_all_public_streams': ujson.dumps(False),
+            'default_all_public_streams': orjson.dumps(False).decode(),
         }
         email = 'hambot-bot@zulip.testserver'
         result = self.client_patch(f"/json/bots/{self.get_bot_user(email).id}", bot_info)
@@ -1374,23 +1367,23 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             'full_name': 'The Bot of Hamlet',
             'short_name': 'hambot',
             'bot_type': UserProfile.OUTGOING_WEBHOOK_BOT,
-            'payload_url': ujson.dumps("http://foo.bar.com"),
+            'payload_url': orjson.dumps("http://foo.bar.com").decode(),
             'service_interface': Service.GENERIC,
         }
         result = self.client_post("/json/bots", bot_info)
         self.assert_json_success(result)
         bot_info = {
-            'service_payload_url': ujson.dumps("http://foo.bar2.com"),
+            'service_payload_url': orjson.dumps("http://foo.bar2.com").decode(),
             'service_interface': Service.SLACK,
         }
         email = 'hambot-bot@zulip.testserver'
         result = self.client_patch(f"/json/bots/{self.get_bot_user(email).id}", bot_info)
         self.assert_json_success(result)
 
-        service_interface = ujson.loads(result.content)['service_interface']
+        service_interface = orjson.loads(result.content)['service_interface']
         self.assertEqual(service_interface, Service.SLACK)
 
-        service_payload_url = ujson.loads(result.content)['service_payload_url']
+        service_payload_url = orjson.loads(result.content)['service_payload_url']
         self.assertEqual(service_payload_url, "http://foo.bar2.com")
 
     @patch('zulip_bots.bots.giphy.giphy.GiphyHandler.validate_config')
@@ -1399,13 +1392,13 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
                              full_name='Bot with config data',
                              bot_type=UserProfile.EMBEDDED_BOT,
                              service_name='giphy',
-                             config_data=ujson.dumps({'key': '12345678'}))
-        bot_info = {'config_data': ujson.dumps({'key': '87654321'})}
+                             config_data=orjson.dumps({'key': '12345678'}).decode())
+        bot_info = {'config_data': orjson.dumps({'key': '87654321'}).decode()}
         email = 'test-bot@zulip.testserver'
         result = self.client_patch(f"/json/bots/{self.get_bot_user(email).id}", bot_info)
         self.assert_json_success(result)
-        config_data = ujson.loads(result.content)['config_data']
-        self.assertEqual(config_data, ujson.loads(bot_info['config_data']))
+        config_data = orjson.loads(result.content)['config_data']
+        self.assertEqual(config_data, orjson.loads(bot_info['config_data']))
 
     def test_outgoing_webhook_invalid_interface(self) -> None:
         self.login('hamlet')
@@ -1413,7 +1406,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             'full_name': 'Outgoing Webhook test bot',
             'short_name': 'outgoingservicebot',
             'bot_type': UserProfile.OUTGOING_WEBHOOK_BOT,
-            'payload_url': ujson.dumps('http://127.0.0.1:5002'),
+            'payload_url': orjson.dumps('http://127.0.0.1:5002').decode(),
             'interface_type': -1,
         }
         result = self.client_post("/json/bots", bot_info)
@@ -1429,7 +1422,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             'full_name': 'Outgoing Webhook test bot',
             'short_name': 'outgoingservicebot',
             'bot_type': UserProfile.OUTGOING_WEBHOOK_BOT,
-            'payload_url': ujson.dumps('http://127.0.0.1:5002'),
+            'payload_url': orjson.dumps('http://127.0.0.1:5002').decode(),
         }
         bot_info.update(extras)
         result = self.client_post("/json/bots", bot_info)
@@ -1438,16 +1431,14 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         bot_email = "outgoingservicebot-bot@zulip.testserver"
         bot_realm = get_realm('zulip')
         bot = get_user(bot_email, bot_realm)
-        services = get_bot_services(bot.id)
-        service = services[0]
+        [service] = get_bot_services(bot.id)
 
-        self.assertEqual(len(services), 1)
         self.assertEqual(service.name, "outgoingservicebot")
         self.assertEqual(service.base_url, "http://127.0.0.1:5002")
         self.assertEqual(service.user_profile, bot)
 
         # invalid URL test case.
-        bot_info['payload_url'] = ujson.dumps('http://127.0.0.:5002')
+        bot_info['payload_url'] = orjson.dumps('http://127.0.0.:5002').decode()
         result = self.client_post("/json/bots", bot_info)
         self.assert_json_error(result, "payload_url is not a URL")
 
@@ -1472,7 +1463,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             'full_name': 'Outgoing Webhook test bot',
             'short_name': 'outgoingservicebot',
             'bot_type': UserProfile.OUTGOING_WEBHOOK_BOT,
-            'payload_url': ujson.dumps('http://127.0.0.1:5002'),
+            'payload_url': orjson.dumps('http://127.0.0.1:5002').decode(),
             'interface_type': -1,
         }
         result = self.client_post("/json/bots", bot_info)
@@ -1489,7 +1480,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
                 user_profile=self.example_user("hamlet"),
                 bot_type=UserProfile.EMBEDDED_BOT,
                 service_name='followup',
-                config_data=ujson.dumps({'key': 'value'}),
+                config_data=orjson.dumps({'key': 'value'}).decode(),
                 assert_json_error_msg='Embedded bots are not enabled.',
                 **extras,
             )
@@ -1500,16 +1491,14 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
                              user_profile=self.example_user("hamlet"),
                              bot_type=UserProfile.EMBEDDED_BOT,
                              service_name='followup',
-                             config_data=ujson.dumps(bot_config_info),
+                             config_data=orjson.dumps(bot_config_info).decode(),
                              **extras)
         bot_email = "embeddedservicebot-bot@zulip.testserver"
         bot_realm = get_realm('zulip')
         bot = get_user(bot_email, bot_realm)
-        services = get_bot_services(bot.id)
-        service = services[0]
+        [service] = get_bot_services(bot.id)
         bot_config = get_bot_config(bot)
         self.assertEqual(bot_config, bot_config_info)
-        self.assertEqual(len(services), 1)
         self.assertEqual(service.name, "followup")
         self.assertEqual(service.user_profile, bot)
 
@@ -1528,7 +1517,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             short_name='embeddedservicebot',
             user_profile=self.example_user("hamlet"),
             service_name='followup',
-            config_data=ujson.dumps({'invalid': ['config', 'value']}),
+            config_data=orjson.dumps({'invalid': ['config', 'value']}).decode(),
             assert_json_error_msg='config_data contains a value that is not a string',
             **extras,
         )
@@ -1540,7 +1529,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             'short_name': 'embeddedservicebot3',
             'bot_type': UserProfile.EMBEDDED_BOT,
             'service_name': 'giphy',
-            'config_data': ujson.dumps(incorrect_bot_config_info),
+            'config_data': orjson.dumps(incorrect_bot_config_info).decode(),
         }
         bot_info.update(extras)
         with patch('zulip_bots.bots.giphy.giphy.GiphyHandler.validate_config', side_effect=ConfigValidationError):
@@ -1564,7 +1553,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             "short_name": "my-stripe",
             "bot_type": UserProfile.INCOMING_WEBHOOK_BOT,
             "service_name": "stripe",
-            "config_data": ujson.dumps({"stripe_api_key": "sample-api-key"}),
+            "config_data": orjson.dumps({"stripe_api_key": "sample-api-key"}).decode(),
         }
         self.create_bot(**bot_metadata)
         new_bot = UserProfile.objects.get(full_name="My Stripe Bot")
@@ -1580,12 +1569,12 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
             "short_name": "my-stripe",
             "bot_type": UserProfile.INCOMING_WEBHOOK_BOT,
             "service_name": "stripe",
-            "config_data": ujson.dumps({"stripe_api_key": "_invalid_key"}),
+            "config_data": orjson.dumps({"stripe_api_key": "_invalid_key"}).decode(),
         }
         response = self.client_post("/json/bots", bot_metadata)
         self.assertEqual(response.status_code, 400)
         expected_error_message = 'Invalid stripe_api_key value _invalid_key (stripe_api_key starts with a "_" and is hence invalid.)'
-        self.assertEqual(ujson.loads(response.content.decode('utf-8'))["msg"], expected_error_message)
+        self.assertEqual(orjson.loads(response.content.decode('utf-8'))["msg"], expected_error_message)
         with self.assertRaises(UserProfile.DoesNotExist):
             UserProfile.objects.get(full_name="My Stripe Bot")
 
@@ -1601,7 +1590,7 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         response = self.client_post("/json/bots", bot_metadata)
         self.assertEqual(response.status_code, 400)
         expected_error_message = "Missing configuration parameters: {'stripe_api_key'}"
-        self.assertEqual(ujson.loads(response.content.decode('utf-8'))["msg"], expected_error_message)
+        self.assertEqual(orjson.loads(response.content.decode('utf-8'))["msg"], expected_error_message)
         with self.assertRaises(UserProfile.DoesNotExist):
             UserProfile.objects.get(full_name="My Stripe Bot")
 
@@ -1630,6 +1619,6 @@ class BotTest(ZulipTestCase, UploadSerializeMixin):
         response = self.client_post("/json/bots", bot_metadata)
         self.assertEqual(response.status_code, 400)
         expected_error_message = "Invalid integration 'stripes'."
-        self.assertEqual(ujson.loads(response.content.decode('utf-8'))["msg"], expected_error_message)
+        self.assertEqual(orjson.loads(response.content.decode('utf-8'))["msg"], expected_error_message)
         with self.assertRaises(UserProfile.DoesNotExist):
             UserProfile.objects.get(full_name="My Stripe Bot")

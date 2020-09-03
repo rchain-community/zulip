@@ -1,7 +1,7 @@
 from typing import Any
 from unittest.mock import patch
 
-import ujson
+import orjson
 from django.http import HttpResponse
 
 from zerver.lib.test_classes import ZulipTestCase
@@ -15,7 +15,7 @@ class ZephyrTest(ZulipTestCase):
         self.login_user(user)
 
         def post(subdomain: Any, **kwargs: Any) -> HttpResponse:
-            params = {k: ujson.dumps(v) for k, v in kwargs.items()}
+            params = {k: orjson.dumps(v).decode() for k, v in kwargs.items()}
             return self.client_post('/accounts/webathena_kerberos_login/', params,
                                     subdomain=subdomain)
 
@@ -56,7 +56,7 @@ class ZephyrTest(ZulipTestCase):
             result = post("zephyr", cred=cred)
 
         self.assert_json_error(result, 'We were unable to setup mirroring for you')
-        log.assert_called_with("Error updating the user's ccache")
+        log.assert_called_with("Error updating the user's ccache", stack_info=True)
 
         with ccache_mock(return_value=b'1234'), mirror_mock(), ssh_mock() as ssh:
             result = post("zephyr", cred=cred)

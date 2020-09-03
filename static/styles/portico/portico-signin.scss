@@ -4,7 +4,7 @@ html {
 
 .flex {
     display: flex;
-    padding: 80px 0px;
+    padding: 80px 0;
     align-items: center;
     justify-content: center;
 
@@ -18,10 +18,10 @@ html {
 .white-box {
     position: relative;
     padding: 30px;
-    min-width: 0px;
+    min-width: 0;
 
     background-color: hsl(0, 0%, 100%);
-    box-shadow: 0px 0px 4px hsla(0, 0%, 0%, 0.1);
+    box-shadow: 0 0 4px hsla(0, 0%, 0%, 0.1);
     border: 1px solid hsl(0, 0%, 87%);
     border-radius: 4px;
 }
@@ -54,8 +54,8 @@ html {
     .login-page-header {
         font-size: 1.5em;
         font-weight: 300;
-        margin: 0px;
-        height: 0px;
+        margin: 0;
+        height: 0;
         transform: translateX(-15px) translateY(-60px);
         text-align: left;
     }
@@ -77,7 +77,7 @@ html {
             display: inline-block;
             vertical-align: top;
 
-            margin: 0px 20px;
+            margin: 0 20px;
         }
     }
 
@@ -143,11 +143,11 @@ html {
     }
 
     .group {
-        margin: 0px 20px;
+        margin: 0 20px;
         display: inline-block;
     }
 
-    input[type=submit] {
+    input[type="submit"] {
         color: hsl(0, 0%, 67%);
         border: 1px solid hsl(0, 0%, 87%);
         border-radius: 4px;
@@ -210,7 +210,7 @@ html {
 
 .find-account-page-container h3,
 .forgot-password-container h3 {
-    margin-top: 0px;
+    margin-top: 0;
 
     font-weight: 300;
     font-size: 2em;
@@ -221,7 +221,7 @@ html {
 
     h3,
     form {
-        margin-bottom: 0px;
+        margin-bottom: 0;
     }
 }
 
@@ -240,17 +240,6 @@ html {
     .header-main .logo span {
         color: hsl(0, 0%, 27%);
     }
-
-    .header-main .logo .brand-logo {
-        circle {
-            fill: hsl(0, 0%, 27%) !important;
-        }
-
-        path {
-            fill: hsl(0, 0%, 100%) !important;
-            stroke: hsl(0, 0%, 100%) !important;
-        }
-    }
 }
 
 .register-form {
@@ -266,7 +255,7 @@ html {
         margin-top: 10px;
 
         &:empty {
-            margin-top: 0px;
+            margin-top: 0;
         }
     }
 
@@ -308,7 +297,7 @@ html {
     font-weight: 400;
 
     .pitch {
-        margin-bottom: 0px;
+        margin-bottom: 0;
     }
 
     .alert.alert-info {
@@ -320,7 +309,7 @@ html {
     }
 
     .white-box p:last-of-type {
-        margin-bottom: 0px;
+        margin-bottom: 0;
     }
 }
 
@@ -390,7 +379,7 @@ html {
     }
 
     .form-inline {
-        margin: 0px;
+        margin: 0;
     }
 
     .get-started {
@@ -409,9 +398,9 @@ html {
         display: inline-block;
         vertical-align: top;
 
-        input[type=text],
-        input[type=email],
-        input[type=password] {
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
             padding: 10px 32px 10px 12px;
             margin: 25px 0 5px;
 
@@ -438,7 +427,7 @@ html {
             }
         }
 
-        input[type=email] {
+        input[type="email"] {
             margin-bottom: 10px;
         }
 
@@ -453,9 +442,9 @@ html {
         }
 
         &.moving-label {
-            input[type=text]:invalid + label,
-            input[type=email]:invalid + label,
-            input[type=password]:invalid + label {
+            input[type="text"]:invalid + label,
+            input[type="email"]:invalid + label,
+            input[type="password"]:invalid + label {
                 transform: translateY(35px) translateX(14px);
                 font-size: 1.2rem;
                 font-weight: 400;
@@ -466,14 +455,14 @@ html {
         }
 
         label,
-        input[type=text]:focus + label,
-        input[type=email]:focus + label,
-        input[type=password]:focus + label,
-        input[type=text]:valid + label,
-        input[type=email]:valid + label,
-        input[type=password]:valid + label {
-            left: 0px;
-            transform: translateY(-0px) translateX(0px);
+        input[type="text"]:focus + label,
+        input[type="email"]:focus + label,
+        input[type="password"]:focus + label,
+        input[type="text"]:valid + label,
+        input[type="email"]:valid + label,
+        input[type="password"]:valid + label {
+            left: 0;
+            transform: translateY(0) translateX(0);
             pointer-events: auto;
 
             font-size: 1rem;
@@ -483,16 +472,15 @@ html {
 
         p.text-error {
             display: block;
-            padding: 0px;
+            padding: 0;
 
             color: hsl(0, 54%, 61%);
             font-size: 0.7em;
             font-weight: 600;
             text-align: left;
-            height: 0;
+            line-height: 1.2;
 
             position: relative;
-            top: -4px;
             left: 1px;
         }
 
@@ -503,12 +491,12 @@ html {
             color: hsl(0, 54%, 61%);
             font-size: 0.7em;
             font-weight: 600;
-            padding-left: 0px;
+            padding-left: 0;
         }
     }
 
     .lead {
-        margin: 0px;
+        margin: 0;
     }
 
     .inline-block {
@@ -542,7 +530,7 @@ html {
 .portico-page {
     .pitch {
         h1 {
-            margin-bottom: 0px;
+            margin-bottom: 5px;
         }
 
         p {
@@ -594,7 +582,7 @@ html {
         .info-box {
             display: inline-block;
             position: relative;
-            margin: 20px 0px 0px 20px;
+            margin: 20px 0 0 20px;
             width: calc(100% - 125px);
 
             /* full width minus the avatar + padding + borders */
@@ -679,9 +667,9 @@ button.login-social-button {
     background-repeat: no-repeat;
     background-position: 13px 50%;
     background-color: hsl(0, 0%, 100%);
-    box-shadow: 0px 1px 3px hsla(0, 0%, 0%, 0.3), 0px 0px 5px hsla(0, 0%, 0%, 0.1);
-    margin-left: 0px;
-    margin-top: 0px;
+    box-shadow: 0 1px 3px hsla(0, 0%, 0%, 0.3), 0 0 5px hsla(0, 0%, 0%, 0.1);
+    margin-left: 0;
+    margin-top: 0;
 
     color: hsl(0, 0%, 34%);
 
@@ -692,7 +680,7 @@ button.login-social-button {
 
     &:active {
         background-color: hsl(0, 0%, 93%);
-        box-shadow: 0px 1px 1px hsla(0, 0%, 0%, 0.3);
+        box-shadow: 0 1px 1px hsla(0, 0%, 0%, 0.3);
     }
 }
 
@@ -705,7 +693,7 @@ button#register_auth_button_gitlab {
 
 .login-page-container .right-side .actions,
 .back-to-login-wrapper {
-    margin: 20px 0px 0px;
+    margin: 20px 0 0;
     text-align: left;
 }
 
@@ -754,12 +742,16 @@ button#register_auth_button_gitlab {
     padding: 0;
     margin: 30px;
 
-    section {
+    fieldset {
         margin: 30px;
+
+        .input-box:last-child {
+            margin-bottom: 0;
+        }
     }
 
     .info-box {
-        margin: 10px 0px 0px 20px;
+        margin: 10px 0 0 20px;
 
         .organization-name {
             max-width: 228px;
@@ -770,7 +762,7 @@ button#register_auth_button_gitlab {
         display: block;
         text-align: center;
         width: 330px;
-        margin: 30px auto 10px;
+        margin: 25px auto 10px;
         position: relative;
 
         &.with-top-space {
@@ -811,7 +803,7 @@ button#register_auth_button_gitlab {
     }
 
     #id_team_subdomain.subdomain {
-        margin-top: 0px;
+        margin-top: 0;
         text-align: right;
         position: relative;
         padding-right: 10px;
@@ -819,7 +811,7 @@ button#register_auth_button_gitlab {
         width: 150px;
 
         + .realm_subdomain_label {
-            margin-top: 12px;
+            top: 15px;
             margin-left: 180px;
             display: inline-block;
 
@@ -828,34 +820,49 @@ button#register_auth_button_gitlab {
         }
     }
 
-    #id_team_subdomain-error {
-        margin-top: 5px;
-        display: block;
-    }
-
     #subdomain_section {
         .inline-block {
             width: 100%;
         }
 
         .or {
-            margin-top: 0px;
+            margin-top: 0;
         }
     }
 
-    .help-box {
-        width: calc(100% - 25px);
-        max-width: none;
-        margin: 0 auto;
+    #id_email {
+        font-weight: normal;
+        margin: 2px;
+        padding-top: 25px;
+        text-align: left;
+        overflow-wrap: break-word;
+    }
 
-        &.margin-top {
-            margin-top: 21px;
-            text-align: left;
+    .help-text {
+        width: 100%;
+        max-width: none;
+        margin: 2px 0;
+        text-align: left;
+        color: hsl(0, 0%, 47%);
+        font-size: 0.9rem;
+        font-weight: 400;
+        line-height: 1.2;
+    }
+
+    .help-inline {
+        display: block;
+    }
+
+    legend {
+        margin-bottom: 0;
+
+        + .input-box {
+            margin-top: 20px;
         }
     }
 
     .external-host {
-        margin: 25px 0px 0px -3px;
+        margin: 25px 0 0 -3px;
         padding: 11.5px 10px;
 
         font-weight: 400;
@@ -865,7 +872,7 @@ button#register_auth_button_gitlab {
     }
 
     .center-block .pitch {
-        margin-bottom: 0px;
+        margin-bottom: 0;
     }
 
     .input-group {
@@ -889,7 +896,7 @@ button#register_auth_button_gitlab {
 }
 
 .static.org-url + #subdomain_section {
-    margin-top: 0px !important;
+    margin-top: 0 !important;
 
     .or {
         display: none;
@@ -958,7 +965,7 @@ button#register_auth_button_gitlab {
     }
 
     .find-account-link {
-        color: hsl(165, 100.0%, 14.7%);
+        color: hsl(165, 100%, 14.7%);
     }
 }
 
@@ -1064,10 +1071,10 @@ button#register_auth_button_gitlab {
             }
 
             .info-box {
-                margin-top: 0px;
+                margin-top: 0;
 
                 .organization-path {
-                    margin-top: 0px;
+                    margin-top: 0;
                 }
             }
         }
@@ -1087,13 +1094,13 @@ button#register_auth_button_gitlab {
 
         .left-side {
             border: none;
-            margin-right: 0px;
-            min-height: 0px;
+            margin-right: 0;
+            min-height: 0;
             margin-bottom: 20px;
             width: 324px;
 
             .description {
-                margin: 20px 0px;
+                margin: 20px 0;
 
                 a {
                     color: hsl(200, 100%, 36%);

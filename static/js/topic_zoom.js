@@ -1,3 +1,5 @@
+"use strict";
+
 let zoomed_in = false;
 
 exports.is_zoomed_in = function () {
@@ -10,7 +12,7 @@ function zoom_in() {
     popovers.hide_all_except_sidebars();
     topic_list.zoom_in();
     stream_list.zoom_in_topics({
-        stream_id: stream_id,
+        stream_id,
     });
 
     zoomed_in = true;
@@ -47,14 +49,14 @@ exports.clear_topics = function () {
 };
 
 exports.initialize = function () {
-    $('#stream_filters').on('click', '.show-more-topics', (e) => {
+    $("#stream_filters").on("click", ".show-more-topics", (e) => {
         zoom_in();
 
         e.preventDefault();
         e.stopPropagation();
     });
 
-    $('.show-all-streams').on('click', (e) => {
+    $(".show-all-streams").on("click", (e) => {
         exports.zoom_out();
 
         e.preventDefault();

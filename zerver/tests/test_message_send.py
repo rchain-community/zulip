@@ -1,9 +1,8 @@
 import datetime
-import time
 from typing import Any, Optional, Set
 from unittest import mock
 
-import ujson
+import orjson
 from django.conf import settings
 from django.db.models import Q
 from django.http import HttpResponse
@@ -113,7 +112,7 @@ class MessagePOSTTest(ZulipTestCase):
             bot, "/api/v1/messages",
             {
                 "type": "stream",
-                "to": ujson.dumps([99999]),
+                "to": orjson.dumps([99999]).decode(),
                 "client": "test suite",
                 "content": "Stream message by ID.",
                 "topic": "Test topic for stream ID message",
@@ -135,7 +134,7 @@ class MessagePOSTTest(ZulipTestCase):
         realm = get_realm('zulip')
         stream = get_stream('Verona', realm)
         result = self.client_post("/json/messages", {"type": "stream",
-                                                     "to": ujson.dumps([stream.id]),
+                                                     "to": orjson.dumps([stream.id]).decode(),
                                                      "client": "test suite",
                                                      "content": "Stream message by ID.",
                                                      "topic": "Test topic for stream ID message"})
@@ -183,7 +182,6 @@ class MessagePOSTTest(ZulipTestCase):
             password='',
             realm=non_admin_profile.realm,
             full_name='freebot',
-            short_name='freebot',
             bot_type=UserProfile.DEFAULT_BOT,
         )
         self._send_and_verify_message(bot_without_owner, stream_name,
@@ -248,7 +246,6 @@ class MessagePOSTTest(ZulipTestCase):
             password='',
             realm=non_admin_profile.realm,
             full_name='freebot',
-            short_name='freebot',
             bot_type=UserProfile.DEFAULT_BOT,
         )
         self._send_and_verify_message(bot_without_owner, stream_name,
@@ -268,10 +265,12 @@ class MessagePOSTTest(ZulipTestCase):
         user = self.example_user('hamlet')
         user.default_sending_stream_id = get_stream('Verona', user.realm).id
         user.save()
+        # The `to` field is required according to OpenAPI specification
         result = self.api_post(user, "/api/v1/messages", {"type": "stream",
                                                           "client": "test suite",
                                                           "content": "Test message no to",
-                                                          "topic": "Test topic"})
+                                                          "topic": "Test topic"},
+                               intentionally_undocumented=True)
         self.assert_json_success(result)
 
         sent_message = self.get_last_message()
@@ -315,7 +314,7 @@ class MessagePOSTTest(ZulipTestCase):
                                                      "client": "test suite",
                                                      "to": othello.email})
         self.assert_json_success(result)
-        message_id = ujson.loads(result.content.decode())['id']
+        message_id = orjson.loads(result.content.decode())['id']
 
         recent_conversations = get_recent_private_conversations(user_profile)
         self.assertEqual(len(recent_conversations), 1)
@@ -330,7 +329,7 @@ class MessagePOSTTest(ZulipTestCase):
                                                      "client": "test suite",
                                                      "to": user_profile.email})
         self.assert_json_success(result)
-        self_message_id = ujson.loads(result.content.decode())['id']
+        self_message_id = orjson.loads(result.content.decode())['id']
 
         recent_conversations = get_recent_private_conversations(user_profile)
         self.assertEqual(len(recent_conversations), 2)
@@ -356,7 +355,7 @@ class MessagePOSTTest(ZulipTestCase):
                 "type": "private",
                 "content": "Test message",
                 "client": "test suite",
-                "to": ujson.dumps([self.example_user("othello").id]),
+                "to": orjson.dumps([self.example_user("othello").id]).decode(),
             },
         )
         self.assert_json_success(result)
@@ -376,8 +375,8 @@ class MessagePOSTTest(ZulipTestCase):
                 "type": "private",
                 "content": "Test message",
                 "client": "test suite",
-                "to": ujson.dumps([self.example_user("othello").id,
-                                   self.example_user("cordelia").id]),
+                "to": orjson.dumps([self.example_user("othello").id,
+                                    self.example_user("cordelia").id]).decode(),
             },
         )
         self.assert_json_success(result)
@@ -402,7 +401,7 @@ class MessagePOSTTest(ZulipTestCase):
             "type": "private",
             "content": "Test message",
             "client": "test suite",
-            "to": ujson.dumps([hamlet.id, othello.id])})
+            "to": orjson.dumps([hamlet.id, othello.id]).decode()})
         self.assert_json_success(result)
         msg = self.get_last_message()
         # Verify that we're not actually on the "recipient list"
@@ -432,14 +431,14 @@ class MessagePOSTTest(ZulipTestCase):
             "type": "private",
             "content": "Test message",
             "client": "test suite",
-            "to": ujson.dumps([othello.id])})
+            "to": orjson.dumps([othello.id]).decode()})
         self.assert_json_error(result, f"'{othello.email}' is no longer using Zulip.")
 
         result = self.client_post("/json/messages", {
             "type": "private",
             "content": "Test message",
             "client": "test suite",
-            "to": ujson.dumps([othello.id, cordelia.id])})
+            "to": orjson.dumps([othello.id, cordelia.id]).decode()})
         self.assert_json_error(result, f"'{othello.email}' is no longer using Zulip.")
 
     def test_invalid_type(self) -> None:
@@ -521,8 +520,8 @@ class MessagePOSTTest(ZulipTestCase):
                                                   "sender": self.mit_email("sipbtest"),
                                                   "content": "Test message",
                                                   "client": "zephyr_mirror",
-                                                  "to": ujson.dumps([self.mit_email("starnine"),
-                                                                     self.mit_email("espuser")])},
+                                                  "to": orjson.dumps([self.mit_email("starnine"),
+                                                                      self.mit_email("espuser")]).decode()},
                                subdomain="zephyr")
         self.assert_json_success(result)
 
@@ -575,8 +574,8 @@ class MessagePOSTTest(ZulipTestCase):
                "sender": self.mit_email("sipbtest"),
                "content": "Test message",
                "client": "zephyr_mirror",
-               "to": ujson.dumps([self.mit_email("espuser"),
-                                  self.mit_email("starnine")])}
+               "to": orjson.dumps([self.mit_email("espuser"),
+                                   self.mit_email("starnine")]).decode()}
 
         with mock.patch('DNS.dnslookup', return_value=[['starnine:*:84233:101:Athena Consulting Exchange User,,,:/mit/starnine:/bin/bash']]):
             result1 = self.api_post(self.mit_user("starnine"), "/api/v1/messages", msg,
@@ -588,8 +587,8 @@ class MessagePOSTTest(ZulipTestCase):
                                     subdomain="zephyr")
             self.assert_json_success(result2)
 
-        self.assertEqual(ujson.loads(result1.content)['id'],
-                         ujson.loads(result2.content)['id'])
+        self.assertEqual(orjson.loads(result1.content)['id'],
+                         orjson.loads(result2.content)['id'])
 
     def test_message_with_null_bytes(self) -> None:
         """
@@ -741,7 +740,7 @@ class MessagePOSTTest(ZulipTestCase):
                                 "sender": self.mit_email("sipbtest"),
                                 "content": "Test message",
                                 "client": "zephyr_mirror",
-                                "to": ujson.dumps([user.id])},
+                                "to": orjson.dumps([user.id]).decode()},
                                subdomain="zephyr")
         self.assert_json_error(result, "Mirroring not allowed with recipient user IDs")
 
@@ -816,7 +815,7 @@ class MessagePOSTTest(ZulipTestCase):
                 client=client,
                 topic='whatever',
                 content='whatever',
-                forged=ujson.dumps(forged),
+                forged=orjson.dumps(forged).decode(),
             )
 
             # Only pass the 'sender' property when doing mirroring behavior.
@@ -943,8 +942,10 @@ class ScheduledMessageTest(ZulipTestCase):
                    "tz_guess": tz_guess}
         if defer_until:
             payload["deliver_at"] = defer_until
-
-        result = self.client_post("/json/messages", payload)
+        # `Topic` cannot be empty according to OpenAPI specification.
+        intentionally_undocumented: bool = (topic_name == '')
+        result = self.client_post("/json/messages", payload,
+                                  intentionally_undocumented=intentionally_undocumented)
         return result
 
     def test_schedule_message(self) -> None:
@@ -1124,6 +1125,7 @@ class StreamMessagesTest(ZulipTestCase):
             user = UserProfile.objects.create(
                 realm=realm,
                 email=email,
+                delivery_email=email,
                 long_term_idle=long_term_idle,
             )
             Subscription.objects.create(
@@ -1144,13 +1146,8 @@ class StreamMessagesTest(ZulipTestCase):
 
         before_um_count = UserMessage.objects.count()
 
-        t = time.time()
         for i in range(num_messages):
             send_test_message()
-
-        delay = time.time() - t
-        assert(delay)  # quiet down lint
-        # print(delay)
 
         after_um_count = UserMessage.objects.count()
         ums_created = after_um_count - before_um_count
@@ -1301,7 +1298,6 @@ class StreamMessagesTest(ZulipTestCase):
             password='',
             realm=realm,
             full_name='Normal Bot',
-            short_name='',
             bot_type=UserProfile.DEFAULT_BOT,
             bot_owner=cordelia,
         )
@@ -1540,7 +1536,7 @@ class ExtractTest(ZulipTestCase):
     def test_extract_private_recipients_emails(self) -> None:
 
         # JSON list w/dups, empties, and trailing whitespace
-        s = ujson.dumps([' alice@zulip.com ', ' bob@zulip.com ', '   ', 'bob@zulip.com'])
+        s = orjson.dumps([' alice@zulip.com ', ' bob@zulip.com ', '   ', 'bob@zulip.com']).decode()
         # sorted() gets confused by extract_private_recipients' return type
         # For testing, ignorance here is better than manual casting
         result = sorted(extract_private_recipients(s))
@@ -1565,11 +1561,11 @@ class ExtractTest(ZulipTestCase):
         self.assertEqual(result, ['alice@zulip.com', 'bob@zulip.com'])
 
         # Invalid data
-        s = ujson.dumps(dict(color='red'))
+        s = orjson.dumps(dict(color='red')).decode()
         with self.assertRaisesRegex(JsonableError, 'Invalid data type for recipients'):
             extract_private_recipients(s)
 
-        s = ujson.dumps([{}])
+        s = orjson.dumps([{}]).decode()
         with self.assertRaisesRegex(JsonableError, 'Invalid data type for recipients'):
             extract_private_recipients(s)
 
@@ -1577,23 +1573,23 @@ class ExtractTest(ZulipTestCase):
         self.assertEqual(extract_private_recipients('[]'), [])
 
         # Heterogeneous lists are not supported
-        mixed = ujson.dumps(['eeshan@example.com', 3, 4])
+        mixed = orjson.dumps(['eeshan@example.com', 3, 4]).decode()
         with self.assertRaisesRegex(JsonableError, 'Recipient lists may contain emails or user IDs, but not both.'):
             extract_private_recipients(mixed)
 
     def test_extract_recipient_ids(self) -> None:
         # JSON list w/dups
-        s = ujson.dumps([3, 3, 12])
+        s = orjson.dumps([3, 3, 12]).decode()
         result = sorted(extract_private_recipients(s))
         self.assertEqual(result, [3, 12])
 
         # Invalid data
-        ids = ujson.dumps(dict(recipient=12))
+        ids = orjson.dumps(dict(recipient=12)).decode()
         with self.assertRaisesRegex(JsonableError, 'Invalid data type for recipients'):
             extract_private_recipients(ids)
 
         # Heterogeneous lists are not supported
-        mixed = ujson.dumps([3, 4, 'eeshan@example.com'])
+        mixed = orjson.dumps([3, 4, 'eeshan@example.com']).decode()
         with self.assertRaisesRegex(JsonableError, 'Recipient lists may contain emails or user IDs, but not both.'):
             extract_private_recipients(mixed)
 
@@ -1624,6 +1620,7 @@ class InternalPrepTest(ZulipTestCase):
             "Error queueing internal message by %s: %s",
             "cordelia@zulip.com",
             "Message must not be empty",
+            stack_info=True,
         )
 
         with mock.patch('logging.exception') as m:
@@ -1638,6 +1635,7 @@ class InternalPrepTest(ZulipTestCase):
             "Error queueing internal message by %s: %s",
             "cordelia@zulip.com",
             "Message must not be empty",
+            stack_info=True,
         )
 
         with mock.patch('logging.exception') as m:
@@ -1653,6 +1651,7 @@ class InternalPrepTest(ZulipTestCase):
             "Error queueing internal message by %s: %s",
             "cordelia@zulip.com",
             "Message must not be empty",
+            stack_info=True,
         )
 
         with mock.patch('logging.exception') as m:
@@ -1668,6 +1667,7 @@ class InternalPrepTest(ZulipTestCase):
             "Error queueing internal message by %s: %s",
             "cordelia@zulip.com",
             "Message must not be empty",
+            stack_info=True,
         )
 
     def test_error_handling(self) -> None:
@@ -1698,6 +1698,7 @@ class InternalPrepTest(ZulipTestCase):
             "Error queueing internal message by %s: %s",
             "cordelia@zulip.com",
             "You can't send private messages outside of your organization.",
+            stack_info=True,
         )
 
     def test_ensure_stream_gets_called(self) -> None:
@@ -1893,6 +1894,25 @@ class CheckMessageTest(ZulipTestCase):
         ret = check_message(sender, client, addressee, message_content)
         self.assertEqual(ret['message'].sender.id, sender.id)
 
+    def test_guest_user_can_send_message(self) -> None:
+        # Guest users can write to web_public streams.
+        sender = self.example_user("polonius")
+        client = make_client(name="test suite")
+        rome_stream = get_stream("Rome", sender.realm)
+
+        is_sender_subscriber = Subscription.objects.filter(
+            user_profile=sender,
+            recipient__type_id=rome_stream.id,
+        ).exists()
+        self.assertFalse(is_sender_subscriber)
+        self.assertTrue(rome_stream.is_web_public)
+
+        topic_name = 'issue'
+        message_content = 'whatever'
+        addressee = Addressee.for_stream_name(rome_stream.name, topic_name)
+        ret = check_message(sender, client, addressee, message_content)
+        self.assertEqual(ret['message'].sender.id, sender.id)
+
     def test_bot_pm_feature(self) -> None:
         """We send a PM to a bot's owner if their bot sends a message to
         an unsubscribed stream"""
@@ -1902,7 +1922,6 @@ class CheckMessageTest(ZulipTestCase):
             password='',
             realm=parent.realm,
             full_name='',
-            short_name='',
             bot_type=UserProfile.DEFAULT_BOT,
             bot_owner=parent,
         )

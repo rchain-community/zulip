@@ -6,12 +6,13 @@ from decimal import Decimal
 from functools import wraps
 from typing import Callable, Dict, Optional, Tuple, TypeVar, cast
 
+import orjson
 import stripe
-import ujson
 from django.conf import settings
 from django.core.signing import Signer
 from django.db import transaction
 from django.utils.timezone import now as timezone_now
+from django.utils.translation import override as override_language
 from django.utils.translation import ugettext as _
 
 from corporate.models import (
@@ -25,7 +26,7 @@ from corporate.models import (
 from zerver.lib.logging_util import log_to_file
 from zerver.lib.timestamp import datetime_to_timestamp, timestamp_to_datetime
 from zerver.lib.utils import generate_random_token
-from zerver.models import Realm, RealmAuditLog, UserProfile
+from zerver.models import Realm, RealmAuditLog, UserProfile, get_system_bot
 from zproject.config import get_secret
 
 STRIPE_PUBLISHABLE_KEY = get_secret('stripe_publishable_key')
@@ -296,10 +297,10 @@ def make_end_of_cycle_updates_if_needed(plan: CustomerPlan,
             RealmAuditLog.objects.create(
                 realm=new_plan.customer.realm, event_time=event_time,
                 event_type=RealmAuditLog.CUSTOMER_SWITCHED_FROM_MONTHLY_TO_ANNUAL_PLAN,
-                extra_data=ujson.dumps({
+                extra_data=orjson.dumps({
                     "monthly_plan_id": plan.id,
                     "annual_plan_id": new_plan.id,
-                })
+                }).decode()
             )
             return new_plan, new_plan_ledger_entry
 
@@ -346,6 +347,11 @@ def compute_plan_parameters(
         period_end = billing_cycle_anchor + timedelta(days=settings.FREE_TRIAL_DAYS)
         next_invoice_date = period_end
     return billing_cycle_anchor, next_invoice_date, period_end, price_per_license
+
+def decimal_to_float(obj: object) -> object:
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError  # nocoverage
 
 # Only used for cloud signups
 @catch_stripe_errors
@@ -423,7 +429,7 @@ def process_initial_upgrade(user: UserProfile, licenses: int, automanage_license
         RealmAuditLog.objects.create(
             realm=realm, acting_user=user, event_time=billing_cycle_anchor,
             event_type=RealmAuditLog.CUSTOMER_PLAN_CREATED,
-            extra_data=ujson.dumps(plan_params))
+            extra_data=orjson.dumps(plan_params, default=decimal_to_float).decode())
 
     if not free_trial:
         stripe.InvoiceItem.create(
@@ -563,6 +569,24 @@ def update_sponsorship_status(realm: Realm, sponsorship_pending: bool) -> None:
     customer.sponsorship_pending = sponsorship_pending
     customer.save(update_fields=["sponsorship_pending"])
 
+def approve_sponsorship(realm: Realm) -> None:
+    from zerver.lib.actions import do_change_plan_type, internal_send_private_message
+    do_change_plan_type(realm, Realm.STANDARD_FREE)
+    customer = get_customer_by_realm(realm)
+    if customer is not None and customer.sponsorship_pending:
+        customer.sponsorship_pending = False
+        customer.save(update_fields=["sponsorship_pending"])
+    notification_bot = get_system_bot(settings.NOTIFICATION_BOT)
+    for billing_admin in realm.get_human_billing_admin_users():
+        with override_language(billing_admin.default_language):
+            # Using variable to make life easier for translators if these details change.
+            plan_name = "Zulip Cloud Standard"
+            emoji = ":tada:"
+            message = _(
+                f"Your organization's request for sponsored hosting has been approved! {emoji}.\n"
+                f"You have been upgraded to {plan_name}, free of charge.")
+            internal_send_private_message(billing_admin.realm, notification_bot, billing_admin, message)
+
 def get_discount_for_realm(realm: Realm) -> Optional[Decimal]:
     customer = get_customer_by_realm(realm)
     if customer is not None:
@@ -598,7 +622,7 @@ def estimate_annual_recurring_revenue_by_realm() -> Dict[str, int]:  # nocoverag
 
 # During realm deactivation we instantly downgrade the plan to Limited.
 # Extra users added in the final month are not charged. Also used
-# for the cancelation of Free Trial.
+# for the cancellation of Free Trial.
 def downgrade_now(realm: Realm) -> None:
     plan = get_current_plan_by_realm(realm)
     if plan is None:

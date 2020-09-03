@@ -6,12 +6,12 @@ import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from functools import wraps
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, TypeVar, cast
 from unittest.mock import Mock, patch
 
+import orjson
 import responses
 import stripe
-import ujson
 from django.conf import settings
 from django.core import signing
 from django.http import HttpResponse
@@ -93,8 +93,8 @@ def fixture_files_for_function(decorated_function: CallableT) -> List[str]:  # n
     decorated_function_name = decorated_function.__name__
     if decorated_function_name[:5] == 'test_':
         decorated_function_name = decorated_function_name[5:]
-    return sorted([f'{STRIPE_FIXTURES_DIR}/{f}' for f in os.listdir(STRIPE_FIXTURES_DIR)
-                   if f.startswith(decorated_function_name + '--')])
+    return sorted(f'{STRIPE_FIXTURES_DIR}/{f}' for f in os.listdir(STRIPE_FIXTURES_DIR)
+                  if f.startswith(decorated_function_name + '--'))
 
 def generate_and_save_stripe_fixture(decorated_function_name: str, mocked_function_name: str,
                                      mocked_function: CallableT) -> Callable[[Any, Any], Any]:  # nocoverage
@@ -127,7 +127,8 @@ def read_stripe_fixture(decorated_function_name: str,
     def _read_stripe_fixture(*args: Any, **kwargs: Any) -> Any:
         mock = operator.attrgetter(mocked_function_name)(sys.modules[__name__])
         fixture_path = stripe_fixture_path(decorated_function_name, mocked_function_name, mock.call_count)
-        fixture = ujson.load(open(fixture_path))
+        with open(fixture_path, "rb") as f:
+            fixture = orjson.loads(f.read())
         # Check for StripeError fixtures
         if "json_body" in fixture:
             requestor = stripe.api_requestor.APIRequestor()
@@ -181,8 +182,8 @@ def normalize_fixture_data(decorated_function: CallableT,
                 if match not in normalized_values[pattern]:
                     normalized_values[pattern][match] = translation % (len(normalized_values[pattern]) + 1,)
                 file_content = file_content.replace(match, normalized_values[pattern][match])
-        file_content = re.sub(r'(?<="risk_score": )(\d+)', '00', file_content)
-        file_content = re.sub(r'(?<="times_redeemed": )(\d+)', '00', file_content)
+        file_content = re.sub(r'(?<="risk_score": )(\d+)', '0', file_content)
+        file_content = re.sub(r'(?<="times_redeemed": )(\d+)', '0', file_content)
         file_content = re.sub(r'(?<="idempotency-key": )"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]*)"',
                               '"00000000-0000-0000-0000-000000000000"', file_content)
         # Dates
@@ -257,7 +258,7 @@ class StripeTestCase(ZulipTestCase):
             self.example_email('hamlet'),
             self.example_email('iago'),
             self.example_email('othello'),
-            self.example_email('prospero'),
+            self.example_email('desdemona'),
             self.example_email('polonius'),  # guest
             self.example_email('default_bot'),  # bot
         ]
@@ -304,7 +305,7 @@ class StripeTestCase(ZulipTestCase):
         host_args = {}
         if realm is not None:  # nocoverage: TODO
             host_args['HTTP_HOST'] = realm.host
-        response = self.client_get("/upgrade/", **host_args)
+        response = self.client_get("/upgrade/", {}, **host_args)
         params: Dict[str, Any] = {
             'schedule': 'annual',
             'signed_seat_count': self.get_signed_seat_count_from_response(response),
@@ -331,7 +332,7 @@ class StripeTestCase(ZulipTestCase):
             if key in params:
                 del params[key]
         for key, value in params.items():
-            params[key] = ujson.dumps(value)
+            params[key] = orjson.dumps(value).decode()
         return self.client_post("/json/billing/upgrade", params, **host_args)
 
     # Upgrade without talking to Stripe
@@ -380,8 +381,8 @@ class StripeTest(StripeTestCase):
         iago = self.example_user('iago')
         with self.settings(BILLING_ENABLED=False):
             self.login_user(iago)
-            response = self.client_get("/upgrade/")
-            self.assert_in_success_response(["Page not found (404)"], response)
+            response = self.client_get("/upgrade/", follow=True)
+            self.assertEqual(response.status_code, 404)
 
     @mock_stripe(tested_timestamp_fields=["created"])
     def test_upgrade_by_card(self, *mocks: Mock) -> None:
@@ -410,27 +411,24 @@ class StripeTest(StripeTestCase):
             raise AssertionError("realm_id is not a number")
 
         # Check Charges in Stripe
-        stripe_charges = [charge for charge in stripe.Charge.list(customer=stripe_customer.id)]
-        self.assertEqual(len(stripe_charges), 1)
-        self.assertEqual(stripe_charges[0].amount, 8000 * self.seat_count)
+        [charge] = stripe.Charge.list(customer=stripe_customer.id)
+        self.assertEqual(charge.amount, 8000 * self.seat_count)
         # TODO: fix Decimal
-        self.assertEqual(stripe_charges[0].description,
+        self.assertEqual(charge.description,
                          f"Upgrade to Zulip Standard, $80.0 x {self.seat_count}")
-        self.assertEqual(stripe_charges[0].receipt_email, user.email)
-        self.assertEqual(stripe_charges[0].statement_descriptor, "Zulip Standard")
+        self.assertEqual(charge.receipt_email, user.email)
+        self.assertEqual(charge.statement_descriptor, "Zulip Standard")
         # Check Invoices in Stripe
-        stripe_invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-        self.assertEqual(len(stripe_invoices), 1)
-        self.assertIsNotNone(stripe_invoices[0].status_transitions.finalized_at)
+        [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
+        self.assertIsNotNone(invoice.status_transitions.finalized_at)
         invoice_params = {
             # auto_advance is False because the invoice has been paid
             'amount_due': 0, 'amount_paid': 0, 'auto_advance': False, 'billing': 'charge_automatically',
             'charge': None, 'status': 'paid', 'total': 0}
         for key, value in invoice_params.items():
-            self.assertEqual(stripe_invoices[0].get(key), value)
+            self.assertEqual(invoice.get(key), value)
         # Check Line Items on Stripe Invoice
-        stripe_line_items = [item for item in stripe_invoices[0].lines]
-        self.assertEqual(len(stripe_line_items), 2)
+        [item0, item1] = invoice.lines
         line_item_params = {
             'amount': 8000 * self.seat_count, 'description': 'Zulip Standard', 'discountable': False,
             'period': {
@@ -441,12 +439,12 @@ class StripeTest(StripeTestCase):
             # but testing the amount and quantity seems sufficient.
             'plan': None, 'proration': False, 'quantity': self.seat_count}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[0].get(key), value)
+            self.assertEqual(item0.get(key), value)
         line_item_params = {
             'amount': -8000 * self.seat_count, 'description': 'Payment (Card ending in 4242)',
             'discountable': False, 'plan': None, 'proration': False, 'quantity': 1}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[1].get(key), value)
+            self.assertEqual(item1.get(key), value)
 
         # Check that we correctly populated Customer, CustomerPlan, and LicenseLedger in Zulip
         customer = Customer.objects.get(stripe_customer_id=stripe_customer.id, realm=user.realm)
@@ -469,7 +467,7 @@ class StripeTest(StripeTestCase):
             # TODO: Check for REALM_PLAN_TYPE_CHANGED
             # (RealmAuditLog.REALM_PLAN_TYPE_CHANGED, Kandra()),
         ])
-        self.assertEqual(ujson.loads(RealmAuditLog.objects.filter(
+        self.assertEqual(orjson.loads(RealmAuditLog.objects.filter(
             event_type=RealmAuditLog.CUSTOMER_PLAN_CREATED).values_list(
                 'extra_data', flat=True).first())['automanage_licenses'], True)
         # Check that we correctly updated Realm
@@ -513,19 +511,17 @@ class StripeTest(StripeTestCase):
         # Check Charges in Stripe
         self.assertFalse(stripe.Charge.list(customer=stripe_customer.id))
         # Check Invoices in Stripe
-        stripe_invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-        self.assertEqual(len(stripe_invoices), 1)
-        self.assertIsNotNone(stripe_invoices[0].due_date)
-        self.assertIsNotNone(stripe_invoices[0].status_transitions.finalized_at)
+        [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
+        self.assertIsNotNone(invoice.due_date)
+        self.assertIsNotNone(invoice.status_transitions.finalized_at)
         invoice_params = {
             'amount_due': 8000 * 123, 'amount_paid': 0, 'attempt_count': 0,
             'auto_advance': True, 'billing': 'send_invoice', 'statement_descriptor': 'Zulip Standard',
             'status': 'open', 'total': 8000 * 123}
         for key, value in invoice_params.items():
-            self.assertEqual(stripe_invoices[0].get(key), value)
+            self.assertEqual(invoice.get(key), value)
         # Check Line Items on Stripe Invoice
-        stripe_line_items = [item for item in stripe_invoices[0].lines]
-        self.assertEqual(len(stripe_line_items), 1)
+        [item] = invoice.lines
         line_item_params = {
             'amount': 8000 * 123, 'description': 'Zulip Standard', 'discountable': False,
             'period': {
@@ -533,7 +529,7 @@ class StripeTest(StripeTestCase):
                 'start': datetime_to_timestamp(self.now)},
             'plan': None, 'proration': False, 'quantity': 123}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[0].get(key), value)
+            self.assertEqual(item.get(key), value)
 
         # Check that we correctly populated Customer, CustomerPlan and LicenseLedger in Zulip
         customer = Customer.objects.get(stripe_customer_id=stripe_customer.id, realm=user.realm)
@@ -554,7 +550,7 @@ class StripeTest(StripeTestCase):
             # TODO: Check for REALM_PLAN_TYPE_CHANGED
             # (RealmAuditLog.REALM_PLAN_TYPE_CHANGED, Kandra()),
         ])
-        self.assertEqual(ujson.loads(RealmAuditLog.objects.filter(
+        self.assertEqual(orjson.loads(RealmAuditLog.objects.filter(
             event_type=RealmAuditLog.CUSTOMER_PLAN_CREATED).values_list(
                 'extra_data', flat=True).first())['automanage_licenses'], False)
         # Check that we correctly updated Realm
@@ -606,11 +602,9 @@ class StripeTest(StripeTestCase):
             except ValueError:  # nocoverage
                 raise AssertionError("realm_id is not a number")
 
-            stripe_charges = [charge for charge in stripe.Charge.list(customer=stripe_customer.id)]
-            self.assertEqual(len(stripe_charges), 0)
+            self.assertFalse(stripe.Charge.list(customer=stripe_customer.id))
 
-            stripe_invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(stripe_invoices), 0)
+            self.assertFalse(stripe.Invoice.list(customer=stripe_customer.id))
 
             customer = Customer.objects.get(stripe_customer_id=stripe_customer.id, realm=user.realm)
             plan = CustomerPlan.objects.get(
@@ -631,7 +625,7 @@ class StripeTest(StripeTestCase):
                 # TODO: Check for REALM_PLAN_TYPE_CHANGED
                 # (RealmAuditLog.REALM_PLAN_TYPE_CHANGED, Kandra()),
             ])
-            self.assertEqual(ujson.loads(RealmAuditLog.objects.filter(
+            self.assertEqual(orjson.loads(RealmAuditLog.objects.filter(
                 event_type=RealmAuditLog.CUSTOMER_PLAN_CREATED).values_list(
                     'extra_data', flat=True).first())['automanage_licenses'], True)
 
@@ -670,8 +664,7 @@ class StripeTest(StripeTestCase):
             )
 
             invoice_plans_as_needed(self.next_month)
-            invoices = stripe.Invoice.list(customer=stripe_customer.id)
-            self.assertEqual(len(invoices), 0)
+            self.assertFalse(stripe.Invoice.list(customer=stripe_customer.id))
             customer_plan = CustomerPlan.objects.get(customer=customer)
             self.assertEqual(customer_plan.status, CustomerPlan.FREE_TRIAL)
             self.assertEqual(customer_plan.next_invoice_date, free_trial_end_date)
@@ -682,8 +675,7 @@ class StripeTest(StripeTestCase):
             self.assertEqual(customer_plan.status, CustomerPlan.ACTIVE)
             self.assertEqual(customer_plan.next_invoice_date, add_months(free_trial_end_date, 1))
             self.assertEqual(realm.plan_type, Realm.STANDARD)
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 1)
+            [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
             invoice_params = {
                 "amount_due": 15 * 80 * 100, "amount_paid": 0, "amount_remaining": 15 * 80 * 100,
                 "auto_advance": True, "billing": "charge_automatically", "collection_method": "charge_automatically",
@@ -691,9 +683,8 @@ class StripeTest(StripeTestCase):
                 "total": 15 * 80 * 100,
             }
             for key, value in invoice_params.items():
-                self.assertEqual(invoices[0].get(key), value)
-            invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-            self.assertEqual(len(invoice_items), 1)
+                self.assertEqual(invoice.get(key), value)
+            [invoice_item] = invoice.get("lines")
             invoice_item_params = {
                 "amount": 15 * 80 * 100, "description": "Zulip Standard - renewal",
                 "plan": None, "quantity": 15, "subscription": None, "discountable": False,
@@ -703,11 +694,10 @@ class StripeTest(StripeTestCase):
                 },
             }
             for key, value in invoice_item_params.items():
-                self.assertEqual(invoice_items[0][key], value)
+                self.assertEqual(invoice_item[key], value)
 
             invoice_plans_as_needed(add_months(free_trial_end_date, 1))
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 1)
+            [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
 
             with patch('corporate.lib.stripe.get_latest_seat_count', return_value=19):
                 update_license_ledger_if_needed(realm, add_months(free_trial_end_date, 10))
@@ -716,14 +706,12 @@ class StripeTest(StripeTestCase):
                 (19, 19),
             )
             invoice_plans_as_needed(add_months(free_trial_end_date, 10))
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 2)
+            [invoice0, invoice1] = stripe.Invoice.list(customer=stripe_customer.id)
             invoice_params = {
                 "amount_due": 5172, "auto_advance": True,  "billing": "charge_automatically",
                 "collection_method": "charge_automatically", "customer_email": "hamlet@zulip.com",
             }
-            invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-            self.assertEqual(len(invoice_items), 1)
+            [invoice_item] = invoice0.get("lines")
             invoice_item_params = {
                 "amount": 5172, "description": "Additional license (Jan 2, 2013 - Mar 2, 2013)",
                 "discountable": False, "quantity": 4,
@@ -734,8 +722,7 @@ class StripeTest(StripeTestCase):
             }
 
             invoice_plans_as_needed(add_months(free_trial_end_date, 12))
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 3)
+            [invoice0, invoice1, invoice2] = stripe.Invoice.list(customer=stripe_customer.id)
 
     @mock_stripe(tested_timestamp_fields=["created"])
     def test_free_trial_upgrade_by_invoice(self, *mocks: Mock) -> None:
@@ -763,8 +750,7 @@ class StripeTest(StripeTestCase):
             except ValueError:  # nocoverage
                 raise AssertionError("realm_id is not a number")
 
-            stripe_invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(stripe_invoices), 0)
+            self.assertFalse(stripe.Invoice.list(customer=stripe_customer.id))
 
             customer = Customer.objects.get(stripe_customer_id=stripe_customer.id, realm=user.realm)
             plan = CustomerPlan.objects.get(
@@ -785,7 +771,7 @@ class StripeTest(StripeTestCase):
                 # TODO: Check for REALM_PLAN_TYPE_CHANGED
                 # (RealmAuditLog.REALM_PLAN_TYPE_CHANGED, Kandra()),
             ])
-            self.assertEqual(ujson.loads(RealmAuditLog.objects.filter(
+            self.assertEqual(orjson.loads(RealmAuditLog.objects.filter(
                 event_type=RealmAuditLog.CUSTOMER_PLAN_CREATED).values_list(
                     'extra_data', flat=True).first())['automanage_licenses'], False)
 
@@ -818,8 +804,7 @@ class StripeTest(StripeTestCase):
             self.assertEqual(customer_plan.status, CustomerPlan.ACTIVE)
             self.assertEqual(customer_plan.next_invoice_date, add_months(free_trial_end_date, 12))
             self.assertEqual(realm.plan_type, Realm.STANDARD)
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 1)
+            [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
             invoice_params = {
                 "amount_due": 123 * 80 * 100, "amount_paid": 0, "amount_remaining": 123 * 80 * 100,
                 "auto_advance": True, "billing": "send_invoice", "collection_method": "send_invoice",
@@ -827,9 +812,8 @@ class StripeTest(StripeTestCase):
                 "total": 123 * 80 * 100,
             }
             for key, value in invoice_params.items():
-                self.assertEqual(invoices[0].get(key), value)
-            invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-            self.assertEqual(len(invoice_items), 1)
+                self.assertEqual(invoice.get(key), value)
+            [invoice_item] = invoice.get("lines")
             invoice_item_params = {
                 "amount": 123 * 80 * 100, "description": "Zulip Standard - renewal",
                 "plan": None, "quantity": 123, "subscription": None, "discountable": False,
@@ -839,28 +823,26 @@ class StripeTest(StripeTestCase):
                 },
             }
             for key, value in invoice_item_params.items():
-                self.assertEqual(invoice_items[0][key], value)
+                self.assertEqual(invoice_item[key], value)
 
             invoice_plans_as_needed(add_months(free_trial_end_date, 1))
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 1)
+            [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
 
             invoice_plans_as_needed(add_months(free_trial_end_date, 10))
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 1)
+            [invoice] = stripe.Invoice.list(customer=stripe_customer.id)
 
             invoice_plans_as_needed(add_months(free_trial_end_date, 12))
-            invoices = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer.id)]
-            self.assertEqual(len(invoices), 2)
+            [invoice0, invoice1] = stripe.Invoice.list(customer=stripe_customer.id)
 
     @mock_stripe()
     def test_billing_page_permissions(self, *mocks: Mock) -> None:
-        hamlet = self.example_user('hamlet')
-        iago = self.example_user('iago')
-        cordelia = self.example_user('cordelia')
+        # Guest users can't access /upgrade page
+        self.login_user(self.example_user('polonius'))
+        response = self.client_get("/upgrade/", follow=True)
+        self.assertEqual(response.status_code, 404)
 
         # Check that non-admins can access /upgrade via /billing, when there is no Customer object
-        self.login_user(hamlet)
+        self.login_user(self.example_user('hamlet'))
         response = self.client_get("/billing/")
         self.assertEqual(response.status_code, 302)
         self.assertEqual('/upgrade/', response.url)
@@ -868,15 +850,20 @@ class StripeTest(StripeTestCase):
         self.upgrade()
         # Check that the non-admin hamlet can still access /billing
         response = self.client_get("/billing/")
-        self.assert_in_success_response(["for billing history or to make changes"], response)
-        # Check admins can access billing, even though they are not a billing admin
-        self.login_user(iago)
+        self.assert_in_success_response(["Your current plan is"], response)
+
+        # Check realm owners can access billing, even though they are not a billing admin
+        desdemona = self.example_user('desdemona')
+        desdemona.role = UserProfile.ROLE_REALM_OWNER
+        desdemona.save(update_fields=["role"])
+        self.login_user(self.example_user('desdemona'))
         response = self.client_get("/billing/")
-        self.assert_in_success_response(["for billing history or to make changes"], response)
-        # Check that a non-admin, non-billing admin user does not have access
-        self.login_user(cordelia)
+        self.assert_in_success_response(["Your current plan is"], response)
+
+        # Check that member who is not a billing admin does not have access
+        self.login_user(self.example_user('cordelia'))
         response = self.client_get("/billing/")
-        self.assert_in_success_response(["You must be an organization administrator"], response)
+        self.assert_in_success_response(["You must be an organization owner or a billing administrator"], response)
 
     @mock_stripe(tested_timestamp_fields=["created"])
     def test_upgrade_by_card_with_outdated_seat_count(self, *mocks: Mock) -> None:
@@ -888,10 +875,10 @@ class StripeTest(StripeTestCase):
             self.upgrade()
         stripe_customer_id = Customer.objects.first().stripe_customer_id
         # Check that the Charge used the old quantity, not new_seat_count
-        self.assertEqual(8000 * self.seat_count,
-                         [charge for charge in stripe.Charge.list(customer=stripe_customer_id)][0].amount)
+        [charge] = stripe.Charge.list(customer=stripe_customer_id)
+        self.assertEqual(8000 * self.seat_count, charge.amount)
         # Check that the invoice has a credit for the old amount and a charge for the new one
-        stripe_invoice = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer_id)][0]
+        [stripe_invoice] = stripe.Invoice.list(customer=stripe_customer_id)
         self.assertEqual([8000 * new_seat_count, -8000 * self.seat_count],
                          [item.amount for item in stripe_invoice.lines])
         # Check LicenseLedger has the new amount
@@ -912,9 +899,8 @@ class StripeTest(StripeTestCase):
         self.assertFalse(CustomerPlan.objects.exists())
         # Check that we created a Customer in stripe, a failed Charge, and no Invoices or Invoice Items
         self.assertTrue(stripe_get_customer(stripe_customer_id))
-        stripe_charges = [charge for charge in stripe.Charge.list(customer=stripe_customer_id)]
-        self.assertEqual(len(stripe_charges), 1)
-        self.assertEqual(stripe_charges[0].failure_code, 'card_declined')
+        [charge] = stripe.Charge.list(customer=stripe_customer_id)
+        self.assertEqual(charge.failure_code, 'card_declined')
         # TODO: figure out what these actually are
         self.assertFalse(stripe.Invoice.list(customer=stripe_customer_id))
         self.assertFalse(stripe.InvoiceItem.list(customer=stripe_customer_id))
@@ -945,9 +931,9 @@ class StripeTest(StripeTestCase):
         self.assertEqual(ledger_entry.licenses, 23)
         self.assertEqual(ledger_entry.licenses_at_next_renewal, 23)
         # Check the Charges and Invoices in Stripe
-        self.assertEqual(8000 * 23, [charge for charge in
-                                     stripe.Charge.list(customer=stripe_customer_id)][0].amount)
-        stripe_invoice = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer_id)][0]
+        [charge0, charge1] = stripe.Charge.list(customer=stripe_customer_id)
+        self.assertEqual(8000 * 23, charge0.amount)
+        [stripe_invoice] = stripe.Invoice.list(customer=stripe_customer_id)
         self.assertEqual([8000 * 23, -8000 * 23],
                          [item.amount for item in stripe_invoice.lines])
         # Check that we correctly populated RealmAuditLog
@@ -971,7 +957,7 @@ class StripeTest(StripeTestCase):
         self.login_user(hamlet)
         response = self.upgrade(talk_to_stripe=False, salt='badsalt')
         self.assert_json_error_contains(response, "Something went wrong. Please contact")
-        self.assertEqual(ujson.loads(response.content)['error_description'], 'tampered seat count')
+        self.assertEqual(orjson.loads(response.content)['error_description'], 'tampered seat count')
 
     def test_upgrade_race_condition(self) -> None:
         hamlet = self.example_user('hamlet')
@@ -989,7 +975,7 @@ class StripeTest(StripeTestCase):
                         del_args: Sequence[str] = []) -> None:
             response = self.upgrade(talk_to_stripe=False, del_args=del_args, **upgrade_params)
             self.assert_json_error_contains(response, "Something went wrong. Please contact")
-            self.assertEqual(ujson.loads(response.content)['error_description'], error_description)
+            self.assertEqual(orjson.loads(response.content)['error_description'], error_description)
 
         hamlet = self.example_user('hamlet')
         self.login_user(hamlet)
@@ -1009,13 +995,13 @@ class StripeTest(StripeTestCase):
             response = self.upgrade(invoice=invoice, talk_to_stripe=False,
                                     del_args=del_args, **upgrade_params)
             self.assert_json_error_contains(response, f"at least {min_licenses_in_response} users")
-            self.assertEqual(ujson.loads(response.content)['error_description'], 'not enough licenses')
+            self.assertEqual(orjson.loads(response.content)['error_description'], 'not enough licenses')
 
         def check_max_licenses_error(licenses: int) -> None:
             response = self.upgrade(invoice=True, talk_to_stripe=False,
                                     licenses=licenses)
             self.assert_json_error_contains(response, f"with more than {MAX_INVOICED_LICENSES} licenses")
-            self.assertEqual(ujson.loads(response.content)['error_description'], 'too many licenses')
+            self.assertEqual(orjson.loads(response.content)['error_description'], 'too many licenses')
 
         def check_success(invoice: bool, licenses: Optional[int], upgrade_params: Dict[str, Any]={}) -> None:
             if licenses is None:
@@ -1066,7 +1052,7 @@ class StripeTest(StripeTestCase):
         with patch("corporate.views.process_initial_upgrade", side_effect=Exception):
             response = self.upgrade(talk_to_stripe=False)
         self.assert_json_error_contains(response, "Something went wrong. Please contact desdemona+admin@zulip.com.")
-        self.assertEqual(ujson.loads(response.content)['error_description'], 'uncaught exception during upgrade')
+        self.assertEqual(orjson.loads(response.content)['error_description'], 'uncaught exception during upgrade')
 
     def test_request_sponsorship(self) -> None:
         user = self.example_user("hamlet")
@@ -1075,9 +1061,9 @@ class StripeTest(StripeTestCase):
         self.login_user(user)
 
         data = {
-            "organization-type": ujson.dumps("Open-source"),
-            "website": ujson.dumps("https://infinispan.org/"),
-            "description": ujson.dumps("Infinispan is a distributed in-memory key/value data store with optional schema."),
+            "organization-type": orjson.dumps("Open-source").decode(),
+            "website": orjson.dumps("https://infinispan.org/").decode(),
+            "description": orjson.dumps("Infinispan is a distributed in-memory key/value data store with optional schema.").decode(),
         }
         response = self.client_post("/json/billing/sponsorship", data)
         self.assert_json_success(response)
@@ -1094,7 +1080,7 @@ class StripeTest(StripeTestCase):
             self.assertEqual(message.subject, "Sponsorship request (Open-source) for zulip")
             self.assertEqual(message.reply_to, ['hamlet@zulip.com'])
             self.assertIn('Zulip sponsorship <noreply-', message.from_email)
-            self.assertIn("User role: Member", message.body)
+            self.assertIn("Requested by: King Hamlet (Member)", message.body)
             self.assertIn("Support URL: http://zulip.testserver/activity/support?q=zulip", message.body)
             self.assertIn("Website: https://infinispan.org", message.body)
             self.assertIn("Organization type: Open-source", message.body)
@@ -1109,17 +1095,28 @@ class StripeTest(StripeTestCase):
 
         self.login_user(self.example_user("othello"))
         response = self.client_get("/billing/")
-        self.assert_in_success_response(["You must be an organization administrator or a billing administrator to view this page."], response)
+        self.assert_in_success_response(["You must be an organization owner or a billing administrator to view this page."], response)
+
+        user.realm.plan_type = Realm.STANDARD_FREE
+        user.realm.save()
+        self.login_user(self.example_user("hamlet"))
+        response = self.client_get("/billing/")
+        self.assert_in_success_response(["Your organization is fully sponsored and is on the <b>Zulip Standard</b>"], response)
 
     def test_redirect_for_billing_home(self) -> None:
         user = self.example_user("iago")
         self.login_user(user)
-        # No Customer yet; check that we are redirected to /upgrade
         response = self.client_get("/billing/")
         self.assertEqual(response.status_code, 302)
         self.assertEqual('/upgrade/', response.url)
 
-        # Customer, but no CustomerPlan; check that we are still redirected to /upgrade
+        user.realm.plan_type = Realm.STANDARD_FREE
+        user.realm.save()
+        response = self.client_get("/billing/")
+        self.assertEqual(response.status_code, 200)
+
+        user.realm.plan_type = Realm.LIMITED
+        user.realm.save()
         Customer.objects.create(realm=user.realm, stripe_customer_id='cus_123')
         response = self.client_get("/billing/")
         self.assertEqual(response.status_code, 302)
@@ -1128,11 +1125,18 @@ class StripeTest(StripeTestCase):
     def test_redirect_for_upgrade_page(self) -> None:
         user = self.example_user("iago")
         self.login_user(user)
-        # No Customer yet;
+
         response = self.client_get("/upgrade/")
         self.assertEqual(response.status_code, 200)
 
-        # Customer, but no CustomerPlan;
+        user.realm.plan_type = Realm.STANDARD_FREE
+        user.realm.save()
+        response = self.client_get("/upgrade/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/billing/")
+
+        user.realm.plan_type = Realm.LIMITED
+        user.realm.save()
         customer = Customer.objects.create(realm=user.realm, stripe_customer_id='cus_123')
         response = self.client_get("/upgrade/")
         self.assertEqual(response.status_code, 200)
@@ -1155,8 +1159,10 @@ class StripeTest(StripeTestCase):
     def test_get_latest_seat_count(self) -> None:
         realm = get_realm("zulip")
         initial_count = get_latest_seat_count(realm)
-        user1 = UserProfile.objects.create(realm=realm, email='user1@zulip.com')
-        user2 = UserProfile.objects.create(realm=realm, email='user2@zulip.com')
+        user1 = UserProfile.objects.create(realm=realm, email='user1@zulip.com',
+                                           delivery_email='user1@zulip.com')
+        user2 = UserProfile.objects.create(realm=realm, email='user2@zulip.com',
+                                           delivery_email='user2@zulip.com')
         self.assertEqual(get_latest_seat_count(realm), initial_count + 2)
 
         # Test that bots aren't counted
@@ -1170,17 +1176,21 @@ class StripeTest(StripeTestCase):
 
         # Test guests
         # Adding a guest to a realm with a lot of members shouldn't change anything
-        UserProfile.objects.create(realm=realm, email='user3@zulip.com', role=UserProfile.ROLE_GUEST)
+        UserProfile.objects.create(realm=realm, email='user3@zulip.com', delivery_email='user3@zulip.com',
+                                   role=UserProfile.ROLE_GUEST)
         self.assertEqual(get_latest_seat_count(realm), initial_count)
         # Test 1 member and 5 guests
         realm = Realm.objects.create(string_id='second', name='second')
-        UserProfile.objects.create(realm=realm, email='member@second.com')
+        UserProfile.objects.create(realm=realm, email='member@second.com',
+                                   delivery_email='member@second.com')
         for i in range(5):
             UserProfile.objects.create(realm=realm, email=f'guest{i}@second.com',
+                                       delivery_email=f'guest{i}@second.com',
                                        role=UserProfile.ROLE_GUEST)
         self.assertEqual(get_latest_seat_count(realm), 1)
         # Test 1 member and 6 guests
         UserProfile.objects.create(realm=realm, email='guest5@second.com',
+                                   delivery_email='guest5@second.com',
                                    role=UserProfile.ROLE_GUEST)
         self.assertEqual(get_latest_seat_count(realm), 2)
 
@@ -1225,11 +1235,11 @@ class StripeTest(StripeTestCase):
         # Check that the customer was charged the discounted amount
         self.upgrade()
         stripe_customer_id = Customer.objects.values_list('stripe_customer_id', flat=True).first()
-        self.assertEqual(1200 * self.seat_count,
-                         [charge for charge in stripe.Charge.list(customer=stripe_customer_id)][0].amount)
-        stripe_invoice = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer_id)][0]
+        [charge] = stripe.Charge.list(customer=stripe_customer_id)
+        self.assertEqual(1200 * self.seat_count, charge.amount)
+        [invoice] = stripe.Invoice.list(customer=stripe_customer_id)
         self.assertEqual([1200 * self.seat_count, -1200 * self.seat_count],
-                         [item.amount for item in stripe_invoice.lines])
+                         [item.amount for item in invoice.lines])
         # Check CustomerPlan reflects the discount
         plan = CustomerPlan.objects.get(price_per_license=1200, discount=Decimal(85))
 
@@ -1238,11 +1248,11 @@ class StripeTest(StripeTestCase):
         plan.save(update_fields=['status'])
         attach_discount_to_realm(user.realm, Decimal(25))
         process_initial_upgrade(user, self.seat_count, True, CustomerPlan.ANNUAL, stripe_create_token().id)
-        self.assertEqual(6000 * self.seat_count,
-                         [charge for charge in stripe.Charge.list(customer=stripe_customer_id)][0].amount)
-        stripe_invoice = [invoice for invoice in stripe.Invoice.list(customer=stripe_customer_id)][0]
+        [charge0, charge1] = stripe.Charge.list(customer=stripe_customer_id)
+        self.assertEqual(6000 * self.seat_count, charge0.amount)
+        [invoice0, invoice1] = stripe.Invoice.list(customer=stripe_customer_id)
         self.assertEqual([6000 * self.seat_count, -6000 * self.seat_count],
-                         [item.amount for item in stripe_invoice.lines])
+                         [item.amount for item in invoice0.lines])
         plan = CustomerPlan.objects.get(price_per_license=6000, discount=Decimal(25))
 
     def test_get_discount_for_realm(self) -> None:
@@ -1269,10 +1279,10 @@ class StripeTest(StripeTestCase):
         with patch("corporate.lib.stripe.billing_logger.error") as mock_billing_logger:
             with patch("stripe.Invoice.list") as mock_invoice_list:
                 response = self.client_post("/json/billing/sources/change",
-                                            {'stripe_token': ujson.dumps(stripe_token)})
+                                            {'stripe_token': orjson.dumps(stripe_token).decode()})
         mock_billing_logger.assert_called()
         mock_invoice_list.assert_not_called()
-        self.assertEqual(ujson.loads(response.content)['error_description'], 'card error')
+        self.assertEqual(orjson.loads(response.content)['error_description'], 'card error')
         self.assert_json_error_contains(response, 'Your card was declined')
         for stripe_source in stripe_get_customer(stripe_customer_id).sources:
             assert isinstance(stripe_source, stripe.Card)
@@ -1283,9 +1293,9 @@ class StripeTest(StripeTestCase):
         stripe_token = stripe_create_token(card_number='4000000000000341').id
         with patch("corporate.lib.stripe.billing_logger.error") as mock_billing_logger:
             response = self.client_post("/json/billing/sources/change",
-                                        {'stripe_token': ujson.dumps(stripe_token)})
+                                        {'stripe_token': orjson.dumps(stripe_token).decode()})
         mock_billing_logger.assert_called()
-        self.assertEqual(ujson.loads(response.content)['error_description'], 'card error')
+        self.assertEqual(orjson.loads(response.content)['error_description'], 'card error')
         self.assert_json_error_contains(response, 'Your card was declined')
         for stripe_source in stripe_get_customer(stripe_customer_id).sources:
             assert isinstance(stripe_source, stripe.Card)
@@ -1297,7 +1307,7 @@ class StripeTest(StripeTestCase):
         # Replace with a valid card
         stripe_token = stripe_create_token(card_number='5555555555554444').id
         response = self.client_post("/json/billing/sources/change",
-                                    {'stripe_token': ujson.dumps(stripe_token)})
+                                    {'stripe_token': orjson.dumps(stripe_token).decode()})
         self.assert_json_success(response)
         number_of_sources = 0
         for stripe_source in stripe_get_customer(stripe_customer_id).sources:
@@ -1423,8 +1433,8 @@ class StripeTest(StripeTestCase):
         self.assertEqual(annual_ledger_entries.values_list('licenses', 'licenses_at_next_renewal')[1], (25, 25))
         audit_log = RealmAuditLog.objects.get(event_type=RealmAuditLog.CUSTOMER_SWITCHED_FROM_MONTHLY_TO_ANNUAL_PLAN)
         self.assertEqual(audit_log.realm, user.realm)
-        self.assertEqual(ujson.loads(audit_log.extra_data)["monthly_plan_id"], monthly_plan.id)
-        self.assertEqual(ujson.loads(audit_log.extra_data)["annual_plan_id"], annual_plan.id)
+        self.assertEqual(orjson.loads(audit_log.extra_data)["monthly_plan_id"], monthly_plan.id)
+        self.assertEqual(orjson.loads(audit_log.extra_data)["annual_plan_id"], annual_plan.id)
 
         invoice_plans_as_needed(self.next_month)
 
@@ -1438,11 +1448,9 @@ class StripeTest(StripeTestCase):
         monthly_plan.refresh_from_db()
         self.assertEqual(monthly_plan.next_invoice_date, None)
 
-        invoices = [invoice for invoice in stripe.Invoice.list(customer=customer.stripe_customer_id)]
-        self.assertEqual(len(invoices), 3)
+        [invoice0, invoice1, invoice2] = stripe.Invoice.list(customer=customer.stripe_customer_id)
 
-        annual_plan_invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-        self.assertEqual(len(annual_plan_invoice_items), 2)
+        [invoice_item0, invoice_item1] = invoice0.get("lines")
         annual_plan_invoice_item_params = {
             "amount": 5 * 80 * 100,
             "description": "Additional license (Feb 2, 2012 - Feb 2, 2013)",
@@ -1453,7 +1461,7 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in annual_plan_invoice_item_params.items():
-            self.assertEqual(annual_plan_invoice_items[0][key], value)
+            self.assertEqual(invoice_item0[key], value)
 
         annual_plan_invoice_item_params = {
             "amount": 20 * 80 * 100, "description": "Zulip Standard - renewal",
@@ -1464,10 +1472,9 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in annual_plan_invoice_item_params.items():
-            self.assertEqual(annual_plan_invoice_items[1][key], value)
+            self.assertEqual(invoice_item1[key], value)
 
-        monthly_plan_invoice_items = [invoice_item for invoice_item in invoices[1].get("lines")]
-        self.assertEqual(len(monthly_plan_invoice_items), 1)
+        [monthly_plan_invoice_item] = invoice1.get("lines")
         monthly_plan_invoice_item_params = {
             "amount": 14 * 8 * 100,
             "description": "Additional license (Jan 2, 2012 - Feb 2, 2012)",
@@ -1478,17 +1485,15 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in monthly_plan_invoice_item_params.items():
-            self.assertEqual(monthly_plan_invoice_items[0][key], value)
+            self.assertEqual(monthly_plan_invoice_item[key], value)
 
         with patch("corporate.lib.stripe.get_latest_seat_count", return_value=30):
             update_license_ledger_if_needed(user.realm, add_months(self.next_month, 1))
         invoice_plans_as_needed(add_months(self.next_month, 1))
 
-        invoices = [invoice for invoice in stripe.Invoice.list(customer=customer.stripe_customer_id)]
-        self.assertEqual(len(invoices), 4)
+        [invoice0, invoice1, invoice2, invoice3] = stripe.Invoice.list(customer=customer.stripe_customer_id)
 
-        monthly_plan_invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-        self.assertEqual(len(monthly_plan_invoice_items), 1)
+        [monthly_plan_invoice_item] = invoice0.get("lines")
         monthly_plan_invoice_item_params = {
             "amount": 5 * 7366,
             "description": "Additional license (Mar 2, 2012 - Feb 2, 2013)",
@@ -1499,14 +1504,12 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in monthly_plan_invoice_item_params.items():
-            self.assertEqual(monthly_plan_invoice_items[0][key], value)
+            self.assertEqual(monthly_plan_invoice_item[key], value)
         invoice_plans_as_needed(add_months(self.now, 13))
 
-        invoices = [invoice for invoice in stripe.Invoice.list(customer=customer.stripe_customer_id)]
-        self.assertEqual(len(invoices), 5)
+        [invoice0, invoice1, invoice2, invoice3, invoice4] = stripe.Invoice.list(customer=customer.stripe_customer_id)
 
-        annual_plan_invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-        self.assertEqual(len(annual_plan_invoice_items), 1)
+        [invoice_item] = invoice0.get("lines")
         annual_plan_invoice_item_params = {
             "amount": 30 * 80 * 100,
             "description": "Zulip Standard - renewal",
@@ -1517,7 +1520,7 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in annual_plan_invoice_item_params.items():
-            self.assertEqual(annual_plan_invoice_items[0][key], value)
+            self.assertEqual(invoice_item[key], value)
 
     @mock_stripe()
     @patch("corporate.lib.stripe.billing_logger.info")
@@ -1573,11 +1576,9 @@ class StripeTest(StripeTestCase):
         self.assertEqual(annual_plan.next_invoice_date, add_months(self.next_month, 12))
         self.assertEqual(annual_plan.invoicing_status, CustomerPlan.DONE)
 
-        invoices = [invoice for invoice in stripe.Invoice.list(customer=customer.stripe_customer_id)]
-        self.assertEqual(len(invoices), 2)
+        [invoice0, invoice1] = stripe.Invoice.list(customer=customer.stripe_customer_id)
 
-        annual_plan_invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-        self.assertEqual(len(annual_plan_invoice_items), 1)
+        [invoice_item] = invoice0.get("lines")
         annual_plan_invoice_item_params = {
             "amount": num_licenses * 80 * 100, "description": "Zulip Standard - renewal",
             "plan": None, "quantity": num_licenses, "subscription": None, "discountable": False,
@@ -1587,7 +1588,7 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in annual_plan_invoice_item_params.items():
-            self.assertEqual(annual_plan_invoice_items[0][key], value)
+            self.assertEqual(invoice_item[key], value)
 
         with patch('corporate.lib.stripe.invoice_plan') as m:
             invoice_plans_as_needed(add_months(self.now, 2))
@@ -1595,11 +1596,9 @@ class StripeTest(StripeTestCase):
 
         invoice_plans_as_needed(add_months(self.now, 13))
 
-        invoices = [invoice for invoice in stripe.Invoice.list(customer=customer.stripe_customer_id)]
-        self.assertEqual(len(invoices), 3)
+        [invoice0, invoice1, invoice2] = stripe.Invoice.list(customer=customer.stripe_customer_id)
 
-        annual_plan_invoice_items = [invoice_item for invoice_item in invoices[0].get("lines")]
-        self.assertEqual(len(annual_plan_invoice_items), 1)
+        [invoice_item] = invoice0.get("lines")
         annual_plan_invoice_item_params = {
             "amount": num_licenses * 80 * 100,
             "description": "Zulip Standard - renewal",
@@ -1610,7 +1609,7 @@ class StripeTest(StripeTestCase):
             },
         }
         for key, value in annual_plan_invoice_item_params.items():
-            self.assertEqual(annual_plan_invoice_items[0][key], value)
+            self.assertEqual(invoice_item[key], value)
 
     @patch("corporate.lib.stripe.billing_logger.info")
     def test_reupgrade_after_plan_status_changed_to_downgrade_at_end_of_cycle(self, mock_: Mock) -> None:
@@ -1818,51 +1817,57 @@ class RequiresBillingAccessTest(ZulipTestCase):
         hamlet.is_billing_admin = True
         hamlet.save(update_fields=["is_billing_admin"])
 
-    def verify_non_admins_blocked_from_endpoint(
-            self, url: str, request_data: Dict[str, Any]={}) -> None:
-        cordelia = self.example_user('cordelia')
-        self.login_user(cordelia)
-        response = self.client_post(url, request_data)
-        self.assert_json_error_contains(response, "Must be a billing administrator or an organization")
+        desdemona = self.example_user('desdemona')
+        desdemona.role = UserProfile.ROLE_REALM_OWNER
+        desdemona.save(update_fields=["role"])
 
-    def test_non_admins_blocked_from_json_endpoints(self) -> None:
-        params: List[Tuple[str, Dict[str, Any]]] = [
-            ("/json/billing/sources/change", {'stripe_token': ujson.dumps('token')}),
-            ("/json/billing/plan/change", {'status': ujson.dumps(1)}),
-        ]
+    def test_who_can_access_json_endpoints(self) -> None:
+        # Billing admins have access
+        self.login_user(self.example_user('hamlet'))
+        with patch("corporate.views.do_replace_payment_source") as mocked1:
+            response = self.client_post("/json/billing/sources/change",
+                                        {'stripe_token': orjson.dumps('token').decode()})
+        self.assert_json_success(response)
+        mocked1.assert_called()
 
-        for (url, data) in params:
-            self.verify_non_admins_blocked_from_endpoint(url, data)
+        # Realm owners have access, even if they are not billing admins
+        self.login_user(self.example_user('desdemona'))
+        with patch("corporate.views.do_replace_payment_source") as mocked2:
+            response = self.client_post("/json/billing/sources/change",
+                                        {'stripe_token': orjson.dumps('token').decode()})
+        self.assert_json_success(response)
+        mocked2.assert_called()
+
+    def test_who_cant_access_json_endpoints(self) -> None:
+        def verify_user_cant_access_endpoint(username: str, endpoint: str, request_data: Dict[str, str], error_message: str) -> None:
+            self.login_user(self.example_user(username))
+            response = self.client_post(endpoint, request_data)
+            self.assert_json_error_contains(response, error_message)
+
+        verify_user_cant_access_endpoint("polonius", "/json/billing/upgrade",
+                                         {'billing_modality': orjson.dumps("charge_automatically").decode(), 'schedule': orjson.dumps("annual").decode(),
+                                          'signed_seat_count': orjson.dumps('signed count').decode(), 'salt': orjson.dumps('salt').decode()},
+                                         "Must be an organization member")
+
+        verify_user_cant_access_endpoint("polonius", "/json/billing/sponsorship",
+                                         {'organization-type': orjson.dumps("event").decode(), 'description': orjson.dumps("event description").decode(),
+                                          'website': orjson.dumps("example.com").decode()},
+                                         "Must be an organization member")
+
+        for username in ["cordelia", "iago"]:
+            self.login_user(self.example_user(username))
+            verify_user_cant_access_endpoint(username, "/json/billing/sources/change", {'stripe_token': orjson.dumps('token').decode()},
+                                             "Must be a billing administrator or an organization owner")
+
+            verify_user_cant_access_endpoint(username, "/json/billing/plan/change",  {'status': orjson.dumps(1).decode()},
+                                             "Must be a billing administrator or an organization owner")
 
         # Make sure that we are testing all the JSON endpoints
         # Quite a hack, but probably fine for now
         string_with_all_endpoints = str(get_resolver('corporate.urls').reverse_dict)
         json_endpoints = {word.strip("\"'()[],$") for word in string_with_all_endpoints.split()
                           if 'json/' in word}
-        # No need to test upgrade and sponsorship endpoints as they only require user to be logged in.
-        json_endpoints.remove("json/billing/upgrade")
-        json_endpoints.remove("json/billing/sponsorship")
-
-        self.assertEqual(len(json_endpoints), len(params))
-
-    def test_admins_and_billing_admins_can_access(self) -> None:
-        # Billing admins have access
-        hamlet = self.example_user('hamlet')
-        iago = self.example_user('iago')
-        self.login_user(hamlet)
-        with patch("corporate.views.do_replace_payment_source") as mocked1:
-            response = self.client_post("/json/billing/sources/change",
-                                        {'stripe_token': ujson.dumps('token')})
-        self.assert_json_success(response)
-        mocked1.assert_called()
-
-        # Realm admins have access, even if they are not billing admins
-        self.login_user(iago)
-        with patch("corporate.views.do_replace_payment_source") as mocked2:
-            response = self.client_post("/json/billing/sources/change",
-                                        {'stripe_token': ujson.dumps('token')})
-        self.assert_json_success(response)
-        mocked2.assert_called()
+        self.assertEqual(len(json_endpoints), 4)
 
 class BillingHelpersTest(ZulipTestCase):
     def test_next_month(self) -> None:
@@ -2078,7 +2083,7 @@ class LicenseLedgerTest(StripeTestCase):
 
     def test_user_changes(self) -> None:
         self.local_upgrade(self.seat_count, True, CustomerPlan.ANNUAL, 'token')
-        user = do_create_user('email', 'password', get_realm('zulip'), 'name', 'name')
+        user = do_create_user('email', 'password', get_realm('zulip'), 'name')
         do_deactivate_user(user)
         do_reactivate_user(user)
         # Not a proper use of do_activate_user, but fine for this test
@@ -2125,12 +2130,9 @@ class InvoiceTest(StripeTestCase):
         plan = CustomerPlan.objects.first()
         invoice_plan(plan, self.now + timedelta(days=400))
 
-        stripe_invoices = [invoice for invoice in stripe.Invoice.list(
-            customer=plan.customer.stripe_customer_id)]
-        self.assertEqual(len(stripe_invoices), 2)
-        self.assertIsNotNone(stripe_invoices[0].status_transitions.finalized_at)
-        stripe_line_items = [item for item in stripe_invoices[0].lines]
-        self.assertEqual(len(stripe_line_items), 3)
+        [invoice0, invoice1] = stripe.Invoice.list(customer=plan.customer.stripe_customer_id)
+        self.assertIsNotNone(invoice0.status_transitions.finalized_at)
+        [item0, item1, item2] = invoice0.lines
         line_item_params = {
             'amount': int(8000 * (1 - ((400-366) / 365)) + .5),
             'description': 'Additional license (Feb 5, 2013 - Jan 2, 2014)',
@@ -2140,7 +2142,7 @@ class InvoiceTest(StripeTestCase):
                 'end': datetime_to_timestamp(self.now + timedelta(days=2*365 + 1))},
             'quantity': 1}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[0].get(key), value)
+            self.assertEqual(item0.get(key), value)
         line_item_params = {
             'amount': 8000 * (self.seat_count + 1),
             'description': 'Zulip Standard - renewal',
@@ -2150,7 +2152,7 @@ class InvoiceTest(StripeTestCase):
                 'end': datetime_to_timestamp(self.now + timedelta(days=2*365 + 1))},
             'quantity': (self.seat_count + 1)}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[1].get(key), value)
+            self.assertEqual(item1.get(key), value)
         line_item_params = {
             'amount': 3 * int(8000 * (366-100) / 366 + .5),
             'description': 'Additional license (Apr 11, 2012 - Jan 2, 2013)',
@@ -2160,7 +2162,7 @@ class InvoiceTest(StripeTestCase):
                 'end': datetime_to_timestamp(self.now + timedelta(days=366))},
             'quantity': 3}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[2].get(key), value)
+            self.assertEqual(item2.get(key), value)
 
     @mock_stripe()
     def test_fixed_price_plans(self, *mocks: Mock) -> None:
@@ -2174,12 +2176,9 @@ class InvoiceTest(StripeTestCase):
         plan.price_per_license = 0
         plan.save(update_fields=['fixed_price', 'price_per_license'])
         invoice_plan(plan, self.next_year)
-        stripe_invoices = [invoice for invoice in stripe.Invoice.list(
-            customer=plan.customer.stripe_customer_id)]
-        self.assertEqual(len(stripe_invoices), 2)
-        self.assertEqual(stripe_invoices[0].billing, 'send_invoice')
-        stripe_line_items = [item for item in stripe_invoices[0].lines]
-        self.assertEqual(len(stripe_line_items), 1)
+        [invoice0, invoice1] = stripe.Invoice.list(customer=plan.customer.stripe_customer_id)
+        self.assertEqual(invoice0.billing, 'send_invoice')
+        [item] = invoice0.lines
         line_item_params = {
             'amount': 100,
             'description': 'Zulip Standard - renewal',
@@ -2189,7 +2188,7 @@ class InvoiceTest(StripeTestCase):
                 'end': datetime_to_timestamp(self.next_year + timedelta(days=365))},
             'quantity': 1}
         for key, value in line_item_params.items():
-            self.assertEqual(stripe_line_items[0].get(key), value)
+            self.assertEqual(item.get(key), value)
 
     def test_no_invoice_needed(self) -> None:
         with patch('corporate.lib.stripe.timezone_now', return_value=self.now):

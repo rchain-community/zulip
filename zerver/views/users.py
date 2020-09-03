@@ -250,16 +250,16 @@ def patch_bot_backend(
         else:
             (stream, recipient, sub) = access_stream_by_name(
                 user_profile, default_sending_stream)
-        do_change_default_sending_stream(bot, stream)
+        do_change_default_sending_stream(bot, stream, acting_user=user_profile)
     if default_events_register_stream is not None:
         if default_events_register_stream == "":
             stream = None
         else:
             (stream, recipient, sub) = access_stream_by_name(
                 user_profile, default_events_register_stream)
-        do_change_default_events_register_stream(bot, stream)
+        do_change_default_events_register_stream(bot, stream, acting_user=user_profile)
     if default_all_public_streams is not None:
-        do_change_default_all_public_streams(bot, default_all_public_streams)
+        do_change_default_all_public_streams(bot, default_all_public_streams, acting_user=user_profile)
 
     if service_payload_url is not None:
         check_valid_interface_type(service_interface)
@@ -382,7 +382,6 @@ def add_bot_backend(
 
     bot_profile = do_create_user(email=email, password=None,
                                  realm=user_profile.realm, full_name=full_name,
-                                 short_name=short_name,
                                  bot_type=bot_type,
                                  bot_owner=user_profile,
                                  avatar_source=avatar_source,
@@ -414,6 +413,7 @@ def add_bot_backend(
     api_key = get_api_key(bot_profile)
 
     json_result = dict(
+        user_id=bot_profile.id,
         api_key=api_key,
         avatar_url=avatar_url(bot_profile),
         default_sending_stream=get_stream_name(bot_profile.default_sending_stream),
@@ -486,9 +486,13 @@ def get_members_backend(request: HttpRequest, user_profile: UserProfile, user_id
 
 @require_realm_admin
 @has_request_variables
-def create_user_backend(request: HttpRequest, user_profile: UserProfile,
-                        email: str=REQ(), password: str=REQ(), full_name_raw: str=REQ("full_name"),
-                        short_name: str=REQ()) -> HttpResponse:
+def create_user_backend(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    email: str=REQ(),
+    password: str=REQ(),
+    full_name_raw: str=REQ("full_name"),
+) -> HttpResponse:
     full_name = check_full_name(full_name_raw)
     form = CreateUserForm({'full_name': full_name, 'email': email})
     if not form.is_valid():
@@ -518,8 +522,8 @@ def create_user_backend(request: HttpRequest, user_profile: UserProfile,
     if not check_password_strength(password):
         return json_error(PASSWORD_TOO_WEAK_ERROR)
 
-    do_create_user(email, password, realm, full_name, short_name, acting_user=user_profile)
-    return json_success()
+    target_user = do_create_user(email, password, realm, full_name, acting_user=user_profile)
+    return json_success({'user_id': target_user.id})
 
 def get_profile_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     raw_user_data = get_raw_user_data(user_profile.realm, user_profile,

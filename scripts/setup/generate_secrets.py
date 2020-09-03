@@ -87,7 +87,7 @@ def generate_secrets(development: bool = False) -> None:
         if need_secret(name):
             add_secret(name, random_token())
 
-    # These secrets are exclusive to a Zulip develpment environment.
+    # These secrets are exclusive to a Zulip development environment.
     # We use postgres peer authentication by default in production,
     # and initial_password_salt is used to generate passwords for the
     # test/development database users.  See `manage.py
@@ -183,7 +183,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--development', action='store_true', dest='development',
+    group.add_argument('--development', action='store_true',
                        help='For setting up the developer env for zulip')
     group.add_argument('--production', action='store_false', dest='development',
                        help='For setting up the production env for zulip')

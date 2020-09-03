@@ -13,13 +13,15 @@ from zerver.lib.webhooks.common import UnexpectedWebhookEventType, check_send_we
 from zerver.models import Realm, UserProfile, get_user_by_delivery_email
 
 IGNORED_EVENTS = [
-    'issuelink_created',
-    'attachment_created',
-    'issuelink_deleted',
-    'sprint_started',
-    'sprint_closed',
-    'worklog_created',
-    'worklog_updated',
+    "attachment_created",
+    "issuelink_created",
+    "issuelink_deleted",
+    "jira:version_released",
+    "jira:worklog_updated",
+    "sprint_closed",
+    "sprint_started",
+    "worklog_created",
+    "worklog_updated",
 ]
 
 def guess_zulip_user_from_jira(jira_username: str, realm: Realm) -> Optional[UserProfile]:
@@ -29,7 +31,6 @@ def guess_zulip_user_from_jira(jira_username: str, realm: Realm) -> Optional[Use
         # and beginning of email address
         user = UserProfile.objects.filter(
             Q(full_name__iexact=jira_username) |
-            Q(short_name__iexact=jira_username) |
             Q(email__istartswith=jira_username),
             is_active=True,
             realm=realm).order_by("id")[0]
@@ -67,7 +68,7 @@ def convert_jira_markup(content: str, realm: Realm) -> str:
     # In order to support both forms, we don't match a | in bare links
     content = re.sub(r'\[([^\|~]+?)\]', r'[\1](\1)', content)
 
-    # Full links which have a | are converted into a better markdown link
+    # Full links which have a | are converted into a better Markdown link
     full_link_re = re.compile(r'\[(?:(?P<title>[^|~]+)\|)(?P<url>[^\]]*)\]')
     content = re.sub(full_link_re, r'[\g<title>](\g<url>)', content)
 

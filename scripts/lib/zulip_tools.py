@@ -68,11 +68,11 @@ def parse_cache_script_args(description: str) -> argparse.Namespace:
         "installation in dev) and older than threshold days will be "
         "deleted. (defaults to 14)")
     parser.add_argument(
-        "--dry-run", dest="dry_run", action="store_true",
+        "--dry-run", action="store_true",
         help="If specified then script will only print the caches "
         "that it will delete/keep back. It will not delete any cache.")
     parser.add_argument(
-        "--verbose", dest="verbose", action="store_true",
+        "--verbose", action="store_true",
         help="If specified then script will print a detailed report "
         "of what is being will deleted/kept back.")
     parser.add_argument(
@@ -291,13 +291,18 @@ def purge_unused_caches(
         print("Done!")
 
 def generate_sha1sum_emoji(zulip_path: str) -> str:
-    ZULIP_EMOJI_DIR = os.path.join(zulip_path, 'tools', 'setup', 'emoji')
     sha = hashlib.sha1()
 
-    filenames = ['emoji_map.json', 'build_emoji', 'emoji_setup_utils.py', 'emoji_names.py']
+    filenames = [
+        'static/assets/zulip-emoji/zulip.png',
+        'tools/setup/emoji/emoji_map.json',
+        'tools/setup/emoji/build_emoji',
+        'tools/setup/emoji/emoji_setup_utils.py',
+        'tools/setup/emoji/emoji_names.py',
+    ]
 
     for filename in filenames:
-        file_path = os.path.join(ZULIP_EMOJI_DIR, filename)
+        file_path = os.path.join(zulip_path, filename)
         with open(file_path, 'rb') as reader:
             sha.update(reader.read())
 
@@ -455,7 +460,7 @@ def is_root() -> bool:
 def run_as_root(args: List[str], **kwargs: Any) -> None:
     sudo_args = kwargs.pop('sudo_args', [])
     if not is_root():
-        args = ['sudo'] + sudo_args + ['--'] + args
+        args = ['sudo', *sudo_args, '--', *args]
     run(args, **kwargs)
 
 def assert_not_running_as_root() -> None:

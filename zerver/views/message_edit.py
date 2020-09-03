@@ -1,7 +1,7 @@
 import datetime
 from typing import Any, Dict, List, Optional, Set
 
-import ujson
+import orjson
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse
 from django.utils.timezone import now as timezone_now
@@ -84,13 +84,13 @@ def get_message_edit_history(request: HttpRequest, user_profile: UserProfile,
 
     # Extract the message edit history from the message
     if message.edit_history is not None:
-        message_edit_history = ujson.loads(message.edit_history)
+        message_edit_history = orjson.loads(message.edit_history)
     else:
         message_edit_history = []
 
     # Fill in all the extra data that will make it usable
     fill_edit_history_entries(message_edit_history, message)
-    return json_success({"message_history": reversed(message_edit_history)})
+    return json_success({"message_history": list(reversed(message_edit_history))})
 
 PROPAGATE_MODE_VALUES = ["change_later", "change_one", "change_all"]
 @has_request_variables
@@ -223,7 +223,7 @@ def update_message_backend(request: HttpRequest, user_profile: UserMessage,
             # `sender.realm_id` must match the decision made in the
             # `render_incoming_message` call earlier in this function.
             'message_realm_id': user_profile.realm_id,
-            'urls': links_for_embed}
+            'urls': list(links_for_embed)}
         queue_json_publish('embed_links', event_data)
     return json_success()
 

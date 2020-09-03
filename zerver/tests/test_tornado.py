@@ -1,7 +1,7 @@
 import urllib.parse
 from typing import Any, Dict, Optional
 
-import ujson
+import orjson
 from django.conf import settings
 from django.core import signals
 from django.db import close_old_connections
@@ -31,7 +31,7 @@ class TornadoWebTestCase(AsyncHTTPTestCase, ZulipTestCase):
     def get_app(self) -> Application:
         return create_tornado_application(9993)
 
-    def client_get(self, path: str, **kwargs: Any) -> HTTPResponse:
+    def tornado_client_get(self, path: str, **kwargs: Any) -> HTTPResponse:
         self.add_session_cookie(kwargs)
         kwargs['skip_user_agent'] = True
         self.set_http_headers(kwargs)
@@ -77,10 +77,13 @@ class TornadoWebTestCase(AsyncHTTPTestCase, ZulipTestCase):
         kwargs['headers'] = headers
 
     def create_queue(self, **kwargs: Any) -> str:
-        response = self.client_get('/json/events?dont_block=true', subdomain="zulip",
-                                   skip_user_agent=True)
+        response = self.tornado_client_get(
+            '/json/events?dont_block=true',
+            subdomain="zulip",
+            skip_user_agent=True,
+        )
         self.assertEqual(response.code, 200)
-        body = ujson.loads(response.body)
+        body = orjson.loads(response.body)
         self.assertEqual(body['events'], [])
         self.assertIn('queue_id', body)
         return body['queue_id']
@@ -113,7 +116,7 @@ class EventsTestCase(TornadoWebTestCase):
 
         self.io_loop.call_later(0.1, process_events)
         response = self.wait()
-        data = ujson.loads(response.body)
+        data = orjson.loads(response.body)
         self.assertEqual(data['events'], [
             {'type': 'test', 'data': 'test data', 'id': 0},
         ])

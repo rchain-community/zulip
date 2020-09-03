@@ -5,9 +5,9 @@ import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Mapping, Optional, Set
 
+import orjson
 import pika
 import pika.adapters.tornado_connection
-import ujson
 from django.conf import settings
 from pika.adapters.blocking_connection import BlockingChannel
 from pika.spec import Basic
@@ -16,7 +16,7 @@ from tornado import ioloop
 from zerver.lib.utils import statsd
 
 MAX_REQUEST_RETRIES = 3
-Consumer = Callable[[BlockingChannel, Basic.Deliver, pika.BasicProperties, str], None]
+Consumer = Callable[[BlockingChannel, Basic.Deliver, pika.BasicProperties, bytes], None]
 
 # This simple queuing library doesn't expose much of the power of
 # rabbitmq/pika's queuing system; its purpose is to just provide an
@@ -126,7 +126,7 @@ class SimpleQueueClient:
         self.ensure_queue(queue_name, do_publish)
 
     def json_publish(self, queue_name: str, body: Mapping[str, Any]) -> None:
-        data = ujson.dumps(body).encode()
+        data = orjson.dumps(body)
         try:
             self.publish(queue_name, data)
             return
@@ -140,7 +140,7 @@ class SimpleQueueClient:
         def wrapped_consumer(ch: BlockingChannel,
                              method: Basic.Deliver,
                              properties: pika.BasicProperties,
-                             body: str) -> None:
+                             body: bytes) -> None:
             try:
                 consumer(ch, method, properties, body)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -163,8 +163,8 @@ class SimpleQueueClient:
         def wrapped_callback(ch: BlockingChannel,
                              method: Basic.Deliver,
                              properties: pika.BasicProperties,
-                             body: str) -> None:
-            callback(ujson.loads(body))
+                             body: bytes) -> None:
+            callback(orjson.loads(body))
         self.register_consumer(queue_name, wrapped_callback)
 
     def drain_queue(self, queue_name: str) -> List[bytes]:
@@ -185,7 +185,7 @@ class SimpleQueueClient:
         return messages
 
     def json_drain_queue(self, queue_name: str) -> List[Dict[str, Any]]:
-        return list(map(ujson.loads, self.drain_queue(queue_name)))
+        return list(map(orjson.loads, self.drain_queue(queue_name)))
 
     def queue_size(self) -> int:
         assert self.channel is not None
@@ -316,7 +316,7 @@ class TornadoQueueClient(SimpleQueueClient):
         def wrapped_consumer(ch: BlockingChannel,
                              method: Basic.Deliver,
                              properties: pika.BasicProperties,
-                             body: str) -> None:
+                             body: bytes) -> None:
             consumer(ch, method, properties, body)
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -359,7 +359,6 @@ def queue_json_publish(
     event: Dict[str, Any],
     processor: Optional[Callable[[Any], None]] = None,
 ) -> None:
-    # most events are dicts, but zerver.middleware.write_log_line uses a str
     with queue_lock:
         if settings.USING_RABBITMQ:
             get_queue_client().json_publish(queue_name, event)

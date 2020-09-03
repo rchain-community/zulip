@@ -166,7 +166,7 @@ def send_response_message(bot_id: int, message_info: Dict[str, Any], response_da
         topic - see get_topic_from_message_info
 
     response_data is what the bot wants to send back and has these fields:
-        content - raw markdown content for Zulip to render
+        content - raw Markdown content for Zulip to render
     """
 
     message_type = message_info['type']
@@ -272,7 +272,7 @@ def process_success_response(event: Dict[str, Any],
                              response: Response) -> None:
     try:
         response_json = json.loads(response.text)
-    except ValueError:
+    except json.JSONDecodeError:
         fail_with_message(event, "Invalid JSON in response")
         return
 
@@ -333,6 +333,6 @@ def do_rest_call(base_url: str,
             f"An exception of type *{type(e).__name__}* occurred for message `{event['command']}`! "
             "See the Zulip server logs for more information."
         )
-        logging.exception("Outhook trigger failed:")
+        logging.exception("Outhook trigger failed:", stack_info=True)
         fail_with_message(event, response_message)
         notify_bot_owner(event, exception=e)

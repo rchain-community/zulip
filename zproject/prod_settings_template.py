@@ -294,7 +294,7 @@ SOCIAL_AUTH_SAML_SUPPORT_CONTACT = {
 #
 #SOCIAL_AUTH_APPLE_TEAM = "<your Team ID>"
 #SOCIAL_AUTH_APPLE_SERVICES_ID = "<your Services ID>"
-#SOCIAL_AUTH_APPLE_BUNDLE_ID = "<your Bundle ID>"
+#SOCIAL_AUTH_APPLE_APP_ID = "<your App ID>"
 #SOCIAL_AUTH_APPLE_KEY = "<your Key ID>"
 
 ########
@@ -365,6 +365,9 @@ SESSION_COOKIE_AGE = 60 * 60 * 24 * 7 * 2  # 2 weeks
 #ERROR_REPORTING = True
 # For frontend (JavaScript) tracebacks
 #BROWSER_ERROR_REPORTING = False
+
+# Controls the DSN used to report errors to Sentry.io
+#SENTRY_DSN = 'https://bbb@bbb.ingest.sentry.io/1235'
 
 # If True, each log message in the server logs will identify the
 # Python module where it came from.  Useful for tracking down a
@@ -442,7 +445,7 @@ ENABLE_GRAVATAR = True
 #REMOTE_POSTGRES_SSLMODE = 'require'
 
 # If you want to set a Terms of Service for your server, set the path
-# to your markdown file, and uncomment the following line.
+# to your Markdown file, and uncomment the following line.
 #TERMS_OF_SERVICE = '/etc/zulip/terms.md'
 
 # Similarly if you want to set a Privacy Policy.
@@ -651,10 +654,10 @@ CAMO_URI = '/external_content/'
 #THUMBNAIL_IMAGES = True
 
 # Controls the Jitsi Meet video call integration.  By default, the
-# integration uses the SaaS meet.jit.si server.  You can specify
+# integration uses the SaaS https://meet.jit.si server.  You can specify
 # your own Jitsi Meet server, or if you'd like to disable the
 # integration, set JITSI_SERVER_URL = None.
-#JITSI_SERVER_URL = 'jitsi.example.com'
+#JITSI_SERVER_URL = 'https://jitsi.example.com'
 
 # Controls the Big Blue Button video call integration.  You must also
 # set big_blue_button_secret in zulip-secrets.conf.

@@ -3,7 +3,7 @@ import os
 from typing import List, Optional
 
 import django.urls.resolvers
-import ujson
+import orjson
 from django.test import Client
 
 from zerver.lib.test_classes import ZulipTestCase
@@ -37,10 +37,11 @@ class PublicURLTest(ZulipTestCase):
                           "/en/accounts/login/", "/ru/accounts/login/",
                           "/help/"],
                     302: ["/", "/en/", "/ru/"],
+                    400: ["/json/messages",
+                          ],
                     401: [f"/json/streams/{denmark_stream_id}/members",
                           "/api/v1/users/me/subscriptions",
                           "/api/v1/messages",
-                          "/json/messages",
                           "/api/v1/streams",
                           ],
                     404: ["/help/nonexistent", "/help/include/admin",
@@ -93,7 +94,7 @@ class PublicURLTest(ZulipTestCase):
             resp = self.client_get("/api/v1/fetch_google_client_id")
             self.assertEqual(200, resp.status_code,
                              msg=f"Expected 200, received {resp.status_code} for GET /api/v1/fetch_google_client_id")
-            data = ujson.loads(resp.content)
+            data = orjson.loads(resp.content)
             self.assertEqual('success', data['result'])
             self.assertEqual('ABCD', data['google_client_id'])
 

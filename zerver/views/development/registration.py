@@ -12,7 +12,7 @@ from zerver.views.auth import create_preregistration_user
 from zerver.views.registration import accounts_register
 
 
-# This is used only by the casper test in 00-realm-creation.js.
+# This is used only by the puppeteer test in 00-realm-creation.js.
 def confirmation_key(request: HttpRequest) -> HttpResponse:
     return json_success(request.session.get('confirmation_key'))
 
@@ -34,7 +34,7 @@ def register_development_user(request: HttpRequest) -> HttpResponse:
     activation_url = create_confirmation_link(prereg,
                                               Confirmation.USER_REGISTRATION)
     key = activation_url.split('/')[-1]
-    # Need to add test data to POST request as it doesnt originally contain the required parameters
+    # Need to add test data to POST request as it doesn't originally contain the required parameters
     modify_postdata(request, key=key, full_name=name, password='test', terms='true')
 
     return accounts_register(request)
@@ -50,7 +50,7 @@ def register_development_realm(request: HttpRequest) -> HttpResponse:
     activation_url = create_confirmation_link(prereg,
                                               Confirmation.REALM_CREATION)
     key = activation_url.split('/')[-1]
-    # Need to add test data to POST request as it doesnt originally contain the required parameters
+    # Need to add test data to POST request as it doesn't originally contain the required parameters
     modify_postdata(request, key=key, realm_name=realm_name, full_name=name, password='test',
                     realm_subdomain=realm_name, terms='true')
 

@@ -1,4 +1,10 @@
-const render_admin_export_list = require('../templates/admin_export_list.hbs');
+"use strict";
+
+const XDate = require("xdate");
+
+const render_admin_export_list = require("../templates/admin_export_list.hbs");
+
+const people = require("./people");
 
 const meta = {
     loaded: false,
@@ -24,10 +30,10 @@ exports.populate_exports_table = function (exports) {
         return;
     }
 
-    const exports_table = $('#admin_exports_table').expectOne();
+    const exports_table = $("#admin_exports_table").expectOne();
     list_render.create(exports_table, Object.values(exports), {
         name: "admin_exports_list",
-        modifier: function (data) {
+        modifier(data) {
             let failed_timestamp = data.failed_timestamp;
             let deleted_timestamp = data.deleted_timestamp;
 
@@ -60,10 +66,10 @@ exports.populate_exports_table = function (exports) {
         },
         filter: {
             element: exports_table.closest(".settings-section").find(".search"),
-            predicate: function (item, value) {
+            predicate(item, value) {
                 return people.get_full_name(item.acting_user_id).toLowerCase().includes(value);
             },
-            onupdate: function () {
+            onupdate() {
                 ui.reset_scrollbar(exports_table);
             },
         },
@@ -72,9 +78,10 @@ exports.populate_exports_table = function (exports) {
         sort_fields: {
             user: sort_user,
         },
+        simplebar_container: $("#data-exports .progressive-table-wrapper"),
     });
 
-    const spinner = $('.export_row .export_url_spinner');
+    const spinner = $(".export_row .export_url_spinner");
     if (spinner.length) {
         loading.make_indicator(spinner);
     } else {
@@ -85,17 +92,21 @@ exports.populate_exports_table = function (exports) {
 exports.set_up = function () {
     meta.loaded = true;
 
-    $("#export-data").on('click', (e) => {
+    $("#export-data").on("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const export_status = $('#export_status');
+        const export_status = $("#export_status");
 
         channel.post({
-            url: '/json/export/realm',
-            success: function () {
-                ui_report.success(i18n.t("Export started. Check back in a few minutes."), export_status, 4000);
+            url: "/json/export/realm",
+            success() {
+                ui_report.success(
+                    i18n.t("Export started. Check back in a few minutes."),
+                    export_status,
+                    4000,
+                );
             },
-            error: function (xhr) {
+            error(xhr) {
                 ui_report.error(i18n.t("Export failed"), xhr, export_status);
             },
         });
@@ -103,20 +114,20 @@ exports.set_up = function () {
 
     // Do an initial population of the table
     channel.get({
-        url: '/json/export/realm',
-        success: function (data) {
+        url: "/json/export/realm",
+        success(data) {
             exports.populate_exports_table(data.exports);
         },
     });
 
-    $('.admin_exports_table').on('click', '.delete', function (e) {
+    $(".admin_exports_table").on("click", ".delete", function (e) {
         e.preventDefault();
         e.stopPropagation();
         const btn = $(this);
 
         channel.del({
-            url: '/json/export/realm/' + encodeURIComponent(btn.attr('data-export-id')),
-            error: function (xhr) {
+            url: "/json/export/realm/" + encodeURIComponent(btn.attr("data-export-id")),
+            error(xhr) {
                 ui_report.generic_row_button_error(xhr, btn);
             },
             // No success function, since UI updates are done via server_events

@@ -37,7 +37,7 @@ There are many command line options for running Zulip tests, such
 as a `--verbose` option.  The
 best way to learn the options is to use the online help:
 
-    ./tools/test-backend -h
+    ./tools/test-backend --help
 
 We also have ways to instrument our tests for finding code coverage,
 URL coverage, and slow tests.  Use the `-h` option to discover these
@@ -298,7 +298,7 @@ A common use is to prevent a call to a third-party service from using
 the Internet; `git grep mock.patch | grep requests` is a good way to
 find several examples of doing this.
 
-## Zulip Testing Philosophy
+## Zulip testing philosophy
 
 If there is one word to describe Zulip's philosophy for writing tests,
 it is probably "flexible."  (Hopefully "thorough" goes without saying.)
@@ -317,7 +317,7 @@ endpoints support a JSON interface.  Regardless of the interface, an
 endpoint test generally follows this pattern:
 
 - Set up the data.
-- Login with `self.login()` or set up an API key.
+- Log in with `self.login()` or set up an API key.
 - Use a Zulip test helper to hit the endpoint.
 - Assert that the result was either a success or failure.
 - Check the data that comes back from the endpoint.
@@ -435,6 +435,13 @@ requires testing not only the "happy path" but also error handling
 code and edge cases.  It will generate a nice HTML report that you can
 view right from your browser (the tool prints the URL where the report
 is exposed in your development environment).
+
+- **Console output** A properly written test should print nothing to
+the console; use `with self.assertLogs` to capture and verify any
+logging output.  Note that we reconfigure various loggers in
+`zproject/test_extra_settings.py` where the output is unlikely to be
+interesting when running our test suite.  `test-backend
+--ban-console-output` checks for stray print statements.
 
 Note that `test-backend --coverage` will assert that
 various specific files in the project have 100% test coverage and

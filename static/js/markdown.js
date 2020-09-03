@@ -1,6 +1,16 @@
-// This contains zulip's frontend markdown implementation; see
+"use strict";
+
+const katex = require("katex");
+const _ = require("lodash");
+const moment = require("moment");
+
+const emoji = require("../shared/js/emoji");
+const fenced_code = require("../shared/js/fenced_code");
+const marked = require("../third/marked/lib/marked");
+
+// This contains zulip's frontend Markdown implementation; see
 // docs/subsystems/markdown.md for docs on our Markdown syntax.  The other
-// main piece in rendering markdown client-side is
+// main piece in rendering Markdown client-side is
 // static/third/marked/lib/marked.js, which we have significantly
 // modified from the original implementation.
 
@@ -15,7 +25,7 @@ let helpers;
 const realm_filter_map = new Map();
 let realm_filter_list = [];
 
-// Regexes that match some of our common backend-only markdown syntax
+// Regexes that match some of our common backend-only Markdown syntax
 const backend_only_markdown_re = [
     // Inline image previews, check for contiguous chars ending in image suffix
     // To keep the below regexes simple, split them out for the end-of-message case
@@ -32,8 +42,8 @@ exports.translate_emoticons_to_names = (text) => {
     // Translates emoticons in a string to their colon syntax.
     let translated = text;
     let replacement_text;
-    const terminal_symbols = ',.;?!()[] "\'\n\t'; // From composebox_typeahead
-    const symbols_except_space = terminal_symbols.replace(' ', '');
+    const terminal_symbols = ",.;?!()[] \"'\n\t"; // From composebox_typeahead
+    const symbols_except_space = terminal_symbols.replace(" ", "");
 
     const emoticon_replacer = function (match, g1, offset, str) {
         const prev_char = str[offset - 1];
@@ -46,7 +56,8 @@ exports.translate_emoticons_to_names = (text) => {
         const valid_start = symbol_at_start || offset === 0;
         const valid_end = symbol_at_end || offset === str.length - match.length;
 
-        if (non_space_at_start && non_space_at_end) { // Hello!:)?
+        if (non_space_at_start && non_space_at_end) {
+            // Hello!:)?
             return match;
         }
         if (valid_start && valid_end) {
@@ -55,7 +66,7 @@ exports.translate_emoticons_to_names = (text) => {
         return match;
     };
 
-    for (const translation of helpers.get_emoticon_translations()) {
+    for (const translation of emoji.get_emoticon_translations()) {
         // We can't pass replacement_text directly into
         // emoticon_replacer, because emoticon_replacer is
         // a callback for `replace()`.  Instead we just mutate
@@ -69,7 +80,7 @@ exports.translate_emoticons_to_names = (text) => {
 
 exports.contains_backend_only_syntax = function (content) {
     // Try to guess whether or not a message contains syntax that only the
-    // backend markdown processor can correctly handle.
+    // backend Markdown processor can correctly handle.
     // If it doesn't, we can immediately render it client-side for local echo.
     const markedup = backend_only_markdown_re.find((re) => re.test(content));
 
@@ -77,7 +88,7 @@ exports.contains_backend_only_syntax = function (content) {
     // then don't render it locally. It is workaround for the fact that
     // javascript regex doesn't support lookbehind.
     const false_filter_match = realm_filter_list.find((re) => {
-        const pattern = /(?:[^\s'"\(,:<])/.source + re[0].source + /(?![\w])/.source;
+        const pattern = /(?:[^\s'"(,:<])/.source + re[0].source + /(?![\w])/.source;
         const regex = new RegExp(pattern);
         return regex.test(content);
     });
@@ -88,12 +99,10 @@ exports.apply_markdown = function (message) {
     message_store.init_booleans(message);
 
     const options = {
-        userMentionHandler: function (mention, silently) {
-            if (mention === 'all' || mention === 'everyone' || mention === 'stream') {
+        userMentionHandler(mention, silently) {
+            if (mention === "all" || mention === "everyone" || mention === "stream") {
                 message.mentioned = true;
-                return '<span class="user-mention" data-user-id="*">' +
-                       '@' + mention +
-                       '</span>';
+                return '<span class="user-mention" data-user-id="*">' + "@" + mention + "</span>";
             }
 
             let full_name;
@@ -149,7 +158,7 @@ exports.apply_markdown = function (message) {
                 message.mentioned = true;
                 message.mentioned_me_directly = true;
             }
-            let str = '';
+            let str = "";
             if (silently) {
                 str += '<span class="user-mention silent" data-user-id="' + user_id + '">';
             } else {
@@ -159,26 +168,31 @@ exports.apply_markdown = function (message) {
             // If I mention "@aLiCe sMITH", I still want "Alice Smith" to
             // show in the pill.
             const actual_full_name = helpers.get_actual_name_from_user_id(user_id);
-            return str + _.escape(actual_full_name) + '</span>';
+            return str + _.escape(actual_full_name) + "</span>";
         },
-        groupMentionHandler: function (name) {
+        groupMentionHandler(name) {
             const group = helpers.get_user_group_from_name(name);
             if (group !== undefined) {
                 if (helpers.is_member_of_user_group(group.id, helpers.my_user_id())) {
                     message.mentioned = true;
                 }
-                return '<span class="user-group-mention" data-user-group-id="' + group.id + '">' +
-                       '@' + _.escape(group.name) +
-                       '</span>';
+                return (
+                    '<span class="user-group-mention" data-user-group-id="' +
+                    group.id +
+                    '">' +
+                    "@" +
+                    _.escape(group.name) +
+                    "</span>"
+                );
             }
             return;
         },
-        silencedMentionHandler: function (quote) {
+        silencedMentionHandler(quote) {
             // Silence quoted mentions.
             const user_mention_re = /<span.*user-mention.*data-user-id="(\d+|\*)"[^>]*>@/gm;
             quote = quote.replace(user_mention_re, (match) => {
                 match = match.replace(/"user-mention"/g, '"user-mention silent"');
-                match = match.replace(/>@/g, '>');
+                match = match.replace(/>@/g, ">");
                 return match;
             });
             // In most cases, if you are being mentioned in the message you're quoting, you wouldn't
@@ -191,12 +205,12 @@ exports.apply_markdown = function (message) {
         },
     };
     // Our python-markdown processor appends two \n\n to input
-    message.content = marked(message.raw_content + '\n\n', options).trim();
+    message.content = marked(message.raw_content + "\n\n", options).trim();
     message.is_me_message = exports.is_status_message(message.raw_content);
 };
 
 exports.add_topic_links = function (message) {
-    if (message.type !== 'stream') {
+    if (message.type !== "stream") {
         message.topic_links = [];
         return;
     }
@@ -233,22 +247,31 @@ exports.add_topic_links = function (message) {
 };
 
 exports.is_status_message = function (raw_content) {
-    return raw_content.startsWith('/me ');
+    return raw_content.startsWith("/me ");
 };
 
 function make_emoji_span(codepoint, title, alt_text) {
-    return '<span aria-label="' + title + '"' +
-           ' class="emoji emoji-' + codepoint + '"' +
-           ' role="img" title="' + title + '">' + alt_text +
-           '</span>';
+    return (
+        '<span aria-label="' +
+        title +
+        '"' +
+        ' class="emoji emoji-' +
+        codepoint +
+        '"' +
+        ' role="img" title="' +
+        title +
+        '">' +
+        alt_text +
+        "</span>"
+    );
 }
 
 function handleUnicodeEmoji(unicode_emoji) {
     const codepoint = unicode_emoji.codePointAt(0).toString(16);
-    const emoji_name = helpers.get_emoji_name(codepoint);
+    const emoji_name = emoji.get_emoji_name(codepoint);
 
     if (emoji_name) {
-        const alt_text = ':' + emoji_name + ':';
+        const alt_text = ":" + emoji_name + ":";
         const title = emoji_name.split("_").join(" ");
         return make_emoji_span(codepoint, title, alt_text);
     }
@@ -257,7 +280,7 @@ function handleUnicodeEmoji(unicode_emoji) {
 }
 
 function handleEmoji(emoji_name) {
-    const alt_text = ':' + emoji_name + ':';
+    const alt_text = ":" + emoji_name + ":";
     const title = emoji_name.split("_").join(" ");
 
     // Zulip supports both standard/unicode emoji, served by a
@@ -267,15 +290,23 @@ function handleEmoji(emoji_name) {
     // Otherwise we'll look at unicode emoji to render with an emoji
     // span using the spritesheet; and if it isn't one of those
     // either, we pass through the plain text syntax unmodified.
-    const emoji_url = helpers.get_realm_emoji_url(emoji_name);
+    const emoji_url = emoji.get_realm_emoji_url(emoji_name);
 
     if (emoji_url) {
-        return '<img alt="' + alt_text + '"' +
-               ' class="emoji" src="' + emoji_url + '"' +
-               ' title="' + title + '">';
+        return (
+            '<img alt="' +
+            alt_text +
+            '"' +
+            ' class="emoji" src="' +
+            emoji_url +
+            '"' +
+            ' title="' +
+            title +
+            '">'
+        );
     }
 
-    const codepoint = helpers.get_emoji_codepoint(emoji_name);
+    const codepoint = emoji.get_emoji_codepoint(emoji_name);
     if (codepoint) {
         return make_emoji_span(codepoint, title, alt_text);
     }
@@ -288,7 +319,7 @@ function handleTimestamp(time) {
     if (isNaN(time)) {
         // Moment throws a large deprecation warning when it has to fallback
         // to the Date() constructor. We needn't worry here and can let backend
-        // markdown handle any dates that moment misses.
+        // Markdown handle any dates that moment misses.
         moment.suppressDeprecationWarnings = true;
         timeobject = moment(time); // not a Unix timestamp
     } else {
@@ -309,7 +340,7 @@ function handleTimestamp(time) {
 
     // Use html5 <time> tag for valid timestamps.
     // render time without milliseconds.
-    const escaped_isotime = _.escape(timeobject.toISOString().split('.')[0] + 'Z');
+    const escaped_isotime = _.escape(timeobject.toISOString().split(".")[0] + "Z");
     return `<time datetime="${escaped_isotime}">${escaped_time}</time>`;
 }
 
@@ -319,9 +350,18 @@ function handleStream(stream_name) {
         return;
     }
     const href = helpers.stream_hash(stream.stream_id);
-    return '<a class="stream" data-stream-id="' + stream.stream_id + '" ' +
-        'href="/' + href + '"' +
-        '>' + '#' + _.escape(stream.name) + '</a>';
+    return (
+        '<a class="stream" data-stream-id="' +
+        stream.stream_id +
+        '" ' +
+        'href="/' +
+        href +
+        '"' +
+        ">" +
+        "#" +
+        _.escape(stream.name) +
+        "</a>"
+    );
 }
 
 function handleStreamTopic(stream_name, topic) {
@@ -330,9 +370,18 @@ function handleStreamTopic(stream_name, topic) {
         return;
     }
     const href = helpers.stream_topic_hash(stream.stream_id, topic);
-    const text = '#' + _.escape(stream.name) + ' > ' + _.escape(topic);
-    return '<a class="stream-topic" data-stream-id="' + stream.stream_id + '" ' +
-        'href="/' + href + '"' + '>' + text + '</a>';
+    const text = "#" + _.escape(stream.name) + " > " + _.escape(topic);
+    return (
+        '<a class="stream-topic" data-stream-id="' +
+        stream.stream_id +
+        '" ' +
+        'href="/' +
+        href +
+        '"' +
+        ">" +
+        text +
+        "</a>"
+    );
 }
 
 function handleRealmFilter(pattern, matches) {
@@ -353,8 +402,9 @@ function handleTex(tex, fullmatch) {
     try {
         return katex.renderToString(tex);
     } catch (ex) {
-        if (ex.message.startsWith('KaTeX parse error')) { // TeX syntax error
-            return '<span class="tex-error">' + _.escape(fullmatch) + '</span>';
+        if (ex.message.startsWith("KaTeX parse error")) {
+            // TeX syntax error
+            return '<span class="tex-error">' + _.escape(fullmatch) + "</span>";
         }
         blueslip.error(ex);
     }
@@ -369,9 +419,9 @@ function python_to_js_filter(pattern, url) {
     while (match) {
         const name = match[1];
         // Replace named group with regular matching group
-        pattern = pattern.replace('(?P<' + name + '>', '(');
+        pattern = pattern.replace("(?P<" + name + ">", "(");
         // Replace named reference in url to numbered reference
-        url = url.replace('%(' + name + ')s', '\\' + current_group);
+        url = url.replace("%(" + name + ")s", "\\" + current_group);
 
         // Reset the RegExp state
         named_group_re.lastIndex = 0;
@@ -380,7 +430,7 @@ function python_to_js_filter(pattern, url) {
         current_group += 1;
     }
     // Convert any python in-regex flags to RegExp flags
-    let js_flags = 'g';
+    let js_flags = "g";
     const inline_flag_re = /\(\?([iLmsux]+)\)/;
     match = inline_flag_re.exec(pattern);
 
@@ -413,7 +463,7 @@ function python_to_js_filter(pattern, url) {
         // We have an error computing the generated regex syntax.
         // We'll ignore this realm filter for now, but log this
         // failure for debugging later.
-        blueslip.error('python_to_js_filter: ' + ex.message);
+        blueslip.error("python_to_js_filter: " + ex.message);
     }
     return [final_regex, url];
 }
@@ -444,25 +494,27 @@ exports.initialize = function (realm_filters, helper_config) {
     helpers = helper_config;
 
     function disable_markdown_regex(rules, name) {
-        rules[name] = {exec: function () {
-            return false;
-        }};
+        rules[name] = {
+            exec() {
+                return false;
+            },
+        };
     }
 
-    // Configure the marked markdown parser for our usage
+    // Configure the marked Markdown parser for our usage
     const r = new marked.Renderer();
 
     // No <code> around our code blocks instead a codehilite <div> and disable
     // class-specific highlighting.
-    r.code = (code) => fenced_code.wrap_code(code) + '\n\n';
+    r.code = (code) => fenced_code.wrap_code(code) + "\n\n";
 
     // Prohibit empty links for some reason.
     const old_link = r.link;
     r.link = (href, title, text) => old_link.call(r, href, title, text.trim() ? text : href);
 
-    // Put a newline after a <br> in the generated HTML to match markdown
+    // Put a newline after a <br> in the generated HTML to match Markdown
     r.br = function () {
-        return '<br>\n';
+        return "<br>\n";
     };
 
     function preprocess_code_blocks(src) {
@@ -481,13 +533,13 @@ exports.initialize = function (realm_filters, helper_config) {
 
     // Disable lheadings
     // We only keep the # Heading format.
-    disable_markdown_regex(marked.Lexer.rules.tables, 'lheading');
+    disable_markdown_regex(marked.Lexer.rules.tables, "lheading");
 
     // Disable __strong__ (keeping **strong**)
     marked.InlineLexer.rules.zulip.strong = /^\*\*([\s\S]+?)\*\*(?!\*)/;
 
     // Make sure <del> syntax matches the backend processor
-    marked.InlineLexer.rules.zulip.del = /^(?!<\~)\~\~([^~]+)\~\~(?!\~)/;
+    marked.InlineLexer.rules.zulip.del = /^(?!<~)~~([^~]+)~~(?!~)/;
 
     // Disable _emphasis_ (keeping *emphasis*)
     // Text inside ** must start and end with a word character
@@ -495,7 +547,7 @@ exports.initialize = function (realm_filters, helper_config) {
     marked.InlineLexer.rules.zulip.em = /^\*(?!\s+)((?:\*\*|[\s\S])+?)((?:[\S]))\*(?!\*)/;
 
     // Disable autolink as (a) it is not used in our backend and (b) it interferes with @mentions
-    disable_markdown_regex(marked.InlineLexer.rules.zulip, 'autolink');
+    disable_markdown_regex(marked.InlineLexer.rules.zulip, "autolink");
 
     exports.update_realm_filter_rules(realm_filters);
 
@@ -520,12 +572,8 @@ exports.initialize = function (realm_filters, helper_config) {
         texHandler: handleTex,
         timestampHandler: handleTimestamp,
         renderer: r,
-        preprocessors: [
-            preprocess_code_blocks,
-            preprocess_translate_emoticons,
-        ],
+        preprocessors: [preprocess_code_blocks, preprocess_translate_emoticons],
     });
-
 };
 
 window.markdown = exports;

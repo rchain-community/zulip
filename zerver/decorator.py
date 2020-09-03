@@ -7,23 +7,16 @@ from io import BytesIO
 from typing import Callable, Dict, Optional, Tuple, TypeVar, Union, cast
 
 import django_otp
-import ujson
+import orjson
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth import login as django_login
 from django.contrib.auth.decorators import user_passes_test as django_user_passes_test
 from django.contrib.auth.models import AnonymousUser
-from django.http import (
-    HttpRequest,
-    HttpResponse,
-    HttpResponseNotAllowed,
-    HttpResponseRedirect,
-    QueryDict,
-)
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, QueryDict
 from django.http.multipartparser import MultiPartParser
 from django.shortcuts import resolve_url
-from django.template.response import SimpleTemplateResponse
-from django.utils.decorators import available_attrs
+from django.template.response import SimpleTemplateResponse, TemplateResponse
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import ugettext as _
 from django.views.decorators.csrf import csrf_exempt
@@ -37,6 +30,7 @@ from zerver.lib.exceptions import (
     InvalidJSONError,
     JsonableError,
     OrganizationAdministratorRequired,
+    OrganizationMemberRequired,
     OrganizationOwnerRequired,
     UnexpectedWebhookEventType,
 )
@@ -44,7 +38,7 @@ from zerver.lib.logging_util import log_to_file
 from zerver.lib.queue import queue_json_publish
 from zerver.lib.rate_limiter import RateLimitedUser
 from zerver.lib.request import REQ, has_request_variables
-from zerver.lib.response import json_error, json_success, json_unauthorized
+from zerver.lib.response import json_error, json_method_not_allowed, json_success, json_unauthorized
 from zerver.lib.subdomains import get_subdomain, user_matches_subdomain
 from zerver.lib.timestamp import datetime_to_timestamp, timestamp_to_datetime
 from zerver.lib.types import ViewFuncT
@@ -52,14 +46,8 @@ from zerver.lib.user_agent import parse_user_agent
 from zerver.lib.utils import has_api_key_format, statsd
 from zerver.models import Realm, UserProfile, get_client, get_user_profile_by_api_key
 
-# This is a hack to ensure that RemoteZulipServer always exists even
-# if Zilencer isn't enabled.
 if settings.ZILENCER_ENABLED:
     from zilencer.models import RemoteZulipServer, get_remote_server_by_uuid
-else:  # nocoverage # Hack here basically to make impossible code paths compile
-    from unittest.mock import Mock
-    get_remote_server_by_uuid = Mock()
-    RemoteZulipServer = Mock()  # type: ignore[misc] # https://github.com/JukkaL/mypy/issues/1188
 
 webhook_logger = logging.getLogger("zulip.zerver.webhooks")
 log_to_file(webhook_logger, settings.API_KEY_ONLY_WEBHOOK_LOG_PATH)
@@ -110,7 +98,10 @@ def require_post(func: ViewFuncT) -> ViewFuncT:
             err_method = request.method
             logging.warning('Method Not Allowed (%s): %s', err_method, request.path,
                             extra={'status_code': 405, 'request': request})
-            return HttpResponseNotAllowed(["POST"])
+            if request.error_format == 'JSON':
+                return json_method_not_allowed(["POST"])
+            else:
+                return TemplateResponse(request, "404.html", context={'status_code': 405}, status=405)
         return func(request, *args, **kwargs)
     return cast(ViewFuncT, wrapper)  # https://github.com/python/mypy/issues/1927
 
@@ -130,14 +121,21 @@ def require_realm_admin(func: ViewFuncT) -> ViewFuncT:
         return func(request, user_profile, *args, **kwargs)
     return cast(ViewFuncT, wrapper)  # https://github.com/python/mypy/issues/1927
 
-def require_billing_access(func: ViewFuncT) -> ViewFuncT:
+def require_organization_member(func: ViewFuncT) -> ViewFuncT:
     @wraps(func)
     def wrapper(request: HttpRequest, user_profile: UserProfile, *args: object, **kwargs: object) -> HttpResponse:
-        if not user_profile.is_realm_admin and not user_profile.is_billing_admin:
-            raise JsonableError(_("Must be a billing administrator or an organization administrator"))
+        if user_profile.role > UserProfile.ROLE_MEMBER:
+            raise OrganizationMemberRequired()
         return func(request, user_profile, *args, **kwargs)
     return cast(ViewFuncT, wrapper)  # https://github.com/python/mypy/issues/1927
 
+def require_billing_access(func: ViewFuncT) -> ViewFuncT:
+    @wraps(func)
+    def wrapper(request: HttpRequest, user_profile: UserProfile, *args: object, **kwargs: object) -> HttpResponse:
+        if not user_profile.has_billing_access:
+            raise JsonableError(_("Must be a billing administrator or an organization owner"))
+        return func(request, user_profile, *args, **kwargs)
+    return cast(ViewFuncT, wrapper)  # https://github.com/python/mypy/issues/1927
 
 def get_client_name(request: HttpRequest) -> str:
     # If the API request specified a client in the request content,
@@ -197,7 +195,7 @@ class InvalidZulipServerKeyError(InvalidZulipServerError):
 
 def validate_api_key(request: HttpRequest, role: Optional[str],
                      api_key: str, is_webhook: bool=False,
-                     client_name: Optional[str]=None) -> Union[UserProfile, RemoteZulipServer]:
+                     client_name: Optional[str]=None) -> Union[UserProfile, "RemoteZulipServer"]:
     # Remove whitespace to protect users from trivial errors.
     api_key = api_key.strip()
     if role is not None:
@@ -266,22 +264,17 @@ def access_user_by_api_key(request: HttpRequest, api_key: str, email: Optional[s
     return user_profile
 
 def log_exception_to_webhook_logger(
-        request: HttpRequest, user_profile: UserProfile,
-        request_body: Optional[str]=None,
-        unexpected_event: bool=False,
+    request: HttpRequest,
+    user_profile: UserProfile,
+    summary: str,
+    payload: str,
+    unexpected_event: bool,
 ) -> None:
-    if request_body is not None:
-        payload = request_body
-    else:
-        payload = request.body
-
     if request.content_type == 'application/json':
         try:
-            payload = ujson.dumps(ujson.loads(payload), indent=4)
-        except ValueError:
-            request_body = str(payload)
-    else:
-        request_body = str(payload)
+            payload = orjson.dumps(orjson.loads(payload), option=orjson.OPT_INDENT_2).decode()
+        except orjson.JSONDecodeError:
+            pass
 
     custom_header_template = "{header}: {value}\n"
 
@@ -294,6 +287,7 @@ def log_exception_to_webhook_logger(
     header_message = header_text if header_text else None
 
     message = """
+summary: {summary}
 user: {email} ({realm})
 client: {client_name}
 URL: {path_info}
@@ -304,6 +298,7 @@ body:
 
 {body}
     """.format(
+        summary=summary,
         email=user_profile.delivery_email,
         realm=user_profile.realm.string_id,
         client_name=request.client.name,
@@ -315,9 +310,9 @@ body:
     message = message.strip(' ')
 
     if unexpected_event:
-        webhook_unexpected_events_logger.exception(message)
+        webhook_unexpected_events_logger.exception(message, stack_info=True)
     else:
-        webhook_logger.exception(message)
+        webhook_logger.exception(message, stack_info=True)
 
 def full_webhook_client_name(raw_client_name: Optional[str]=None) -> Optional[str]:
     if raw_client_name is None:
@@ -355,6 +350,8 @@ def api_key_only_webhook_view(
                     log_exception_to_webhook_logger(
                         request=request,
                         user_profile=user_profile,
+                        summary=str(err),
+                        payload=request.body,
                         unexpected_event=isinstance(err, UnexpectedWebhookEventType),
                     )
                 raise err
@@ -380,7 +377,11 @@ def redirect_to_login(next: str, login_url: Optional[str]=None,
 
     return HttpResponseRedirect(urllib.parse.urlunparse(login_url_parts))
 
-# From Django 1.8
+# From Django 2.2, modified to pass the request rather than just the
+# user into test_func; this is useful so that we can revalidate the
+# subdomain matches the user's realm.  It is likely that we could make
+# the subdomain validation happen elsewhere and switch to using the
+# stock Django version.
 def user_passes_test(test_func: Callable[[HttpResponse], bool], login_url: Optional[str]=None,
                      redirect_field_name: str=REDIRECT_FIELD_NAME) -> Callable[[ViewFuncT], ViewFuncT]:
     """
@@ -389,7 +390,7 @@ def user_passes_test(test_func: Callable[[HttpResponse], bool], login_url: Optio
     that takes the user object and returns True if the user passes.
     """
     def decorator(view_func: ViewFuncT) -> ViewFuncT:
-        @wraps(view_func, assigned=available_attrs(view_func))
+        @wraps(view_func)
         def _wrapped_view(request: HttpRequest, *args: object, **kwargs: object) -> HttpResponse:
             if test_func(request):
                 return view_func(request, *args, **kwargs)
@@ -598,9 +599,10 @@ def authenticated_rest_api_view(
                     request_body = request.POST.get('payload')
                     if request_body is not None:
                         log_exception_to_webhook_logger(
-                            request_body=request_body,
                             request=request,
                             user_profile=profile,
+                            summary=str(err),
+                            payload=request_body,
                             unexpected_event=isinstance(err, UnexpectedWebhookEventType),
                         )
 
@@ -776,26 +778,17 @@ def rate_limit(domain: str='api_by_user') -> Callable[[ViewFuncT], ViewFuncT]:
             if client_is_exempt_from_rate_limiting(request):
                 return func(request, *args, **kwargs)
 
-            try:
-                user = request.user
-            except Exception:  # nocoverage # See comments below
-                # TODO: This logic is not tested, and I'm not sure we are
-                # doing the right thing here.
-                user = None
+            user = request.user
 
-            if not user:  # nocoverage # See comments below
-                logging.error("Requested rate-limiting on %s but user is not authenticated!",
-                              func.__name__)
-                return func(request, *args, **kwargs)
-
-            if isinstance(user, AnonymousUser):  # nocoverage
+            if isinstance(user, AnonymousUser) or (settings.ZILENCER_ENABLED and
+                                                   isinstance(user, RemoteZulipServer)):
                 # We can only rate-limit logged-in users for now.
                 # We also only support rate-limiting authenticated
                 # views right now.
                 # TODO: implement per-IP non-authed rate limiting
                 return func(request, *args, **kwargs)
 
-            # Rate-limiting data is stored in redis
+            assert isinstance(user, UserProfile)
             rate_limit_user(request, user, domain)
 
             return func(request, *args, **kwargs)

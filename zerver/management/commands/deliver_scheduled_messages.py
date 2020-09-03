@@ -53,7 +53,8 @@ Usage: ./manage.py deliver_scheduled_messages
             # Here doing a check and sleeping indefinitely on this setting might
             # not sound right. Actually we do this check to avoid running this
             # process on every server that might be in service to a realm. See
-            # the comment in zproject/settings.py file about renaming this setting.
+            # the comment in zproject/default_settings.py file about renaming this
+            # setting.
             sleep_forever()
 
         while True:
@@ -65,7 +66,7 @@ Usage: ./manage.py deliver_scheduled_messages
                     with transaction.atomic():
                         do_send_messages([self.construct_message(message)])
                         message.delivered = True
-                        message.save(update_fields=['delivered'])
+                Message.objects.bulk_update(messages_to_deliver, ['delivered'])
 
             cur_time = timezone_now()
             time_next_min = (cur_time + timedelta(minutes=1)).replace(second=0, microsecond=0)

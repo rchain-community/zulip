@@ -2,7 +2,7 @@ import os
 from unittest.mock import patch
 
 import botocore.exceptions
-import ujson
+import orjson
 from django.conf import settings
 from django.utils.timezone import now as timezone_now
 
@@ -45,8 +45,10 @@ class RealmExportTest(ZulipTestCase):
         # Test the export logic.
         with patch('zerver.lib.export.do_export_realm',
                    return_value=tarball_path) as mock_export:
-            with self.settings(LOCAL_UPLOADS_DIR=None), stdout_suppressed():
+            with self.settings(LOCAL_UPLOADS_DIR=None), stdout_suppressed(), \
+                    self.assertLogs(level='INFO') as info_logs:
                 result = self.client_post('/json/export/realm')
+            self.assertTrue('INFO:root:Completed data export for zulip in ' in info_logs.output[0])
         self.assert_json_success(result)
         self.assertFalse(os.path.exists(tarball_path))
         args = mock_export.call_args_list[0][1]
@@ -61,7 +63,7 @@ class RealmExportTest(ZulipTestCase):
         self.assertEqual(audit_log_entry.acting_user_id, admin.id)
 
         # Test that the file is hosted, and the contents are as expected.
-        path_id = ujson.loads(audit_log_entry.extra_data).get('export_path')
+        path_id = orjson.loads(audit_log_entry.extra_data).get('export_path')
         self.assertIsNotNone(path_id)
         self.assertEqual(bucket.Object(path_id).get()['Body'].read(), b'zulip!')
 
@@ -87,7 +89,7 @@ class RealmExportTest(ZulipTestCase):
 
         # Try to delete an export with a `deleted_timestamp` key.
         audit_log_entry.refresh_from_db()
-        export_data = ujson.loads(audit_log_entry.extra_data)
+        export_data = orjson.loads(audit_log_entry.extra_data)
         self.assertIn('deleted_timestamp', export_data)
         result = self.client_delete(f'/json/export/realm/{audit_log_entry.id}')
         self.assert_json_error(result, "Export already deleted")
@@ -104,8 +106,9 @@ class RealmExportTest(ZulipTestCase):
         # Test the export logic.
         with patch('zerver.lib.export.do_export_realm',
                    return_value=tarball_path) as mock_export:
-            with stdout_suppressed():
+            with stdout_suppressed(), self.assertLogs(level='INFO') as info_logs:
                 result = self.client_post('/json/export/realm')
+            self.assertTrue('INFO:root:Completed data export for zulip in ' in info_logs.output[0])
         self.assert_json_success(result)
         self.assertFalse(os.path.exists(tarball_path))
         args = mock_export.call_args_list[0][1]
@@ -120,7 +123,7 @@ class RealmExportTest(ZulipTestCase):
         self.assertEqual(audit_log_entry.acting_user_id, admin.id)
 
         # Test that the file is hosted, and the contents are as expected.
-        path_id = ujson.loads(audit_log_entry.extra_data).get('export_path')
+        path_id = orjson.loads(audit_log_entry.extra_data).get('export_path')
         response = self.client_get(path_id)
         self.assertEqual(response.status_code, 200)
         self.assert_url_serves_contents_of_file(path_id, b'zulip!')
@@ -146,7 +149,7 @@ class RealmExportTest(ZulipTestCase):
 
         # Try to delete an export with a `deleted_timestamp` key.
         audit_log_entry.refresh_from_db()
-        export_data = ujson.loads(audit_log_entry.extra_data)
+        export_data = orjson.loads(audit_log_entry.extra_data)
         self.assertIn('deleted_timestamp', export_data)
         result = self.client_delete(f'/json/export/realm/{audit_log_entry.id}')
         self.assert_json_error(result, "Export already deleted")

@@ -1,4 +1,3 @@
-import time
 from typing import Any, Dict, List, Union
 from unittest import mock
 
@@ -47,7 +46,7 @@ class MessageDictTest(ZulipTestCase):
         Different clients have different needs
         when it comes to things like generating avatar
         hashes or including both rendered and unrendered
-        markdown, so that explains the different shapes.
+        Markdown, so that explains the different shapes.
 
         And then the two codepaths have different
         performance needs.  In the events codepath, we
@@ -176,7 +175,6 @@ class MessageDictTest(ZulipTestCase):
         self.assertTrue(num_ids >= 600)
 
         flush_per_request_caches()
-        t = time.time()
         with queries_captured() as queries:
             rows = list(MessageDict.get_raw_db_rows(ids))
 
@@ -186,13 +184,6 @@ class MessageDictTest(ZulipTestCase):
             ]
             MessageDict.post_process_dicts(objs, apply_markdown=False, client_gravatar=False)
 
-        delay = time.time() - t
-        # Make sure we don't take longer than 1.5ms per message to
-        # extract messages.  Note that we increased this from 1ms to
-        # 1.5ms to handle tests running in parallel being a bit
-        # slower.
-        error_msg = f"Number of ids: {num_ids}. Time delay: {delay}"
-        self.assertTrue(delay < 0.0015 * num_ids, error_msg)
         self.assert_length(queries, 7)
         self.assertEqual(len(rows), num_ids)
 
@@ -347,7 +338,6 @@ class MessageHydrationTest(ZulipTestCase):
             sender_is_mirror_dummy=False,
             sender_email=cordelia.email,
             sender_full_name=cordelia.full_name,
-            sender_short_name=cordelia.short_name,
             sender_id=cordelia.id,
         )
 
@@ -362,7 +352,6 @@ class MessageHydrationTest(ZulipTestCase):
             dict(
                 email='aaron@example.com',
                 full_name='Aaron Smith',
-                short_name='Aaron',
                 id=999,
                 is_mirror_dummy=False,
             ),
@@ -374,7 +363,6 @@ class MessageHydrationTest(ZulipTestCase):
             sender_is_mirror_dummy=False,
             sender_email=cordelia.email,
             sender_full_name=cordelia.full_name,
-            sender_short_name=cordelia.short_name,
             sender_id=cordelia.id,
         )
 
@@ -386,7 +374,6 @@ class MessageHydrationTest(ZulipTestCase):
                 dict(
                     email='aaron@example.com',
                     full_name='Aaron Smith',
-                    short_name='Aaron',
                     id=999,
                     is_mirror_dummy=False,
                 ),
@@ -394,7 +381,6 @@ class MessageHydrationTest(ZulipTestCase):
                     email=cordelia.email,
                     full_name=cordelia.full_name,
                     id=cordelia.id,
-                    short_name=cordelia.short_name,
                     is_mirror_dummy=False,
                 ),
             ],
@@ -482,7 +468,7 @@ class MessageHydrationTest(ZulipTestCase):
 
         # Find which display_recipient in the list is cordelia:
         for display_recipient in message['display_recipient']:
-            if display_recipient['short_name'] == 'cordelia':
+            if display_recipient['id'] == cordelia.id:
                 cordelia_display_recipient = display_recipient
 
         # Make sure the email is up-to-date.
@@ -499,7 +485,6 @@ class TestMessageForIdsDisplayRecipientFetching(ZulipTestCase):
                 recipient_dict: UserDisplayRecipient = {
                     'email': user_profile.email,
                     'full_name': user_profile.full_name,
-                    'short_name': user_profile.short_name,
                     'id': user_profile.id,
                     'is_mirror_dummy': user_profile.is_mirror_dummy,
                 }

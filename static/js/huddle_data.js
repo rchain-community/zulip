@@ -1,3 +1,9 @@
+"use strict";
+
+const _ = require("lodash");
+
+const people = require("./people");
+
 const huddle_timestamps = new Map();
 
 exports.process_loaded_messages = function (messages) {

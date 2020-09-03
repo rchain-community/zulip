@@ -95,7 +95,7 @@
 * [View organization statistics](/help/analytics)
 * [Linking to Zulip](/help/linking-to-zulip)
 * [Connect through a proxy](/help/connect-through-a-proxy)
-* [Add a custom certificate](/help/custom-certificates)
+* [Use a custom certificate](/help/custom-certificates)
 
 ## Apps
 * [Desktop installation guides](/help/desktop-app-install-guide)
@@ -113,8 +113,9 @@
 * [Roles and permissions](/help/roles-and-permissions)
 * [Set the default language for new users](/help/change-the-default-language-for-your-organization)
 * [Export your organization](/help/export-your-organization)
+* [Change organization URL](/help/change-organization-url)
 * [Deactivate your organization](/help/deactivate-your-organization)
-* [GDPR Compliance](/help/gdpr-compliance)
+* [GDPR compliance](/help/gdpr-compliance)
 
 ## Organization settings
 * [Restrict stream creation](/help/configure-who-can-create-streams)

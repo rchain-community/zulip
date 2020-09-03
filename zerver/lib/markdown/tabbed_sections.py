@@ -25,7 +25,7 @@ NAV_BAR_TEMPLATE = """
 """.strip()
 
 NAV_LIST_ITEM_TEMPLATE = """
-<li data-language="{data_language}">{name}</li>
+<li data-language="{data_language}" tabindex="0">{name}</li>
 """.strip()
 
 DIV_TAB_CONTENT_TEMPLATE = """
@@ -65,7 +65,7 @@ TAB_DISPLAY_NAMES = {
     'allow-anyone-to-join': 'Allow anyone to join',
     'restrict-by-email-domain': 'Restrict by email domain',
 
-    'zoom': 'Zoom (experimental)',
+    'zoom': 'Zoom',
     'jitsi-meet': 'Jitsi Meet',
     'bigbluebutton': 'Big Blue Button',
     'disable': 'Disabled',
@@ -103,7 +103,7 @@ class TabbedSectionsPreprocessor(Preprocessor):
 
             start = tab_section['start_tabs_index']
             end = tab_section['end_tabs_index'] + 1
-            lines = lines[:start] + [rendered_tabs] + lines[end:]
+            lines = [*lines[:start], rendered_tabs, *lines[end:]]
             tab_section = self.parse_tabs(lines)
         return lines
 

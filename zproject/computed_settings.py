@@ -31,7 +31,6 @@ from .configured_settings import (
     EMAIL_BACKEND,
     EMAIL_HOST,
     ERROR_REPORTING,
-    EVENT_LOGS_ENABLED,
     EXTERNAL_HOST,
     EXTERNAL_HOST_WITHOUT_PORT,
     EXTERNAL_URI_SCHEME,
@@ -47,6 +46,8 @@ from .configured_settings import (
     REMOTE_POSTGRES_PORT,
     REMOTE_POSTGRES_SSLMODE,
     SENDFILE_BACKEND,
+    SENTRY_DSN,
+    SOCIAL_AUTH_APPLE_APP_ID,
     SOCIAL_AUTH_APPLE_SERVICES_ID,
     SOCIAL_AUTH_GITHUB_KEY,
     SOCIAL_AUTH_GITHUB_ORG_NAME,
@@ -103,6 +104,8 @@ CASPER_TESTS = False
 RUNNING_OPENAPI_CURL_TEST = False
 # This is overridden in test_settings.py for the test suites
 GENERATE_STRIPE_FIXTURES = False
+# This is overridden in test_settings.py for the test suites
+BAN_CONSOLE_OUTPUT = False
 
 # Google Compute Engine has an /etc/boto.cfg that is "nicely
 # configured" to work with GCE's storage service.  However, their
@@ -326,24 +329,17 @@ RABBITMQ_PASSWORD = get_secret("rabbitmq_password")
 
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 
-# Compress large values being stored in memcached; this is important
-# for at least the realm_users cache.
-PYLIBMC_MIN_COMPRESS_LEN = 100 * 1024
-PYLIBMC_COMPRESS_LEVEL = 1
-
 MEMCACHED_PASSWORD = get_secret("memcached_password")
 
 CACHES = {
     'default': {
-        'BACKEND': 'django_pylibmc.memcached.PyLibMCCache',
+        'BACKEND': 'django_bmemcached.memcached.BMemcached',
         'LOCATION': MEMCACHED_LOCATION,
-        'TIMEOUT': 3600,
-        'BINARY': True,
-        'USERNAME': MEMCACHED_USERNAME,
-        'PASSWORD': MEMCACHED_PASSWORD,
         'OPTIONS': {
-            'tcp_nodelay': True,
-            'retry_timeout': 1,
+            'socket_timeout': 3600,
+            'username': MEMCACHED_USERNAME,
+            'password': MEMCACHED_PASSWORD,
+            'pickle_protocol': 4,
         },
     },
     'database': {
@@ -688,15 +684,6 @@ SCHEDULED_MESSAGE_DELIVERER_LOG_PATH = zulip_path("/var/log/zulip/scheduled_mess
 RETENTION_LOG_PATH = zulip_path("/var/log/zulip/message_retention.log")
 AUTH_LOG_PATH = zulip_path("/var/log/zulip/auth.log")
 
-# The EVENT_LOGS feature is an ultra-legacy piece of code, which
-# originally logged all significant database changes for debugging.
-# We plan to replace it with RealmAuditLog, stored in the database,
-# everywhere that code mentioning it appears.
-if EVENT_LOGS_ENABLED:
-    EVENT_LOG_DIR: Optional[str] = zulip_path("/home/zulip/logs/event_log")
-else:
-    EVENT_LOG_DIR = None
-
 ZULIP_WORKER_TEST_FILE = '/tmp/zulip-worker-test-file'
 
 
@@ -708,10 +695,10 @@ else:
 # This is disabled in a few tests.
 LOGGING_ENABLED = True
 
-DEFAULT_ZULIP_HANDLERS = (
-    (['zulip_admins'] if ERROR_REPORTING else []) +
-    ['console', 'file', 'errors_file']
-)
+DEFAULT_ZULIP_HANDLERS = [
+    *(['zulip_admins'] if ERROR_REPORTING else []),
+    'console', 'file', 'errors_file',
+]
 
 LOGGING: Dict[str, Any] = {
     'version': 1,
@@ -905,7 +892,7 @@ LOGGING: Dict[str, Any] = {
         },
         'zulip.auth': {
             'level': 'DEBUG',
-            'handlers': DEFAULT_ZULIP_HANDLERS + ['auth_file'],
+            'handlers': [*DEFAULT_ZULIP_HANDLERS, 'auth_file'],
             'propagate': False,
         },
         'zulip.ldap': {
@@ -927,9 +914,16 @@ LOGGING: Dict[str, Any] = {
         'zulip.slow_queries': {
             'level': 'INFO',
             'handlers': ['slow_queries_file'],
+            'propagate': False,
         },
         'zulip.soft_deactivation': {
             'handlers': ['file', 'errors_file'],
+            'propagate': False,
+        },
+        # This logger is used only for automated tests validating the
+        # error-handling behavior of the zulip_admins handler.
+        'zulip.test_zulip_admins_handler': {
+            'handlers': ['zulip_admins'],
             'propagate': False,
         },
         'zulip.zerver.lib.webhooks.common': {
@@ -1030,8 +1024,10 @@ SOCIAL_AUTH_LOGIN_ERROR_URL = '/login/'
 # SERVICES_ID to make things more readable in the configuration
 # and our own custom backend code.
 SOCIAL_AUTH_APPLE_CLIENT = SOCIAL_AUTH_APPLE_SERVICES_ID
+SOCIAL_AUTH_APPLE_AUDIENCE = [id for id in [SOCIAL_AUTH_APPLE_CLIENT, SOCIAL_AUTH_APPLE_APP_ID] if id is not None]
+
 if PRODUCTION:
-    SOCIAL_AUTH_APPLE_SECRET = get_from_file_if_exists("/etc/zulip/apple/zulip-private-key.key")
+    SOCIAL_AUTH_APPLE_SECRET = get_from_file_if_exists("/etc/zulip/apple-auth-key.p8")
 else:
     SOCIAL_AUTH_APPLE_SECRET = get_from_file_if_exists("zproject/dev_apple.key")
 
@@ -1132,3 +1128,9 @@ CROSS_REALM_BOT_EMAILS = {
 THUMBOR_KEY = get_secret('thumbor_key')
 
 TWO_FACTOR_PATCH_ADMIN = False
+
+# Allow the environment to override the default DSN
+SENTRY_DSN = os.environ.get("SENTRY_DSN", SENTRY_DSN)
+if SENTRY_DSN:
+    from .sentry import setup_sentry
+    setup_sentry(SENTRY_DSN)

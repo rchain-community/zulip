@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Optional, Union
 
-import ujson
+import orjson
 from django.conf import settings
 from django.core.management.base import CommandParser
 from django.test import Client
@@ -32,19 +32,16 @@ approach shown above.
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument('-f', '--fixture',
-                            dest='fixture',
                             type=str,
                             help='The path to the fixture you\'d like to send '
                                  'into Zulip')
 
         parser.add_argument('-u', '--url',
-                            dest='url',
                             type=str,
                             help='The url on your Zulip server that you want '
                                  'to post the fixture to')
 
         parser.add_argument('-H', '--custom-headers',
-                            dest='custom-headers',
                             type=str,
                             help='The headers you want to provide along with '
                                  'your mock request to Zulip.')
@@ -55,8 +52,8 @@ approach shown above.
         if not custom_headers:
             return {}
         try:
-            custom_headers_dict = ujson.loads(custom_headers)
-        except ValueError as ve:
+            custom_headers_dict = orjson.loads(custom_headers)
+        except orjson.JSONDecodeError as ve:
             raise CommandError('Encountered an error while attempting to parse custom headers: {}\n'
                                'Note: all strings must be enclosed within "" instead of \'\''.format(ve))
         return standardize_headers(custom_headers_dict)
@@ -71,7 +68,7 @@ approach shown above.
         if not self._does_fixture_path_exist(full_fixture_path):
             raise CommandError('Fixture {} does not exist'.format(options['fixture']))
 
-        headers = self.parse_headers(options['custom-headers'])
+        headers = self.parse_headers(options['custom_headers'])
         json = self._get_fixture_as_json(full_fixture_path)
         realm = self.get_realm(options)
         if realm is None:
@@ -90,6 +87,6 @@ approach shown above.
     def _does_fixture_path_exist(self, fixture_path: str) -> bool:
         return os.path.exists(fixture_path)
 
-    def _get_fixture_as_json(self, fixture_path: str) -> str:
-        with open(fixture_path) as f:
-            return ujson.dumps(ujson.load(f))
+    def _get_fixture_as_json(self, fixture_path: str) -> bytes:
+        with open(fixture_path, "rb") as f:
+            return orjson.dumps(orjson.loads(f.read()))

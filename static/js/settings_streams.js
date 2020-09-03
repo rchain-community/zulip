@@ -1,3 +1,5 @@
+"use strict";
+
 const render_admin_default_streams_list = require("../templates/admin_default_streams_list.hbs");
 
 const meta = {
@@ -14,7 +16,8 @@ exports.maybe_disable_widgets = function () {
     }
 
     $(".organization-box [data-name='default-streams-list']")
-        .find("input:not(.search), button, select").attr("disabled", true);
+        .find("input:not(.search), button, select")
+        .prop("disabled", true);
 };
 
 exports.build_default_stream_table = function () {
@@ -25,7 +28,7 @@ exports.build_default_stream_table = function () {
 
     list_render.create(table, subs, {
         name: "default_streams_list",
-        modifier: function (item) {
+        modifier(item) {
             return render_admin_default_streams_list({
                 stream: item,
                 can_modify: page_params.is_admin,
@@ -33,23 +36,23 @@ exports.build_default_stream_table = function () {
         },
         filter: {
             element: table.closest(".settings-section").find(".search"),
-            predicate: function (item, query) {
+            predicate(item, query) {
                 return item.name.toLowerCase().includes(query.toLowerCase());
             },
-            onupdate: function () {
+            onupdate() {
                 ui.reset_scrollbar(table);
             },
         },
         parent_container: $("#admin-default-streams-list").expectOne(),
-        init_sort: ['alphabetic', 'name'],
+        init_sort: ["alphabetic", "name"],
+        simplebar_container: $("#admin-default-streams-list .progressive-table-wrapper"),
     });
 
-    loading.destroy_indicator($('#admin_page_default_streams_loading_indicator'));
+    loading.destroy_indicator($("#admin_page_default_streams_loading_indicator"));
 };
 
 exports.update_default_streams_table = function () {
-    if (/#*organization/.test(window.location.hash) ||
-        /#*settings/.test(window.location.hash)) {
+    if (/#*organization/.test(window.location.hash) || /#*settings/.test(window.location.hash)) {
         $("#admin_default_streams_table").expectOne().find("tr.default_stream_row").remove();
         exports.build_default_stream_table();
     }
@@ -57,15 +60,15 @@ exports.update_default_streams_table = function () {
 
 function make_stream_default(stream_id) {
     const data = {
-        stream_id: stream_id,
+        stream_id,
     };
     const default_stream_status = $("#admin-default-stream-status");
     default_stream_status.hide();
 
     channel.post({
-        url: '/json/default_streams',
-        data: data,
-        error: function (xhr) {
+        url: "/json/default_streams",
+        data,
+        error(xhr) {
             if (xhr.status.toString().charAt(0) === "4") {
                 ui_report.error(i18n.t("Failed"), xhr, default_stream_status);
             } else {
@@ -78,11 +81,11 @@ function make_stream_default(stream_id) {
 
 exports.delete_default_stream = function (stream_id, default_stream_row, alert_element) {
     channel.del({
-        url: "/json/default_streams" + "?" + $.param({ stream_id: stream_id }),
-        error: function (xhr) {
+        url: "/json/default_streams" + "?" + $.param({stream_id}),
+        error(xhr) {
             ui_report.generic_row_button_error(xhr, alert_element);
         },
-        success: function () {
+        success() {
             default_stream_row.remove();
         },
     });
@@ -98,7 +101,7 @@ exports.build_page = function () {
 
     exports.update_default_streams_table();
 
-    $('.create_default_stream').keypress((e) => {
+    $(".create_default_stream").on("keypress", (e) => {
         if (e.which === 13) {
             e.preventDefault();
             e.stopPropagation();
@@ -108,14 +111,14 @@ exports.build_page = function () {
         }
     });
 
-    $('.create_default_stream').typeahead({
+    $(".create_default_stream").typeahead({
         items: 5,
         fixed: true,
-        source: function () {
+        source() {
             return stream_data.get_non_default_stream_names();
         },
-        highlighter: function (item) {
-            return typeahead_helper.render_typeahead_item({ primary: item });
+        highlighter(item) {
+            return typeahead_helper.render_typeahead_item({primary: item});
         },
     });
 

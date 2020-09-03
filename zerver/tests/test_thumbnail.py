@@ -2,7 +2,7 @@ import base64
 import urllib
 from io import StringIO
 
-import ujson
+import orjson
 from django.conf import settings
 
 from zerver.lib.test_classes import ZulipTestCase
@@ -40,7 +40,7 @@ class ThumbnailTest(ZulipTestCase):
 
         result = self.client_post("/json/user_uploads", {'file': fp})
         self.assert_json_success(result)
-        json = ujson.loads(result.content)
+        json = orjson.loads(result.content)
         self.assertIn("uri", json)
         uri = json["uri"]
         base = '/user_uploads/'
@@ -165,7 +165,7 @@ class ThumbnailTest(ZulipTestCase):
 
         result = self.client_post("/json/user_uploads", {'file': fp})
         self.assert_json_success(result)
-        json = ujson.loads(result.content)
+        json = orjson.loads(result.content)
         self.assertIn("uri", json)
         uri = json["uri"]
         base = '/user_uploads/'
@@ -173,7 +173,7 @@ class ThumbnailTest(ZulipTestCase):
 
         # Test full size image.
         # We remove the forward slash infront of the `/user_uploads/` to match
-        # markdown behaviour.
+        # Markdown behaviour.
         quoted_uri = urllib.parse.quote(uri[1:], safe='')
         result = self.client_get(f"/thumbnail?url={quoted_uri}&size=full")
         self.assertEqual(result.status_code, 302, result)
@@ -192,12 +192,12 @@ class ThumbnailTest(ZulipTestCase):
 
         result = self.client_post("/json/user_uploads", {'file': fp})
         self.assert_json_success(result)
-        json = ujson.loads(result.content)
+        json = orjson.loads(result.content)
         self.assertIn("uri", json)
         uri = json["uri"]
 
         # We remove the forward slash infront of the `/user_uploads/` to match
-        # markdown behaviour.
+        # Markdown behaviour.
         quoted_uri = urllib.parse.quote(uri[1:], safe='')
         result = self.client_get(f"/thumbnail?url={quoted_uri}&size=full")
         self.assertEqual(result.status_code, 302, result)
@@ -262,7 +262,7 @@ class ThumbnailTest(ZulipTestCase):
 
         result = self.client_post("/json/user_uploads", {'file': fp})
         self.assert_json_success(result)
-        json = ujson.loads(result.content)
+        json = orjson.loads(result.content)
         self.assertIn("uri", json)
         uri = json["uri"]
         base = '/user_uploads/'
@@ -306,7 +306,7 @@ class ThumbnailTest(ZulipTestCase):
 
         result = self.client_post("/json/user_uploads", {'file': fp})
         self.assert_json_success(result)
-        json = ujson.loads(result.content)
+        json = orjson.loads(result.content)
         self.assertIn("uri", json)
         uri = json["uri"]
         base = '/user_uploads/'
@@ -338,7 +338,7 @@ class ThumbnailTest(ZulipTestCase):
 
         result = self.client_post("/json/user_uploads", {'file': fp})
         self.assert_json_success(result)
-        json = ujson.loads(result.content)
+        json = orjson.loads(result.content)
         self.assertIn("uri", json)
         uri = json["uri"]
         base = '/user_uploads/'

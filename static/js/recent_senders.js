@@ -1,4 +1,6 @@
-const FoldDict = require('./fold_dict').FoldDict;
+"use strict";
+
+const FoldDict = require("./fold_dict").FoldDict;
 
 // topic_senders[stream_id][topic_id][sender_id] = latest_message_id
 const topic_senders = new Map();
@@ -71,6 +73,33 @@ exports.process_topic_edit = function (old_stream_id, old_topic, new_topic, new_
     // the messages were moved to another stream or deleted.
 };
 
+exports.update_topics_of_deleted_message_ids = function (message_ids) {
+    const topics_to_update = new Map();
+    for (const msg_id of message_ids) {
+        // message_store still has data on deleted messages when this runs.
+        const message = message_store.get(msg_id);
+        if (message === undefined) {
+            // We may not have the deleted message cached locally in
+            // message_store; if so, we can just skip processing it.
+            continue;
+        }
+        if (message.type === "stream") {
+            // Create unique keys for stream_id and topic.
+            const topic_key = message.stream_id + ":" + message.topic;
+            topics_to_update.set(topic_key, [message.stream_id, message.topic]);
+        }
+    }
+
+    for (const [stream_id, topic] of topics_to_update.values()) {
+        const topic_dict = topic_senders.get(stream_id);
+        topic_dict.delete(topic);
+        const topic_msgs = message_util.get_messages_in_topic(stream_id, topic);
+        for (const msg of topic_msgs) {
+            exports.process_message_for_senders(msg);
+        }
+    }
+};
+
 exports.compare_by_recency = function (user_a, user_b, stream_id, topic) {
     let a_message_id;
     let b_message_id;
@@ -113,9 +142,7 @@ exports.get_topic_recent_senders = function (stream_id, topic) {
         return [];
     }
 
-    const sorted_senders = Array.from(sender_message_ids.entries()).sort(
-        (s1, s2) => s1[1] - s2[1],
-    );
+    const sorted_senders = Array.from(sender_message_ids.entries()).sort((s1, s2) => s1[1] - s2[1]);
     const recent_senders = [];
     for (const item of sorted_senders) {
         recent_senders.push(item[0]);

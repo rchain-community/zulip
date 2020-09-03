@@ -8,11 +8,62 @@ server versions is to check the `zulip_feature_level` parameter in the
 `/register` and `/server_settings` responses to determine which of the
 below features are supported.
 
+## Changes in Zulip 4.0
+
+**Feature level 32**
+
+* [`GET /events`](/api/get-events): Added `op` field to
+  `update_message_flags` events, deprecating the `operation` field
+  (which has the same value).  This removes an unintentional anomaly
+  in the format of this event type.
+
+**Feature level 31**
+
+* [`GET users/me/subscriptions`](/api/get-subscriptions): Added a
+  `role` field to Subscription objects representing whether the user
+  is a stream administrator.
+
+* [`GET /events`](/api/get-events): Added `role` field to
+  Subscription objects sent in `subscriptions` events.
+
+Note that as of this feature level, stream administrators are a
+partially completed feature.  In particular, it is impossible for a
+user to be a stream administrator at this feature level.
+
+**Feature Level 30**
+
+* [`GET users/me/subscriptions`](/api/get-subscriptions), [`GET
+  /streams`](/api/get-streams): Added `date_created` to Stream
+  objects.
+* [`POST /users`](/api/create-user), `POST /bots`: The ID of the newly
+  created user is now returned in the response.
+
+Feature levels 28 and 29 are reserved for future use in 3.x bug fix
+releases.
+
+## Changes in Zulip 3.1
+
+**Feature level 27**
+
+* The `short_name` field is removed from `display_recipients`
+  in `POST /users`.
+
+**Feature level 26**
+
+* The `sender_short_name` field is no longer included in
+  `GET /messages`.
+* The `short_name` field is removed from `display_recipients`
+  in `GET /messages`.
+
 ## Changes in Zulip 3.0
+
+**Feature level 25**
+
+No changes; feature level used for Zulip 3.0 release.
 
 **Feature level 24**
 
-* The `!avatar()` and `!gravatar()` markdown syntax, which was never
+* The `!avatar()` and `!gravatar()` Markdown syntax, which was never
   documented, had inconsistent syntax, and was rarely used, was
   removed.
 
@@ -77,7 +128,7 @@ below features are supported.
 **Feature level 15**
 
 * Added [spoilers](/help/format-your-message-using-markdown#spoilers)
-  to supported markdown features.
+  to supported Markdown features.
 
 **Feature level 14**
 
@@ -117,7 +168,7 @@ below features are supported.
 * [`GET users/me`](/api/get-own-user): Added `avatar_version`, `is_guest`,
   `is_active`, `timezone`, and `date_joined` fields to the User objects.
 * [`GET users/me`](/api/get-own-user): Removed `client_id` and `short_name`
-  from the reponse to this endpoint.  These fields had no purpose and
+  from the response to this endpoint.  These fields had no purpose and
   were inconsistent with other API responses describing users.
 
 **Feature level 9**
@@ -137,7 +188,7 @@ below features are supported.
   and [`GET /users/me`](/api/get-own-user): User objects now contain the
   `is_owner` field as well.
 * Added [time mentions](/help/format-your-message-using-markdown#mention-a-time)
-  to supported markdown features.
+  to supported Markdown features.
 
 **Feature level 7**
 

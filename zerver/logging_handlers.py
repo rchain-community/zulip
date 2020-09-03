@@ -41,16 +41,23 @@ def add_request_metadata(report: Dict[str, Any], request: HttpRequest) -> None:
         if isinstance(user_profile, AnonymousUser):
             user_full_name = None
             user_email = None
+            user_role = None
         else:
             user_full_name = user_profile.full_name
             user_email = user_profile.email
+            user_role = user_profile.get_role_name()
     except Exception:
         # Unexpected exceptions here should be handled gracefully
         traceback.print_exc()
         user_full_name = None
         user_email = None
-    report['user_email'] = user_email
-    report['user_full_name'] = user_full_name
+        user_role = None
+
+    report['user'] = {
+        'user_email': user_email,
+        'user_full_name': user_full_name,
+        'user_role': user_role,
+    }
 
     exception_filter = get_exception_reporter_filter(request)
     try:
@@ -87,7 +94,7 @@ class AdminNotifyHandler(logging.Handler):
 
         # This parameter determines whether Zulip should attempt to
         # send Zulip messages containing the error report.  If there's
-        # syntax that makes the markdown processor throw an exception,
+        # syntax that makes the Markdown processor throw an exception,
         # we really don't want to send that syntax into a new Zulip
         # message in exception handler (that's the stuff of which
         # recursive exception loops are made).

@@ -1,15 +1,19 @@
 # JavaScript/TypeScript unit tests
 
 Our node-based unit tests system is the preferred way to test
-JavaScript/TypeScript code in Zulip.  We prefer it over the [Casper
-black-box whole-app testing](../testing/testing-with-casper.md),
+JavaScript/TypeScript code in Zulip.  We prefer it over the [Puppeteer
+black-box whole-app testing](../testing/testing-with-puppeteer.md),
 system since it is much (>100x) faster and also easier to do correctly
-than the Casper system.
+than the Puppeteer system.
 
-You can run tests as follow:
+You can run this test suite as follows:
 ```
     tools/test-js-with-node
 ```
+
+See `test-js-with-node --help` for useful options; even though the
+whole suite is quite fast, it still saves time to run a single test by
+name when debugging something.
 
 The JS unit tests are written to work with node.  You can find them
 in `frontend_tests/node_tests`.  Here is an example test from
@@ -44,8 +48,8 @@ A good first test to read is
 
 ## How the node tests work
 
-Unlike the [casper unit tests](../testing/testing-with-casper.md),
-which use the `phantomjs` browser connected to a running Zulip
+Unlike the [Puppeteer unit tests](../testing/testing-with-puppeteer.md),
+which use a headless Chromium browser connected to a running Zulip
 development server, our node unit tests don't have a browser, don't
 talk to a server, and generally don't use a complete virtual DOM (a
 handful of tests use the `jsdom` library for this purpose) because
@@ -64,9 +68,9 @@ working on or debugging the Zulip node tests.
 
 Conceptually, the `zjquery` library provides minimal versions of most
 `jQuery` DOM manipulation functions, and has a convenient system for
-letting you setup return values for more complex functions.  For
+letting you set up return values for more complex functions.  For
 example, if the code you'd like to test calls `$obj.find()`, you can
-use `$obj.set_find_results(selector, $value)` to setup `zjquery` so
+use `$obj.set_find_results(selector, $value)` to set up `zjquery` so
 that calls to `$obj.find(selector)` will return `$value`. See the unit
 test file for details.
 
@@ -163,7 +167,7 @@ branch coverage is a good goal.
 The overall project goal is to get to 100% node test coverage on all
 data/logic modules (UI modules are lower priority for unit testing).
 
-# Editor debugger integration
+## Editor debugger integration
 
 Our node test system is pretty simple, and it's possible to configure
 the native debugger features of popular editors to allow stepping
@@ -175,7 +179,7 @@ notes for other editors are welcome!
 
 These instructions assume you're using the Vagrant development environment.
 
-1. Setup [Vagrant in WebStorm][vagrant-webstorm].
+1. Set up [Vagrant in WebStorm][vagrant-webstorm].
 
 2. In WebStorm, navigate to `Preferences -> Tools -> Vagrant` and
    configure the following:
@@ -206,7 +210,7 @@ These instructions assume you're using the Vagrant development environment.
     1. Under `JavaScript file`, enter `frontend_tests/zjsunit/index.js`
      -- this is the root script for Zulip's node unit tests.
 
-Congratulations!  You've now setup the integration.
+Congratulations!  You've now set up the integration.
 
 ## Running tests with the debugger
 

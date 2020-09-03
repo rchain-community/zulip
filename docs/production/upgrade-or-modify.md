@@ -36,7 +36,7 @@ to a new Zulip release:
     repository](https://github.com/zulip/zulip) using
     `tools/build-release-tarball`.
 
-1. Login to your Zulip and run as root:
+1. Log in to your Zulip and run as root:
 
     ```
     /home/zulip/deployments/current/scripts/upgrade-zulip zulip-server-VERSION.tar.gz
@@ -63,7 +63,7 @@ doing the final upgrade at off hours, or buying a support contract.
 See the [troubleshooting guide](#troubleshooting-and-rollback) if you
 run into any issues or need to roll back the upgrade.
 
-## Upgrading from a git repository
+## Upgrading from a Git repository
 
 Zulip supports upgrading a production installation to any commit in a
 Git repository, which is great for [running pre-release changes from
@@ -111,7 +111,7 @@ The upgrade scripts are idempotent, so there's no harm in trying again
 after resolving an issue.  The most common causes of errors are:
 
 * Networking issues (e.g. your Zulip server doesn't have reliable
-  Internet access or needs a proxy setup).  Fix the networking issue
+  Internet access or needs a proxy set up).  Fix the networking issue
   and try again.
 * Especially when using `upgrade-zulip-from-git`, systems with the
   minimal RAM for running Zulip can run into out-of-memory issues
@@ -132,7 +132,7 @@ help](https://chat.zulip.org/#narrow/stream/31-production-help) in the
 [Zulip development community
 server](../contributing/chat-zulip-org.md) for best-effort help.
 Please include the relevant error output from the above logs in a
-[markdown code
+[Markdown code
 block](https://zulip.com/help/format-your-message-using-markdown#code)
 in any reports.
 
@@ -249,9 +249,9 @@ instructions for other supported platforms.
         /home/zulip/deployments/current/ --ignore-static-assets --audit-fts-indexes
     ```
 
-That last command will finish by restarting your Zulip server; you
-should now be able to navigate to its URL and confirm everything is
-working correctly.
+   This will finish by restarting your Zulip server; you should now be
+   able to navigate to its URL and confirm everything is working
+   correctly.
 
 ### Upgrading from Ubuntu 16.04 Xenial to 18.04 Bionic
 
@@ -278,11 +278,28 @@ working correctly.
     systemctl restart memcached
     ```
 
-5. Same as for Bionic to Focal.
+5. Finally, we need to reinstall the current version of Zulip, which
+   among other things will recompile Zulip's Python module
+   dependencies for your new version of Python:
 
-That last command will finish by restarting your Zulip server; you
-should now be able to navigate to its URL and confirm everything is
-working correctly.
+    ```
+    rm -rf /srv/zulip-venv-cache/*
+    /home/zulip/deployments/current/scripts/lib/upgrade-zulip-stage-2 \
+        /home/zulip/deployments/current/ --ignore-static-assets
+    ```
+
+   This will finish by restarting your Zulip server; you should now
+   be able to navigate to its URL and confirm everything is working
+   correctly.
+
+6. [Upgrade to the latest Zulip release](#upgrading-to-a-release), now
+   that your server is running a supported operating system.
+
+7. As root, finish by verifying the contents of the full-text indexes:
+
+    ```
+    /home/zulip/deployments/current/manage.py audit_fts_indexes
+    ```
 
 ### Upgrading from Ubuntu 14.04 Trusty to 16.04 Xenial
 
@@ -295,7 +312,7 @@ working correctly.
 3. Same as for Bionic to Focal.
 
 4. As root, upgrade the database installation and OS configuration to
-match the new OS version:
+   match the new OS version:
 
     ```
     apt remove upstart -y
@@ -309,11 +326,23 @@ match the new OS version:
     service memcached restart
     ```
 
-5. Same as for Bionic to Focal.
+5. Finally, we need to reinstall the current version of Zulip, which
+   among other things will recompile Zulip's Python module
+   dependencies for your new version of Python:
 
-That last command will finish by restarting your Zulip server; you
-should now be able to navigate to its URL and confirm everything is
-working correctly.
+    ```
+    rm -rf /srv/zulip-venv-cache/*
+    /home/zulip/deployments/current/scripts/lib/upgrade-zulip-stage-2 \
+        /home/zulip/deployments/current/ --ignore-static-assets
+    ```
+
+   This will finish by restarting your Zulip server; you should now be
+   able to navigate to its URL and confirm everything is working
+   correctly.
+
+6. [Upgrade from Xenial to
+   Bionic](#upgrading-from-ubuntu-16-04-xenial-to-18-04-bionic), so
+   that you are running a supported operating system.
 
 ### Upgrading from Debian Stretch to Debian Buster
 
@@ -339,20 +368,37 @@ working correctly.
     ```
     apt remove upstart -y
     /home/zulip/deployments/current/scripts/zulip-puppet-apply -f
-    pg_dropcluster 9.5 main --stop
+    pg_dropcluster 11 main --stop
     systemctl stop postgresql
-    pg_upgradecluster -m upgrade 9.3 main
-    pg_dropcluster 9.3 main
-    apt remove postgresql-9.3
+    pg_upgradecluster -m upgrade 9.6 main
+    pg_dropcluster 9.6 main
+    apt remove postgresql-9.6
     systemctl start postgresql
     service memcached restart
     ```
 
-5. Same as for Bionic to Focal.
+5. Finally, we need to reinstall the current version of Zulip, which
+   among other things will recompile Zulip's Python module
+   dependencies for your new version of Python:
 
-That last command will finish by restarting your Zulip server; you
-should now be able to navigate to its URL and confirm everything is
-working correctly.
+    ```
+    rm -rf /srv/zulip-venv-cache/*
+    /home/zulip/deployments/current/scripts/lib/upgrade-zulip-stage-2 \
+        /home/zulip/deployments/current/ --ignore-static-assets
+    ```
+
+   This will finish by restarting your Zulip server; you should now
+   be able to navigate to its URL and confirm everything is working
+   correctly.
+
+6. [Upgrade to the latest Zulip release](#upgrading-to-a-release), now
+   that your server is running a supported operating system.
+
+7. As root, finish by verifying the contents of the full-text indexes:
+
+    ```
+    /home/zulip/deployments/current/manage.py audit_fts_indexes
+    ```
 
 ## Upgrading PostgreSQL
 
@@ -458,7 +504,7 @@ git diff 2.0.4 acme-branch
 git push origin +acme-branch
 ```
 
-* Login to your Zulip server and configure and use
+* Log in to your Zulip server and configure and use
 [upgrade-zulip-from-git][] to install the changes; remember to
 configure `git_repo_url` to point to your fork on GitHub and run it as
 `upgrade-zulip-from-git acme-branch`.
@@ -489,7 +535,7 @@ cd zulip
 git fetch --tags upstream
 git checkout acme-branch
 git rebase --onto 2.1.0 2.0.4
-# Fix any errors or merge conflicts; see Zulip's Git Guide for advice
+# Fix any errors or merge conflicts; see Zulip's Git guide for advice
 
 # Use `git diff` to verify your changes are what you expect
 git diff 2.1.0 acme-branch

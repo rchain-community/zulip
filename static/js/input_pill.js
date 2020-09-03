@@ -1,4 +1,6 @@
-const render_input_pill = require('../templates/input_pill.hbs');
+"use strict";
+
+const render_input_pill = require("../templates/input_pill.hbs");
 
 // See https://zulip.readthedocs.io/en/latest/subsystems/input-pills.html
 exports.random_id = function () {
@@ -17,17 +19,17 @@ exports.create = function (opts) {
     };
 
     if (!opts.container) {
-        blueslip.error('Pill needs container.');
+        blueslip.error("Pill needs container.");
         return;
     }
 
     if (!opts.create_item_from_text) {
-        blueslip.error('Pill needs create_item_from_text');
+        blueslip.error("Pill needs create_item_from_text");
         return;
     }
 
     if (!opts.get_text_from_item) {
-        blueslip.error('Pill needs get_text_from_item');
+        blueslip.error("Pill needs get_text_from_item");
         return;
     }
 
@@ -46,28 +48,28 @@ exports.create = function (opts) {
     // of the `this` arg in the `Function.prototype.bind` use in the prototype.
     const funcs = {
         // return the value of the contenteditable input form.
-        value: function (input_elem) {
+        value(input_elem) {
             return input_elem.innerText;
         },
 
         // clear the value of the input form.
-        clear: function (input_elem) {
+        clear(input_elem) {
             input_elem.innerText = "";
         },
 
-        clear_text: function () {
+        clear_text() {
             store.$input.text("");
         },
 
-        is_pending: function () {
+        is_pending() {
             // This function returns true if we have text
             // in out widget that hasn't been turned into
             // pills.  We use it to decide things like
             // whether we're ready to send typing indicators.
-            return store.$input.text().trim() !== '';
+            return store.$input.text().trim() !== "";
         },
 
-        create_item: function (text) {
+        create_item(text) {
             const existing_items = funcs.items();
             const item = store.create_item_from_text(text, existing_items);
 
@@ -85,17 +87,17 @@ exports.create = function (opts) {
 
         // This is generally called by typeahead logic, where we have all
         // the data we need (as opposed to, say, just a user-typed email).
-        appendValidatedData: function (item) {
+        appendValidatedData(item) {
             const id = exports.random_id();
 
             if (!item.display_value) {
-                blueslip.error('no display_value returned');
+                blueslip.error("no display_value returned");
                 return;
             }
 
             const payload = {
-                id: id,
-                item: item,
+                id,
+                item,
             };
 
             store.pills.push(payload);
@@ -105,7 +107,7 @@ exports.create = function (opts) {
             const opts = {
                 id: payload.id,
                 display_value: item.display_value,
-                has_image: has_image,
+                has_image,
             };
 
             if (has_image) {
@@ -119,7 +121,7 @@ exports.create = function (opts) {
 
         // this appends a pill to the end of the container but before the
         // input block.
-        appendPill: function (value) {
+        appendPill(value) {
             if (value.length === 0) {
                 return;
             }
@@ -142,7 +144,7 @@ exports.create = function (opts) {
         // from the DOM, removes it from the array and returns it.
         // this would generally be used for DOM-provoked actions, such as a user
         // clicking on a pill to remove it.
-        removePill: function (id) {
+        removePill(id) {
             let idx;
             for (let x = 0; x < store.pills.length; x += 1) {
                 if (store.pills[x].id === id) {
@@ -162,11 +164,11 @@ exports.create = function (opts) {
         },
 
         // this will remove the last pill in the container -- by default tied
-        // to the "backspace" key when the value of the input is empty.
+        // to the "Backspace" key when the value of the input is empty.
         // If quiet is a truthy value, the event handler associated with the
         // pill will not be evaluated. This is useful when using clear to reset
         // the pills.
-        removeLastPill: function (quiet) {
+        removeLastPill(quiet) {
             const pill = store.pills.pop();
 
             if (pill) {
@@ -177,7 +179,7 @@ exports.create = function (opts) {
             }
         },
 
-        removeAllPills: function (quiet) {
+        removeAllPills(quiet) {
             while (store.pills.length > 0) {
                 this.removeLastPill(quiet);
             }
@@ -185,7 +187,7 @@ exports.create = function (opts) {
             this.clear(store.$input[0]);
         },
 
-        insertManyPills: function (pills) {
+        insertManyPills(pills) {
             if (typeof pills === "string") {
                 pills = pills.split(/,/g).map((pill) => pill.trim());
             }
@@ -216,15 +218,15 @@ exports.create = function (opts) {
             }
         },
 
-        getByID: function (id) {
+        getByID(id) {
             return store.pills.find((pill) => pill.id === id);
         },
 
-        items: function () {
+        items() {
             return store.pills.map((pill) => pill.item);
         },
 
-        createPillonPaste: function () {
+        createPillonPaste() {
             if (typeof store.createPillonPaste === "function") {
                 return store.createPillonPaste();
             }
@@ -264,8 +266,10 @@ exports.create = function (opts) {
 
             // if the user backspaces and there is input, just do normal char
             // deletion, otherwise delete the last pill in the sequence.
-            if (char === KEY.BACKSPACE && (
-                funcs.value(e.target).length === 0 || window.getSelection().anchorOffset === 0)) {
+            if (
+                char === KEY.BACKSPACE &&
+                (funcs.value(e.target).length === 0 || window.getSelection().anchorOffset === 0)
+            ) {
                 e.preventDefault();
                 funcs.removeLastPill();
 
@@ -278,7 +282,7 @@ exports.create = function (opts) {
             // below that handles events on the ".pill" class.
             if (char === KEY.LEFT_ARROW) {
                 if (window.getSelection().anchorOffset === 0) {
-                    store.$parent.find(".pill").last().focus();
+                    store.$parent.find(".pill").last().trigger("focus");
                 }
             }
 
@@ -304,15 +308,15 @@ exports.create = function (opts) {
             const $pill = store.$parent.find(".pill:focus");
 
             if (char === KEY.LEFT_ARROW) {
-                $pill.prev().focus();
+                $pill.prev().trigger("focus");
             } else if (char === KEY.RIGHT_ARROW) {
-                $pill.next().focus();
+                $pill.next().trigger("focus");
             } else if (char === KEY.BACKSPACE) {
                 const $next = $pill.next();
                 const id = $pill.data("id");
                 funcs.removePill(id);
-                $next.focus();
-                // the "backspace" key in FireFox will go back a page if you do
+                $next.trigger("focus");
+                // the "Backspace" key in Firefox will go back a page if you do
                 // not prevent it.
                 e.preventDefault();
             }
@@ -330,7 +334,7 @@ exports.create = function (opts) {
             e.preventDefault();
 
             // get text representation of clipboard
-            const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+            const text = (e.originalEvent || e).clipboardData.getData("text/plain");
 
             // insert text manually
             document.execCommand("insertText", false, text);
@@ -349,22 +353,25 @@ exports.create = function (opts) {
             const id = $pill.data("id");
 
             funcs.removePill(id);
-            $next.focus();
+            $next.trigger("focus");
         });
 
         store.$parent.on("click", function (e) {
             if ($(e.target).is(".pill-container")) {
-                $(this).find(".input").focus();
+                $(this).find(".input").trigger("focus");
             }
         });
 
         store.$parent.on("copy", ".pill", (e) => {
             const id = store.$parent.find(":focus").data("id");
             const data = funcs.getByID(id);
-            e.originalEvent.clipboardData.setData("text/plain", store.get_text_from_item(data.item));
+            e.originalEvent.clipboardData.setData(
+                "text/plain",
+                store.get_text_from_item(data.item),
+            );
             e.preventDefault();
         });
-    }());
+    })();
 
     // the external, user-accessible prototype.
     const prototype = {
@@ -374,15 +381,15 @@ exports.create = function (opts) {
         getByID: funcs.getByID,
         items: funcs.items,
 
-        onPillCreate: function (callback) {
+        onPillCreate(callback) {
             store.onPillCreate = callback;
         },
 
-        onPillRemove: function (callback) {
+        onPillRemove(callback) {
             store.removePillFunction = callback;
         },
 
-        createPillonPaste: function (callback) {
+        createPillonPaste(callback) {
             store.createPillonPaste = callback;
         },
 

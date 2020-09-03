@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-import ujson
+import orjson
 
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Stream, get_realm, get_user
@@ -22,12 +22,18 @@ class TestIntegrationsDevPanel(ZulipTestCase):
             "custom_headers": "{}",
             "is_json": "true",
         }
+        with self.assertLogs(level="ERROR") as logs:
+            response = self.client_post(target_url, data)
 
-        response = self.client_post(target_url, data)
+            self.assertEqual(response.status_code, 500)  # Since the response would be forwarded.
+            expected_response = {"result": "error", "msg": "Internal server error"}
+            self.assertEqual(orjson.loads(response.content), expected_response)
 
-        self.assertEqual(response.status_code, 500)  # Since the response would be forwarded.
-        expected_response = {"result": "error", "msg": "Internal server error"}
-        self.assertEqual(ujson.loads(response.content), expected_response)
+        # Intention of this test looks like to trigger keyError
+        # so just testing KeyError is printed along with Traceback in logs
+        self.assertTrue("KeyError" in logs.output[0])
+        self.assertTrue("Traceback (most recent call last)" in logs.output[0])
+        self.assertEqual(logs.output[1], "ERROR:django.request:Internal Server Error: /api/v1/external/airbrake")
 
     def test_check_send_webhook_fixture_message_for_success_without_headers(self) -> None:
         bot = get_user('webhook-bot@zulip.com', self.zulip_realm)
@@ -45,8 +51,8 @@ class TestIntegrationsDevPanel(ZulipTestCase):
 
         response = self.client_post(target_url, data)
         expected_response = {'responses': [{'status_code': 200, 'message': {"result": "success", "msg": ""}}], 'result': 'success', 'msg': ''}
-        response_content = ujson.loads(response.content)
-        response_content["responses"][0]["message"] = ujson.loads(response_content["responses"][0]["message"])
+        response_content = orjson.loads(response.content)
+        response_content["responses"][0]["message"] = orjson.loads(response_content["responses"][0]["message"])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response_content, expected_response)
 
@@ -66,7 +72,7 @@ class TestIntegrationsDevPanel(ZulipTestCase):
         data = {
             "url": url,
             "body": body,
-            "custom_headers": ujson.dumps({"X_GITHUB_EVENT": "ping"}),
+            "custom_headers": orjson.dumps({"X_GITHUB_EVENT": "ping"}).decode(),
             "is_json": "true",
         }
 
@@ -89,7 +95,7 @@ class TestIntegrationsDevPanel(ZulipTestCase):
         data = {
             "url": url,
             "body": body,
-            "custom_headers": ujson.dumps({"Content-Type": "application/x-www-form-urlencoded"}),
+            "custom_headers": orjson.dumps({"Content-Type": "application/x-www-form-urlencoded"}).decode(),
             "is_json": "false",
         }
 
@@ -107,7 +113,7 @@ class TestIntegrationsDevPanel(ZulipTestCase):
         response = self.client_get(target_url)
         expected_response = {'msg': '"somerandomnonexistantintegration" is not a valid webhook integration.', 'result': 'error'}
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(ujson.loads(response.content), expected_response)
+        self.assertEqual(orjson.loads(response.content), expected_response)
 
     @patch("zerver.views.development.integrations.os.path.exists")
     def test_get_fixtures_for_integration_without_fixtures(self, os_path_exists_mock: MagicMock) -> None:
@@ -116,13 +122,13 @@ class TestIntegrationsDevPanel(ZulipTestCase):
         response = self.client_get(target_url)
         expected_response = {'msg': 'The integration "airbrake" does not have fixtures.', 'result': 'error'}
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(ujson.loads(response.content), expected_response)
+        self.assertEqual(orjson.loads(response.content), expected_response)
 
     def test_get_fixtures_for_success(self) -> None:
         target_url = "/devtools/integrations/airbrake/fixtures"
         response = self.client_get(target_url)
         self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(ujson.loads(response.content)["fixtures"])
+        self.assertIsNotNone(orjson.loads(response.content)["fixtures"])
 
     def test_get_dev_panel_page(self) -> None:
         # Just to satisfy the test suite.
@@ -154,9 +160,9 @@ class TestIntegrationsDevPanel(ZulipTestCase):
                 "message": {"msg": "", "result": "success"},
             },
         ]
-        responses = ujson.loads(response.content)["responses"]
+        responses = orjson.loads(response.content)["responses"]
         for r in responses:
-            r["message"] = ujson.loads(r["message"])
+            r["message"] = orjson.loads(r["message"])
         self.assertEqual(response.status_code, 200)
         for r in responses:
             # We have to use this roundabout manner since the order may vary each time.
@@ -228,9 +234,9 @@ class TestIntegrationsDevPanel(ZulipTestCase):
                 "status_code": 400,
             },
         ]
-        responses = ujson.loads(response.content)["responses"]
+        responses = orjson.loads(response.content)["responses"]
         for r in responses:
-            r["message"] = ujson.loads(r["message"])
+            r["message"] = orjson.loads(r["message"])
         self.assertEqual(response.status_code, 200)
         for r in responses:
             # We have to use this roundabout manner since the order may vary each time. This is not
@@ -255,4 +261,4 @@ class TestIntegrationsDevPanel(ZulipTestCase):
         response = self.client_post("/devtools/integrations/send_all_webhook_fixture_messages", data)
         expected_response = {'msg': 'The integration "appfollow" does not have fixtures.', 'result': 'error'}
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(ujson.loads(response.content), expected_response)
+        self.assertEqual(orjson.loads(response.content), expected_response)

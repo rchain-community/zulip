@@ -53,7 +53,7 @@ from zerver.lib.actions import (
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.realm_icon import realm_icon_url
 from zerver.lib.request import REQ, has_request_variables
-from zerver.lib.response import json_success
+from zerver.lib.response import json_error, json_success
 from zerver.lib.subdomains import get_subdomain_from_hostname
 from zerver.lib.timestamp import convert_to_UTC, timestamp_to_datetime
 from zerver.lib.validator import to_non_negative_int
@@ -71,19 +71,18 @@ from zerver.views.invite import get_invitee_emails_set
 
 if settings.BILLING_ENABLED:
     from corporate.lib.stripe import (
+        approve_sponsorship,
         attach_discount_to_realm,
+        get_current_plan_by_realm,
         get_customer_by_realm,
         get_discount_for_realm,
+        get_latest_seat_count,
+        make_end_of_cycle_updates_if_needed,
         update_sponsorship_status,
     )
 
 if settings.ZILENCER_ENABLED:
     from zilencer.models import RemoteInstallationCount, RemoteRealmCount, RemoteZulipServer
-else:
-    from unittest.mock import Mock
-    RemoteInstallationCount = Mock()  # type: ignore[misc] # https://github.com/JukkaL/mypy/issues/1188
-    RemoteZulipServer = Mock()  # type: ignore[misc] # https://github.com/JukkaL/mypy/issues/1188
-    RemoteRealmCount = Mock()  # type: ignore[misc] # https://github.com/JukkaL/mypy/issues/1188
 
 MAX_TIME_FOR_FULL_ANALYTICS_GENERATION = timedelta(days=1, minutes=30)
 
@@ -130,6 +129,7 @@ def stats_for_realm(request: HttpRequest, realm_str: str) -> HttpResponse:
 @has_request_variables
 def stats_for_remote_realm(request: HttpRequest, remote_server_id: int,
                            remote_realm_id: int) -> HttpResponse:
+    assert settings.ZILENCER_ENABLED
     server = RemoteZulipServer.objects.get(id=remote_server_id)
     return render_stats(request, f'/remote/{server.id}/realm/{remote_realm_id}',
                         f"Realm {remote_realm_id} on server {server.hostname}")
@@ -150,6 +150,7 @@ def get_chart_data_for_realm(request: HttpRequest, user_profile: UserProfile,
 def get_chart_data_for_remote_realm(
         request: HttpRequest, user_profile: UserProfile, remote_server_id: int,
         remote_realm_id: int, **kwargs: Any) -> HttpResponse:
+    assert settings.ZILENCER_ENABLED
     server = RemoteZulipServer.objects.get(id=remote_server_id)
     return get_chart_data(request=request, user_profile=user_profile, server=server,
                           remote=True, remote_realm_id=int(remote_realm_id), **kwargs)
@@ -160,6 +161,7 @@ def stats_for_installation(request: HttpRequest) -> HttpResponse:
 
 @require_server_admin
 def stats_for_remote_installation(request: HttpRequest, remote_server_id: int) -> HttpResponse:
+    assert settings.ZILENCER_ENABLED
     server = RemoteZulipServer.objects.get(id=remote_server_id)
     return render_stats(request, f'/remote/{server.id}/installation',
                         f'remote Installation {server.hostname}', True, True)
@@ -178,6 +180,7 @@ def get_chart_data_for_remote_installation(
         remote_server_id: int,
         chart_name: str=REQ(),
         **kwargs: Any) -> HttpResponse:
+    assert settings.ZILENCER_ENABLED
     server = RemoteZulipServer.objects.get(id=remote_server_id)
     return get_chart_data(request=request, user_profile=user_profile, for_installation=True,
                           remote=True, server=server, **kwargs)
@@ -190,15 +193,17 @@ def get_chart_data(request: HttpRequest, user_profile: UserProfile, chart_name: 
                    end: Optional[datetime]=REQ(converter=to_utc_datetime, default=None),
                    realm: Optional[Realm]=None, for_installation: bool=False,
                    remote: bool=False, remote_realm_id: Optional[int]=None,
-                   server: Optional[RemoteZulipServer]=None) -> HttpResponse:
+                   server: Optional["RemoteZulipServer"]=None) -> HttpResponse:
     if for_installation:
         if remote:
+            assert settings.ZILENCER_ENABLED
             aggregate_table = RemoteInstallationCount
             assert server is not None
         else:
             aggregate_table = InstallationCount
     else:
         if remote:
+            assert settings.ZILENCER_ENABLED
             aggregate_table = RemoteRealmCount
             assert server is not None
             assert remote_realm_id is not None
@@ -297,25 +302,34 @@ def get_chart_data(request: HttpRequest, user_profile: UserProfile, chart_name: 
 
     assert len({stat.frequency for stat in stats}) == 1
     end_times = time_range(start, end, stats[0].frequency, min_length)
-    data: Dict[str, Any] = {'end_times': end_times, 'frequency': stats[0].frequency}
+    data: Dict[str, Any] = {
+        'end_times': [int(end_time.timestamp()) for end_time in end_times],
+        'frequency': stats[0].frequency,
+    }
 
     aggregation_level = {
         InstallationCount: 'everyone',
         RealmCount: 'everyone',
-        RemoteInstallationCount: 'everyone',
-        RemoteRealmCount: 'everyone',
         UserCount: 'user',
     }
+    if settings.ZILENCER_ENABLED:
+        aggregation_level[RemoteInstallationCount] = 'everyone'
+        aggregation_level[RemoteRealmCount] = 'everyone'
+
     # -1 is a placeholder value, since there is no relevant filtering on InstallationCount
     id_value = {
         InstallationCount: -1,
         RealmCount: realm.id,
-        RemoteInstallationCount: server.id if server is not None else None,
-        # TODO: RemoteRealmCount logic doesn't correctly handle
-        # filtering by server_id as well.
-        RemoteRealmCount: remote_realm_id,
         UserCount: user_profile.id,
     }
+    if settings.ZILENCER_ENABLED:
+        if server is not None:
+            id_value[RemoteInstallationCount] = server.id
+        # TODO: RemoteRealmCount logic doesn't correctly handle
+        # filtering by server_id as well.
+        if remote_realm_id is not None:
+            id_value[RemoteRealmCount] = remote_realm_id
+
     for table in tables:
         data[aggregation_level[table]] = {}
         for stat in stats:
@@ -359,9 +373,9 @@ def table_filtered_to_id(table: Type[BaseCount], key_id: int) -> QuerySet:
         return StreamCount.objects.filter(stream_id=key_id)
     elif table == InstallationCount:
         return InstallationCount.objects.all()
-    elif table == RemoteInstallationCount:
+    elif settings.ZILENCER_ENABLED and table == RemoteInstallationCount:
         return RemoteInstallationCount.objects.filter(server_id=key_id)
-    elif table == RemoteRealmCount:
+    elif settings.ZILENCER_ENABLED and table == RemoteRealmCount:
         return RemoteRealmCount.objects.filter(realm_id=key_id)
     else:
         raise AssertionError(f"Unknown table: {table}")
@@ -442,7 +456,7 @@ def dictfetchall(cursor: connection.cursor) -> List[Dict[str, Any]]:
     "Returns all rows from a cursor as a dict"
     desc = cursor.description
     return [
-        dict(list(zip([col[0] for col in desc], row)))
+        dict(zip((col[0] for col in desc), row))
         for row in cursor.fetchall()
     ]
 
@@ -589,7 +603,10 @@ def realm_summary_table(realm_minutes: Dict[str, float]) -> str:
                 GROUP BY realm_id
             ) wau_counts
             ON wau_counts.realm_id = realm.id
-        WHERE EXISTS (
+        WHERE
+            realm.plan_type = 3
+            OR
+            EXISTS (
                 SELECT *
                 FROM zerver_useractivity ua
                 JOIN zerver_userprofile up
@@ -1118,7 +1135,8 @@ def support(request: HttpRequest) -> HttpResponse:
         keys = set(request.POST.keys())
         if "csrfmiddlewaretoken" in keys:
             keys.remove("csrfmiddlewaretoken")
-        assert(len(keys) == 2)
+        if len(keys) != 2:
+            return json_error(_("Invalid parameters"))
 
         realm_id = request.POST.get("realm_id")
         realm = Realm.objects.get(id=realm_id)
@@ -1151,6 +1169,10 @@ def support(request: HttpRequest) -> HttpResponse:
             elif sponsorship_pending == "false":
                 update_sponsorship_status(realm, False)
                 context["message"] = f"{realm.name} is no longer pending sponsorship."
+        elif request.POST.get('approve_sponsorship') is not None:
+            if request.POST.get('approve_sponsorship') == "approve_sponsorship":
+                approve_sponsorship(realm)
+                context["message"] = f"Sponsorship approved for {realm.name}"
         elif request.POST.get("scrub_realm", None) is not None:
             if request.POST.get("scrub_realm") == "scrub_realm":
                 do_scrub_realm(realm, acting_user=request.user)
@@ -1181,6 +1203,17 @@ def support(request: HttpRequest) -> HttpResponse:
 
         for realm in realms:
             realm.customer = get_customer_by_realm(realm)
+
+            current_plan = get_current_plan_by_realm(realm)
+            if current_plan is not None:
+                new_plan, last_ledger_entry = make_end_of_cycle_updates_if_needed(current_plan, timezone_now())
+                if last_ledger_entry is not None:
+                    if new_plan is not None:
+                        realm.current_plan = new_plan
+                    else:
+                        realm.current_plan = current_plan
+                    realm.current_plan.licenses = last_ledger_entry.licenses
+                    realm.current_plan.licenses_used = get_latest_seat_count(realm)
 
         context["realms"] = realms
 

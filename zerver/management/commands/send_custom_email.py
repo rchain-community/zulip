@@ -12,23 +12,22 @@ class Command(ZulipBaseCommand):
 
     Useful to send a notice to all users of a realm or server.
 
-    The From and Subject headers can be provided in the body of the markdown
+    The From and Subject headers can be provided in the body of the Markdown
     document used to generate the email, or on the command line."""
 
     def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument('--entire-server', action="store_true", default=False,
-                            help="Send to every user on the server. ")
+                            help="Send to every user on the server.")
         parser.add_argument('--markdown-template-path', '--path',
-                            dest='markdown_template_path',
                             required=True,
                             type=str,
-                            help='Path to a markdown-format body for the email.')
+                            help='Path to a Markdown-format body for the email.')
         parser.add_argument('--subject',
                             type=str,
-                            help='Subject for the email. It can be declarated in markdown file in headers')
+                            help='Subject for the email. It can be declared in Markdown file in headers')
         parser.add_argument('--from-name',
                             type=str,
-                            help='From line for the email. It can be declarated in markdown file in headers')
+                            help='From line for the email. It can be declared in Markdown file in headers')
         parser.add_argument('--reply-to',
                             type=str,
                             help='Optional reply-to line for the email')

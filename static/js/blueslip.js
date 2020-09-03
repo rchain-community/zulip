@@ -1,3 +1,5 @@
+"use strict";
+
 /* eslint-disable no-console */
 
 // System documented in https://zulip.readthedocs.io/en/latest/subsystems/logging.html
@@ -12,63 +14,56 @@ if (Error.stackTraceLimit !== undefined) {
     Error.stackTraceLimit = 100000;
 }
 
-function Logger() {
-    this._memory_log = [];
+function pad(num, width) {
+    return num.toString().padStart(width, "0");
 }
 
-Logger.prototype = (function () {
-    function pad(num, width) {
-        let ret = num.toString();
-        while (ret.length < width) {
-            ret = "0" + ret;
+function make_logger_func(name) {
+    return function Logger_func(...args) {
+        const now = new Date();
+        const date_str =
+            now.getUTCFullYear() +
+            "-" +
+            pad(now.getUTCMonth() + 1, 2) +
+            "-" +
+            pad(now.getUTCDate(), 2) +
+            " " +
+            pad(now.getUTCHours(), 2) +
+            ":" +
+            pad(now.getUTCMinutes(), 2) +
+            ":" +
+            pad(now.getUTCSeconds(), 2) +
+            "." +
+            pad(now.getUTCMilliseconds(), 3) +
+            " UTC";
+
+        const str_args = args.map((x) => (typeof x === "object" ? JSON.stringify(x) : x));
+
+        const log_entry = date_str + " " + name.toUpperCase() + ": " + str_args.join("");
+        this._memory_log.push(log_entry);
+
+        // Don't let the log grow without bound
+        if (this._memory_log.length > 1000) {
+            this._memory_log.shift();
         }
-        return ret;
-    }
 
-    function make_logger_func(name) {
-        return function Logger_func(...args) {
-            const now = new Date();
-            const date_str =
-                now.getUTCFullYear() + '-' +
-                pad(now.getUTCMonth() + 1, 2) + '-' +
-                pad(now.getUTCDate(), 2) + ' ' +
-                pad(now.getUTCHours(), 2) + ':' +
-                pad(now.getUTCMinutes(), 2) + ':' +
-                pad(now.getUTCSeconds(), 2) + '.' +
-                pad(now.getUTCMilliseconds(), 3) + ' UTC';
-
-            const str_args = args.map((x) => typeof x === "object" ? JSON.stringify(x) : x);
-
-            const log_entry = date_str + " " + name.toUpperCase() +
-                ': ' + str_args.join("");
-            this._memory_log.push(log_entry);
-
-            // Don't let the log grow without bound
-            if (this._memory_log.length > 1000) {
-                this._memory_log.shift();
-            }
-
-            if (console[name] !== undefined) {
-                return console[name](...args);
-            }
-            return;
-        };
-    }
-
-    const proto = {
-        get_log: function Logger_get_log() {
-            return this._memory_log;
-        },
+        if (console[name] !== undefined) {
+            return console[name](...args);
+        }
     };
+}
 
-    const methods = ['debug', 'log', 'info', 'warn', 'error'];
-    let i;
-    for (i = 0; i < methods.length; i += 1) {
-        proto[methods[i]] = make_logger_func(methods[i]);
+class Logger {
+    _memory_log = [];
+
+    get_log() {
+        return this._memory_log;
     }
+}
 
-    return proto;
-}());
+for (const name of ["debug", "log", "info", "warn", "error"]) {
+    Logger.prototype[name] = make_logger_func(name);
+}
 
 const logger = new Logger();
 
@@ -80,10 +75,10 @@ const reported_errors = new Set();
 const last_report_attempt = new Map();
 
 function report_error(msg, stack, opts) {
-    opts = { show_ui_msg: false, ...opts };
+    opts = {show_ui_msg: false, ...opts};
 
     if (stack === undefined) {
-        stack = 'No stacktrace available';
+        stack = "No stacktrace available";
     }
 
     if (page_params.debug_mode) {
@@ -92,11 +87,13 @@ function report_error(msg, stack, opts) {
         blueslip_stacktrace.display_stacktrace(msg, stack);
     }
 
-    const key = ':' + msg + stack;
-    if (reported_errors.has(key)
-        || last_report_attempt.has(key)
+    const key = ":" + msg + stack;
+    if (
+        reported_errors.has(key) ||
+        (last_report_attempt.has(key) &&
             // Only try to report a given error once every 5 minutes
-            && Date.now() - last_report_attempt.get(key) <= 60 * 5 * 1000) {
+            Date.now() - last_report_attempt.get(key) <= 60 * 5 * 1000)
+    ) {
         return;
     }
 
@@ -110,9 +107,9 @@ function report_error(msg, stack, opts) {
     // Important: We don't use channel.js here so that exceptions
     // always make it to the server even if reload_state.is_in_progress.
     $.ajax({
-        type: 'POST',
-        url: '/json/report/error',
-        dataType: 'json',
+        type: "POST",
+        url: "/json/report/error",
+        dataType: "json",
         data: {
             message: msg,
             stacktrace: stack,
@@ -123,7 +120,7 @@ function report_error(msg, stack, opts) {
             log: logger.get_log().join("\n"),
         },
         timeout: 3 * 1000,
-        success: function () {
+        success() {
             reported_errors.add(key);
             if (opts.show_ui_msg && ui_report !== undefined) {
                 // There are a few races here (and below in the error
@@ -145,18 +142,23 @@ function report_error(msg, stack, opts) {
                 // invoked).  In any case, it will pretty clear that
                 // something is wrong with the page and the user will
                 // probably try to reload anyway.
-                ui_report.message("Oops.  It seems something has gone wrong. " +
-                                  "The error has been reported to the fine " +
-                                  "folks at Zulip, but, in the mean time, " +
-                                  "please try reloading the page.",
-                                  $("#home-error"), "alert-error");
+                ui_report.message(
+                    "Oops.  It seems something has gone wrong. " +
+                        "The error has been reported to the fine " +
+                        "folks at Zulip, but, in the mean time, " +
+                        "please try reloading the page.",
+                    $("#home-error"),
+                    "alert-error",
+                );
             }
         },
-        error: function () {
+        error() {
             if (opts.show_ui_msg && ui_report !== undefined) {
-                ui_report.message("Oops.  It seems something has gone wrong. " +
-                                  "Please try reloading the page.",
-                                  $("#home-error"), "alert-error");
+                ui_report.message(
+                    "Oops.  It seems something has gone wrong. " + "Please try reloading the page.",
+                    $("#home-error"),
+                    "alert-error",
+                );
             }
         },
     });
@@ -171,23 +173,16 @@ function report_error(msg, stack, opts) {
     }
 }
 
-function BlueslipError(msg, more_info) {
-    // One can't subclass Error normally so we have to play games
-    // with setting __proto__
-    const self = new Error(msg);
-    self.name = "BlueslipError";
+class BlueslipError extends Error {
+    name = "BlueslipError";
 
-    // Indirect access to __proto__ keeps jslint quiet
-    const proto = '__proto__';
-    self[proto] = BlueslipError.prototype;
-
-    if (more_info !== undefined) {
-        self.more_info = more_info;
+    constructor(msg, more_info) {
+        super(msg);
+        if (more_info !== undefined) {
+            this.more_info = more_info;
+        }
     }
-    return self;
 }
-
-BlueslipError.prototype = Object.create(Error.prototype);
 
 exports.exception_msg = function blueslip_exception_msg(ex) {
     let message = ex.message;
@@ -200,7 +195,7 @@ exports.exception_msg = function blueslip_exception_msg(ex) {
     return message;
 };
 
-$(window).on('error', (event) => {
+$(window).on("error", (event) => {
     const ex = event.originalEvent.error;
     if (!ex || ex instanceof BlueslipError) {
         return;
@@ -246,7 +241,7 @@ exports.error = function blueslip_error(msg, more_info, stack) {
     }
     const args = build_arg_list(msg, more_info);
     logger.error(...args);
-    report_error(msg, stack, {more_info: more_info});
+    report_error(msg, stack, {more_info});
 
     if (page_params.debug_mode) {
         throw new BlueslipError(msg, more_info);
@@ -254,7 +249,7 @@ exports.error = function blueslip_error(msg, more_info, stack) {
 };
 
 exports.fatal = function blueslip_fatal(msg, more_info) {
-    report_error(msg, Error().stack, {more_info: more_info});
+    report_error(msg, Error().stack, {more_info});
     throw new BlueslipError(msg, more_info);
 };
 
@@ -283,10 +278,14 @@ exports.preview_node = function (node) {
     const className = node.className.length ? node.className : false;
     const id = node.id.length ? node.id : false;
 
-    const node_preview = "<" + tag +
-       (id ? " id='" + id + "'" : "") +
-       (className ? " class='" + className + "'" : "") +
-       "></" + tag + ">";
+    const node_preview =
+        "<" +
+        tag +
+        (id ? " id='" + id + "'" : "") +
+        (className ? " class='" + className + "'" : "") +
+        "></" +
+        tag +
+        ">";
 
     return node_preview;
 };

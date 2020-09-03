@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from email.message import EmailMessage
 from functools import wraps
-from threading import Timer
+from threading import Lock, Timer
 from typing import (
     Any,
     Callable,
@@ -31,10 +31,11 @@ from typing import (
     cast,
 )
 
+import orjson
 import requests
-import ujson
 from django.conf import settings
 from django.db import connection
+from django.db.models import F
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import override as override_language
 from django.utils.translation import ugettext as _
@@ -154,7 +155,7 @@ def retry_send_email_failures(
             error_class_name = e.__class__.__name__
 
             def on_failure(event: Dict[str, Any]) -> None:
-                logging.exception("Event %r failed due to exception %s", event, error_class_name)
+                logging.exception("Event %r failed due to exception %s", event, error_class_name, stack_info=True)
 
             retry_event(worker.queue_name, data, on_failure)
 
@@ -180,8 +181,8 @@ class QueueProcessingWorker(ABC):
         self.update_statistics(0)
 
     def update_statistics(self, remaining_queue_size: int) -> None:
-        total_seconds = sum([seconds for _, seconds in self.recent_consume_times])
-        total_events = sum([events_number for events_number, _ in self.recent_consume_times])
+        total_seconds = sum(seconds for _, seconds in self.recent_consume_times)
+        total_events = sum(events_number for events_number, _ in self.recent_consume_times)
         if total_events == 0:
             recent_average_consume_time = None
         else:
@@ -200,10 +201,10 @@ class QueueProcessingWorker(ABC):
         fn = os.path.join(settings.QUEUE_STATS_DIR, fname)
         with lockfile(fn + '.lock'):
             tmp_fn = fn + '.tmp'
-            with open(tmp_fn, 'w') as f:
-                serialized_dict = ujson.dumps(stats_dict, indent=2)
-                serialized_dict += '\n'
-                f.write(serialized_dict)
+            with open(tmp_fn, 'wb') as f:
+                f.write(
+                    orjson.dumps(stats_dict, option=orjson.OPT_APPEND_NEWLINE | orjson.OPT_INDENT_2)
+                )
             os.rename(tmp_fn, fn)
 
     @abstractmethod
@@ -212,14 +213,14 @@ class QueueProcessingWorker(ABC):
 
     def do_consume(self, consume_func: Callable[[List[Dict[str, Any]]], None],
                    events: List[Dict[str, Any]]) -> None:
+        consume_time_seconds: Optional[float] = None
         try:
             time_start = time.time()
             consume_func(events)
-            consume_time_seconds: Optional[float] = time.time() - time_start
+            consume_time_seconds = time.time() - time_start
             self.consumed_since_last_emptied += len(events)
         except Exception:
             self._handle_consume_exception(events)
-            consume_time_seconds = None
         finally:
             flush_per_request_caches()
             reset_queries()
@@ -254,7 +255,7 @@ class QueueProcessingWorker(ABC):
         # flow. 'queue_name' is always a constant string.
         fname = mark_sanitized(f'{self.queue_name}.errors')
         fn = os.path.join(settings.QUEUE_ERROR_DIR, fname)
-        line = f'{time.asctime()}\t{ujson.dumps(events)}\n'
+        line = f'{time.asctime()}\t{orjson.dumps(events).decode()}\n'
         lock_fn = fn + '.lock'
         with lockfile(lock_fn):
             with open(fn, 'ab') as f:
@@ -262,7 +263,7 @@ class QueueProcessingWorker(ABC):
         check_and_send_restart_signal()
 
     def _log_problem(self) -> None:
-        logging.exception("Problem handling data on queue %s", self.queue_name)
+        logging.exception("Problem handling data on queue %s", self.queue_name, stack_info=True)
 
     def setup(self) -> None:
         self.q = SimpleQueueClient()
@@ -319,7 +320,7 @@ class SignupWorker(QueueProcessingWorker):
             params['list_id'] = settings.ZULIP_FRIENDS_LIST_ID
             params['status'] = 'subscribed'
             r = requests.post(endpoint, auth=('apikey', settings.MAILCHIMP_API_KEY), json=params, timeout=10)
-            if r.status_code == 400 and ujson.loads(r.text)['title'] == 'Member Exists':
+            if r.status_code == 400 and orjson.loads(r.content)['title'] == 'Member Exists':
                 logging.warning("Attempted to sign up already existing email to list: %s",
                                 data['email_address'])
             elif r.status_code == 400:
@@ -369,7 +370,7 @@ class ConfirmationEmailWorker(QueueProcessingWorker):
 @assign_queue('user_activity', queue_type="loop")
 class UserActivityWorker(LoopQueueProcessingWorker):
     """The UserActivity queue is perhaps our highest-traffic queue, and
-    requires some care to ensure it performes adequately.
+    requires some care to ensure it performs adequately.
 
     We use a LoopQueueProcessingWorker as a performance optimization
     for managing the queue.  The structure of UserActivity records is
@@ -469,47 +470,58 @@ class MissedMessageWorker(QueueProcessingWorker):
     events_by_recipient: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
     batch_start_by_recipient: Dict[int, float] = {}
 
+    # This lock protects access to all of the data structures declared
+    # above.  A lock is required because maybe_send_batched_emails, as
+    # the argument to Timer, runs in a separate thread from the rest
+    # of the consumer.
+    lock = Lock()
+
     def consume(self, event: Dict[str, Any]) -> None:
-        logging.debug("Received missedmessage_emails event: %s", event)
+        with self.lock:
+            logging.debug("Received missedmessage_emails event: %s", event)
 
-        # When we process an event, just put it into the queue and ensure we have a timer going.
-        user_profile_id = event['user_profile_id']
-        if user_profile_id not in self.batch_start_by_recipient:
-            self.batch_start_by_recipient[user_profile_id] = time.time()
-        self.events_by_recipient[user_profile_id].append(event)
+            # When we process an event, just put it into the queue and ensure we have a timer going.
+            user_profile_id = event['user_profile_id']
+            if user_profile_id not in self.batch_start_by_recipient:
+                self.batch_start_by_recipient[user_profile_id] = time.time()
+            self.events_by_recipient[user_profile_id].append(event)
 
-        self.ensure_timer()
+            self.ensure_timer()
 
     def ensure_timer(self) -> None:
+        # The caller is responsible for ensuring self.lock is held when it calls this.
         if self.timer_event is not None:
             return
-        self.timer_event = Timer(self.TIMER_FREQUENCY, MissedMessageWorker.maybe_send_batched_emails, [self])
+
+        self.timer_event = Timer(self.TIMER_FREQUENCY, MissedMessageWorker.maybe_send_batched_emails,
+                                 [self])
         self.timer_event.start()
 
-    def stop_timer(self) -> None:
-        if self.timer_event and self.timer_event.is_alive():
-            self.timer_event.cancel()
+    def maybe_send_batched_emails(self) -> None:
+        with self.lock:
+            # self.timer_event just triggered execution of this
+            # function in a thread, so now that we hold the lock, we
+            # clear the timer_event attribute to record that no Timer
+            # is active.
             self.timer_event = None
 
-    def maybe_send_batched_emails(self) -> None:
-        self.stop_timer()
+            current_time = time.time()
+            for user_profile_id, timestamp in list(self.batch_start_by_recipient.items()):
+                if current_time - timestamp < self.BATCH_DURATION:
+                    continue
+                events = self.events_by_recipient[user_profile_id]
+                logging.info("Batch-processing %s missedmessage_emails events for user %s",
+                             len(events), user_profile_id)
+                handle_missedmessage_emails(user_profile_id, events)
+                del self.events_by_recipient[user_profile_id]
+                del self.batch_start_by_recipient[user_profile_id]
 
-        current_time = time.time()
-        for user_profile_id, timestamp in list(self.batch_start_by_recipient.items()):
-            if current_time - timestamp < self.BATCH_DURATION:
-                continue
-            events = self.events_by_recipient[user_profile_id]
-            logging.info("Batch-processing %s missedmessage_emails events for user %s",
-                         len(events), user_profile_id)
-            handle_missedmessage_emails(user_profile_id, events)
-            del self.events_by_recipient[user_profile_id]
-            del self.batch_start_by_recipient[user_profile_id]
-
-        # By only restarting the timer if there are actually events in
-        # the queue, we ensure this queue processor is idle when there
-        # are no missed-message emails to process.
-        if len(self.batch_start_by_recipient) > 0:
-            self.ensure_timer()
+            # By only restarting the timer if there are actually events in
+            # the queue, we ensure this queue processor is idle when there
+            # are no missed-message emails to process.  This avoids
+            # constant CPU usage when there is no work to do.
+            if len(self.batch_start_by_recipient) > 0:
+                self.ensure_timer()
 
 @assign_queue('email_senders')
 class EmailSendingWorker(QueueProcessingWorker):
@@ -595,10 +607,10 @@ class TestWorker(QueueProcessingWorker):
     # and appends it to a file in /tmp.
     def consume(self, event: Mapping[str, Any]) -> None:  # nocoverage
         fn = settings.ZULIP_WORKER_TEST_FILE
-        message = ujson.dumps(event)
-        logging.info("TestWorker should append this message to %s: %s", fn, message)
-        with open(fn, 'a') as f:
-            f.write(message + '\n')
+        message = orjson.dumps(event)
+        logging.info("TestWorker should append this message to %s: %s", fn, message.decode())
+        with open(fn, 'ab') as f:
+            f.write(message + b'\n')
 
 @assign_queue('embed_links')
 class FetchLinksEmbedData(QueueProcessingWorker):
@@ -688,6 +700,12 @@ class EmbeddedBotWorker(QueueProcessingWorker):
 
 @assign_queue('deferred_work')
 class DeferredWorker(QueueProcessingWorker):
+    """This queue processor is intended for cases where we want to trigger a
+    potentially expensive, not urgent, job to be run on a separate
+    thread from the Django worker that initiated it (E.g. so we that
+    can provide a low-latency HTTP response or avoid risk of request
+    timeouts for an operation that could in rare cases take minutes).
+    """
     def consume(self, event: Dict[str, Any]) -> None:
         if event['type'] == 'mark_stream_messages_as_read':
             user_profile = get_user_profile_by_id(event['user_profile_id'])
@@ -700,6 +718,18 @@ class DeferredWorker(QueueProcessingWorker):
                 (stream, recipient, sub) = access_stream_by_id(user_profile, stream_id,
                                                                require_active=False)
                 do_mark_stream_messages_as_read(user_profile, client, stream)
+        elif event["type"] == 'mark_stream_messages_as_read_for_everyone':
+            # This event is generated by the stream deactivation code path.
+            batch_size = 100
+            offset = 0
+            while True:
+                messages = Message.objects.filter(recipient_id=event["stream_recipient_id"]) \
+                    .order_by("id")[offset:offset + batch_size]
+                UserMessage.objects.filter(message__in=messages).extra(where=[UserMessage.where_unread()]) \
+                    .update(flags=F('flags').bitor(UserMessage.flags.read))
+                offset += len(messages)
+                if len(messages) < batch_size:
+                    break
         elif event['type'] == 'clear_push_device_tokens':
             try:
                 clear_push_device_tokens(event["user_profile_id"])
@@ -721,9 +751,9 @@ class DeferredWorker(QueueProcessingWorker):
                                                   threads=6, upload=True, public_only=True,
                                                   delete_after_upload=True)
             except Exception:
-                export_event.extra_data = ujson.dumps(dict(
+                export_event.extra_data = orjson.dumps(dict(
                     failed_timestamp=timezone_now().timestamp(),
-                ))
+                )).decode()
                 export_event.save(update_fields=['extra_data'])
                 logging.error(
                     "Data export for %s failed after %s",
@@ -735,9 +765,9 @@ class DeferredWorker(QueueProcessingWorker):
             assert public_url is not None
 
             # Update the extra_data field now that the export is complete.
-            export_event.extra_data = ujson.dumps(dict(
+            export_event.extra_data = orjson.dumps(dict(
                 export_path=urllib.parse.urlparse(public_url).path,
-            ))
+            )).decode()
             export_event.save(update_fields=['extra_data'])
 
             # Send a private message notification letting the user who

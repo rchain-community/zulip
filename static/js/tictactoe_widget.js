@@ -1,15 +1,17 @@
-const render_widgets_tictactoe_widget = require('../templates/widgets/tictactoe_widget.hbs');
+"use strict";
 
-const tictactoe_data_holder = function () {
-    const self = {};
+const render_widgets_tictactoe_widget = require("../templates/widgets/tictactoe_widget.hbs");
 
-    const me = people.my_current_user_id();
-    const square_values = new Map();
-    let num_filled = 0;
-    let waiting = false;
-    let game_over = false;
+const people = require("./people");
 
-    function is_game_over() {
+class TicTacToeData {
+    me = people.my_current_user_id();
+    square_values = new Map();
+    num_filled = 0;
+    waiting = false;
+    game_over = false;
+
+    is_game_over() {
         const lines = [
             [1, 2, 3],
             [4, 5, 6],
@@ -21,34 +23,31 @@ const tictactoe_data_holder = function () {
             [7, 5, 3],
         ];
 
-        function line_won(line) {
-            const token = square_values.get(line[0]);
+        const line_won = (line) => {
+            const token = this.square_values.get(line[0]);
 
             if (!token) {
                 return false;
             }
 
             return (
-                square_values.get(line[1]) === token &&
-                square_values.get(line[2]) === token);
-        }
+                this.square_values.get(line[1]) === token &&
+                this.square_values.get(line[2]) === token
+            );
+        };
 
         const board = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-        function filled(i) {
-            return square_values.get(i);
-        }
+        const filled = (i) => this.square_values.get(i);
 
         return lines.some(line_won) || board.every(filled);
     }
 
-    self.get_widget_data = function () {
-        function square(i) {
-            return {
-                val: square_values.get(i),
-                idx: i,
-                disabled: waiting || square_values.get(i) || game_over,
-            };
-        }
+    get_widget_data() {
+        const square = (i) => ({
+            val: this.square_values.get(i),
+            idx: i,
+            disabled: this.waiting || this.square_values.get(i) || this.game_over,
+        });
 
         const squares = [
             [square(1), square(2), square(3)],
@@ -56,81 +55,78 @@ const tictactoe_data_holder = function () {
             [square(7), square(8), square(9)],
         ];
 
-        const token = num_filled % 2 === 0 ? 'X' : 'O';
+        const token = this.num_filled % 2 === 0 ? "X" : "O";
         let move_status = token + "'s turn";
 
-        if (game_over) {
+        if (this.game_over) {
             move_status = "Game over!";
         }
 
         const widget_data = {
-            squares: squares,
-            move_status: move_status,
+            squares,
+            move_status,
         };
 
         return widget_data;
-    };
+    }
 
-    self.handle = {
+    handle = {
         square_click: {
-            outbound: function (idx) {
+            outbound: (idx) => {
                 const event = {
-                    type: 'square_click',
-                    idx: idx,
-                    num_filled: num_filled,
+                    type: "square_click",
+                    idx,
+                    num_filled: this.num_filled,
                 };
                 return event;
             },
 
-            inbound: function (sender_id, data) {
+            inbound: (sender_id, data) => {
                 const idx = data.idx;
 
-                if (data.num_filled !== num_filled) {
-                    blueslip.info('out of sync', data.num_filled);
+                if (data.num_filled !== this.num_filled) {
+                    blueslip.info("out of sync", data.num_filled);
                     return;
                 }
 
-                const token = num_filled % 2 === 0 ? 'X' : 'O';
+                const token = this.num_filled % 2 === 0 ? "X" : "O";
 
-                if (square_values.has(idx)) {
+                if (this.square_values.has(idx)) {
                     return;
                 }
 
-                waiting = sender_id === me;
+                this.waiting = sender_id === this.me;
 
-                square_values.set(idx, token);
-                num_filled += 1;
+                this.square_values.set(idx, token);
+                this.num_filled += 1;
 
-                game_over = is_game_over();
+                this.game_over = this.is_game_over();
             },
         },
     };
 
-
-    self.handle_event = function (sender_id, data) {
+    handle_event(sender_id, data) {
         const type = data.type;
-        if (self.handle[type]) {
-            self.handle[type].inbound(sender_id, data);
+        if (this.handle[type]) {
+            this.handle[type].inbound(sender_id, data);
         }
-    };
-
-    return self;
-};
+    }
+}
 
 exports.activate = function (opts) {
     const elem = opts.elem;
     const callback = opts.callback;
 
-    const tictactoe_data = tictactoe_data_holder();
+    const tictactoe_data = new TicTacToeData();
 
     function render() {
         const widget_data = tictactoe_data.get_widget_data();
         const html = render_widgets_tictactoe_widget(widget_data);
         elem.html(html);
 
-        elem.find("button.tictactoe-square").on('click', (e) => {
+        elem.find("button.tictactoe-square").on("click", (e) => {
             e.stopPropagation();
-            const str_idx = $(e.target).attr('data-idx');
+            const str_idx = $(e.target).attr("data-idx");
             const idx = parseInt(str_idx, 10);
 
             const data = tictactoe_data.handle.square_click.outbound(idx);

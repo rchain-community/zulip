@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import re
+import random
 import sys
 
 # check for the venv
 from lib import sanity_check
 
 sanity_check.check_venv(__file__)
-
-import random
 
 from zulint.command import LinterConfig, add_default_linter_arguments
 
@@ -53,7 +51,7 @@ def run() -> None:
     linter_config.external_linter('css', ['node', 'node_modules/.bin/stylelint'], ['css', 'scss'],
                                   fix_arg='--fix',
                                   description="Standard CSS style and formatting linter "
-                                  "(config: .stylelintrc)")
+                                  "(config: stylelint.config.js)")
     linter_config.external_linter('eslint', ['node', 'node_modules/.bin/eslint',
                                              '--quiet', '--cache', '--ext', '.js,.ts'], ['js', 'ts'],
                                   fix_arg='--fix',
@@ -63,7 +61,7 @@ def run() -> None:
                                   description="Runs the puppet parser validator, "
                                   "checking for syntax errors.")
     linter_config.external_linter('puppet-lint',
-                                  ['puppet-lint', '--fail-on-warnings'] + PUPPET_CHECK_RULES_TO_EXCLUDE,
+                                  ['puppet-lint', '--fail-on-warnings', *PUPPET_CHECK_RULES_TO_EXCLUDE],
                                   ['pp'],
                                   fix_arg='--fix',
                                   description="Standard puppet linter"
@@ -93,8 +91,15 @@ def run() -> None:
     linter_config.external_linter('isort', ['isort'], ['py'],
                                   description="Sorts Python import statements",
                                   check_arg=['--check-only', '--diff'])
+    linter_config.external_linter('prettier', ['node_modules/.bin/prettier', '--check'],
+                                  ['css', 'js', 'json', 'scss', 'ts', 'yaml', 'yml'],
+                                  fix_arg=['--write'],
+                                  description="Formats CSS, JavaScript, YAML",
+                                  # https://github.com/prettier/prettier/pull/8703
+                                  suppress_line=lambda line: line in ["Checking formatting...\n", "All matched files use Prettier code style!\n"])
 
     semgrep_command = ["semgrep", "--config=./tools/semgrep.yml", "--error",
+                       "--disable-version-check", "--quiet",
                        # This option is dangerous in the context of running
                        # semgrep-as-a-service on untrusted user code, since it
                        # causes Python code in the rules configuration to be
@@ -107,9 +112,7 @@ def run() -> None:
     linter_config.external_linter('semgrep-py', [*semgrep_command, "--lang=python"], ['py'],
                                   fix_arg='--autofix',
                                   description="Syntactic Grep (semgrep) Code Search Tool "
-                                  "(config: ./tools/semgrep.yml)",
-                                  # https://github.com/returntocorp/semgrep/issues/1228
-                                  suppress_line=lambda line: bool(re.match(r"running \d+ rules\.\.\.$", line)))
+                                  "(config: ./tools/semgrep.yml)")
 
     linter_config.external_linter('thirdparty', ['tools/check-thirdparty'],
                                   description="Check docs/THIRDPARTY copyright file syntax")
