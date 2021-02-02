@@ -1452,56 +1452,57 @@
     "@typescript-eslint/types" "4.0.1"
     eslint-visitor-keys "^2.0.0"
 
-"@uppy/companion-client@^1.5.3":
-  version "1.5.3"
-  resolved "https://registry.yarnpkg.com/@uppy/companion-client/-/companion-client-1.5.3.tgz#bae47802494d3d91aa14f2bc88680cabba5edf41"
-  integrity sha512-VN1JssHZiOjleJcoTyubTvGua3R6P9ENkqKlCt9dPKabGn9diNQ4EZebZlAvUD5hz+zBuzvNyAwgC7xbqZlyMw==
+"@uppy/companion-client@^1.8.1":
+  version "1.8.1"
+  resolved "https://registry.yarnpkg.com/@uppy/companion-client/-/companion-client-1.8.1.tgz#e8796ac5d2219663da1ef46367efd9cbcf629b17"
+  integrity sha512-me07SraLbf+Q7z5i6IVTrKc6tiIe84ztqrifx8ftL/XKfOf2niYrS04PU4sppOCtkHiSPG/jP1TDFYd9HVL3aA==
   dependencies:
-    "@uppy/utils" "^3.2.2"
+    "@uppy/utils" "^3.4.0"
     namespace-emitter "^2.0.1"
+    qs-stringify "^1.1.0"
 
-"@uppy/core@^1.7.1":
-  version "1.13.1"
-  resolved "https://registry.yarnpkg.com/@uppy/core/-/core-1.13.1.tgz#fcec53cac4b4e89c56beeade125b27df6a257c63"
-  integrity sha512-HaWHUGDgcjya0NljV6dvEkVjGm+/WtrUEw+Zo7JA3Ah3VfgIUS/f7/uX+INsw+I4++TzcKSxr9fjTf+IzXSwJA==
+"@uppy/core@^1.15.0":
+  version "1.16.0"
+  resolved "https://registry.yarnpkg.com/@uppy/core/-/core-1.16.0.tgz#a5058e4adb1c7e3d7b52d260eef48fe7283294d7"
+  integrity sha512-qzd/G23KVTLOVmfmszPj8qaTuKyt6ZfLNpp5UnjrZkdvs9b+tY/uKEjUI3Dw8ScSa7roaizQU064z3eik8G84Q==
   dependencies:
     "@transloadit/prettier-bytes" "0.0.7"
-    "@uppy/store-default" "^1.2.3"
-    "@uppy/utils" "^3.2.2"
+    "@uppy/store-default" "^1.2.5"
+    "@uppy/utils" "^3.4.0"
     cuid "^2.1.1"
     lodash.throttle "^4.1.1"
     mime-match "^1.0.2"
     namespace-emitter "^2.0.1"
     preact "8.2.9"
 
-"@uppy/progress-bar@^1.3.4":
-  version "1.3.18"
-  resolved "https://registry.yarnpkg.com/@uppy/progress-bar/-/progress-bar-1.3.18.tgz#8f76cedc3fb2825859e276499428c182fb5c3bc0"
-  integrity sha512-zfuDgaZssYwzc38xCijP9787rGdNVdH/6rUcUStKWB6AcPoOl9XMhzLh1Jm69rDgxcqY+t87Wyw9hwqXoisqTg==
+"@uppy/progress-bar@^1.3.22":
+  version "1.3.24"
+  resolved "https://registry.yarnpkg.com/@uppy/progress-bar/-/progress-bar-1.3.24.tgz#a4fa3ca88931b6333a1583ee9a2670f591206dca"
+  integrity sha512-FLfGGaswnr+Glsk+1WIxd5tT0DfxxZJiLhjmBHVZZGHy2qpBpXbPTeFxcPdlOUPokYKeBGqMKyAYz/LBVpjXAQ==
   dependencies:
-    "@uppy/utils" "^3.2.2"
+    "@uppy/utils" "^3.4.0"
     preact "8.2.9"
 
-"@uppy/store-default@^1.2.3":
-  version "1.2.3"
-  resolved "https://registry.yarnpkg.com/@uppy/store-default/-/store-default-1.2.3.tgz#3274acf97c77f3d7d2c71bd7faefff17e2115527"
-  integrity sha512-9DFq4ccIqfy8mBOO5Mj52X26JsplY3hydSooM+64NKMZ9ccs6LpSm7j8WVbvvNFnSrd7SgP/53vFwo953KCKgg==
+"@uppy/store-default@^1.2.5":
+  version "1.2.5"
+  resolved "https://registry.yarnpkg.com/@uppy/store-default/-/store-default-1.2.5.tgz#52936331d6ac4911197d256d13974d5bae93b3a6"
+  integrity sha512-jnf0U8cfb8Bhgt6yh86YRJO9EEnCyG9BgXZ8dPWWLybgC9Expw3Ah/s3T21tcdChgv4zzdhSACd0JKxCQowyYg==
 
-"@uppy/utils@^3.2.2":
-  version "3.2.2"
-  resolved "https://registry.yarnpkg.com/@uppy/utils/-/utils-3.2.2.tgz#ea4b3f1473e52a700ceff47449ff804b5619700d"
-  integrity sha512-ze3NrG23MbYR29Oj6ik6iGZIpXxmhZK3VYwevfqJbzTknF/yh8BWLRWNyPoyOflNpsmQbxo/Y2hmqTnUC3wEPg==
+"@uppy/utils@^3.4.0":
+  version "3.4.0"
+  resolved "https://registry.yarnpkg.com/@uppy/utils/-/utils-3.4.0.tgz#4afcf8c26dec13ee54676bd1f7958fc1063b68df"
+  integrity sha512-XcT4UgUm1NhWAeQjMrr5LCE7Uookg12FTwQw/QwXBuGABoVilfk56i6h8ecf1bVX0D74zdpSnUiB1h+8a7ollw==
   dependencies:
     abortcontroller-polyfill "^1.4.0"
     lodash.throttle "^4.1.1"
 
-"@uppy/xhr-upload@^1.4.2":
-  version "1.6.3"
-  resolved "https://registry.yarnpkg.com/@uppy/xhr-upload/-/xhr-upload-1.6.3.tgz#0d6a2a33b4706638c3f0a7f1c4aaa19a16e6ded3"
-  integrity sha512-IgR8FiwWOoFgh6IDNS+dDgU1dFVYCq0MJ70wikaOwYLfpziWFx+QJn41vfA7Q0+S4pMrIvnGMkqY4Qc8RLCEDQ==
+"@uppy/xhr-upload@^1.6.8":
+  version "1.6.10"
+  resolved "https://registry.yarnpkg.com/@uppy/xhr-upload/-/xhr-upload-1.6.10.tgz#7900d5948d8133057d284656ea82cbc83fe42dd6"
+  integrity sha512-J8kNQHop3FIgbFWTEF5+Tobf+GfkptCseORLBK8cAjODErHSSiZ5UOD6yvFErC6OvQIWjUX9RUOGTUfb6qUONA==
   dependencies:
-    "@uppy/companion-client" "^1.5.3"
-    "@uppy/utils" "^3.2.2"
+    "@uppy/companion-client" "^1.8.1"
+    "@uppy/utils" "^3.4.0"
     cuid "^2.1.1"
 
 "@vusion/webfonts-generator@^0.6.0":
@@ -9695,6 +9696,11 @@ q@^1.1.2:
   version "1.5.1"
   resolved "https://registry.yarnpkg.com/q/-/q-1.5.1.tgz#7e32f75b41381291d04611f1bf14109ac00651d7"
   integrity sha1-fjL3W0E4EpHQRhHxvxQQmsAGUdc=
+
+qs-stringify@^1.1.0:
+  version "1.2.1"
+  resolved "https://registry.yarnpkg.com/qs-stringify/-/qs-stringify-1.2.1.tgz#9b39ef6b816bd83309628fc9dad435fc0eccc28b"
+  integrity sha512-2N5xGLGZUxpgAYq1fD1LmBSCbxQVsXYt5JU0nU3FuPWO8PlCnKNFQwXkZgyB6mrTdg7IbexX4wxIR403dJw9pw==
 
 qs@6.7.0:
   version "6.7.0"
